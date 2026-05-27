@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rodina Strachoňova</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>@font-face{font-family:'TopoRucni';src:url('/fonts/TopoRucniClean-Regular.ttf');}</style>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#f5f5f5;min-height:100vh;display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px}
+
+  /* ── header ── */
+  header{padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #ddd;background:#fff;flex-shrink:0;gap:10px}
+  header h1{font-size:16px;font-weight:600;color:#222;white-space:nowrap}
+  #ws-status{font-size:13px;color:#888;display:flex;align-items:center;gap:6px;flex-shrink:0}
+  .dot{width:8px;height:8px;border-radius:50%;background:#ccc;flex-shrink:0}
+  .dot.live{background:#4a7c4a;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+  /* ── nav tabs ── */
+  .nav-tabs{display:flex;border-bottom:1px solid #ddd;background:#fff;flex-shrink:0}
+  .nav-tab{font-size:13px;font-weight:500;padding:8px 16px;border:none;border-bottom:2px solid transparent;background:none;cursor:pointer;color:#888;margin-bottom:-1px;transition:color 0.15s,border-color 0.15s;white-space:nowrap}
+  .nav-tab:hover{color:#444}
+  .nav-tab.active{color:#222;border-bottom-color:#333;font-weight:600}
+  .nav-badge{display:inline-block;background:#d97706;color:#fff;font-size:10px;padding:0 5px;border-radius:20px;margin-left:4px;vertical-align:middle;font-weight:700}
+
+  /* ── members bar ── */
+  .members-bar{display:flex;gap:6px;padding:7px 12px;background:#fff;border-bottom:1px solid #eee;overflow-x:auto;flex-shrink:0}
+  .member-chip{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:16px;border:1px solid #ddd;background:#fafafa;cursor:pointer;white-space:nowrap;transition:border-color 0.15s}
+  .member-chip:hover{border-color:#aaa}
+  .chip-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .chip-name{font-size:13px;font-weight:600;color:#222}
+  .chip-status{font-size:12px;color:#777}
+
+  /* ── pages ── */
+  #page-map{display:flex;flex-direction:column;flex:1}
+  #page-clock{display:none;flex:1;overflow:hidden;position:relative}
+  #page-places{display:none;flex-direction:column;flex:1;overflow:hidden}
+  #page-geofences{display:none;flex-direction:column;flex:1;overflow:hidden}
+
+  /* ── map ── */
+  #map{flex:1}
+  .leaflet-popup-content-wrapper{border-radius:6px;border:1px solid #ccc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+  .popup-name{font-size:15px;font-weight:600;color:#222}
+  .popup-status{font-size:13px;color:#555;margin-top:2px}
+  .popup-coords{font-family:monospace;font-size:10px;color:#aaa;margin-top:4px}
+  .popup-time{font-size:12px;color:#aaa}
+
+  /* ── CLOCK PAGE ── */
+  #page-clock{background:#0f0f1a;justify-content:center;align-items:center;min-height:0}
+  #clock-svg-wrap{width:100%;height:100%;min-height:300px;display:flex;align-items:center;justify-content:center;padding:12px}
+  .clock-wedge{cursor:pointer;transition:opacity 0.2s}
+  .clock-wedge:hover{opacity:0.4}
+
+  /* ── places management page ── */
+  .mgmt-toolbar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #eee;background:#fff;flex-shrink:0;flex-wrap:wrap}
+  .mgmt-toolbar input[type=text]{font-size:13px;flex:1;min-width:130px;padding:5px 9px;border:1px solid #ddd;border-radius:5px;background:#fff;color:#222}
+  .mgmt-toolbar input[type=text]:focus{outline:none;border-color:#666}
+  .filter-btns{display:flex;gap:3px}
+  .fbtn{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-radius:12px;background:#fafafa;color:#777;cursor:pointer;transition:all 0.12s}
+  .fbtn.active{background:#333;color:#fff;border-color:#333}
+
+  .mgmt-list{flex:1;overflow-y:auto;padding:8px 12px;display:flex;flex-direction:column;gap:6px}
+
+  /* place card */
+  .place-card{background:#fff;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden;transition:border-color 0.12s}
+  .place-card:hover{border-color:#bbb}
+  .place-card.expanded{border-color:#555}
+  .pc-header{display:flex;align-items:center;gap:9px;padding:9px 12px;cursor:pointer;user-select:none}
+  .pc-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+  .pc-dot-new{background:#d97706}
+  .pc-dot-named{background:#4a7c4a}
+  .pc-info{flex:1;min-width:0}
+  .pc-title{font-size:14px;font-weight:600;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pc-sub{font-size:11px;color:#999;margin-top:1px;font-family:monospace}
+  .pc-badges{display:flex;gap:4px;align-items:center;flex-shrink:0}
+  .pbadge{font-size:10px;padding:2px 7px;border-radius:10px;white-space:nowrap;font-weight:500}
+  .pbadge-new{background:#fef3c7;color:#92400e}
+  .pbadge-ok{background:#dcfce7;color:#166534}
+  .pbadge-auto{background:#dbeafe;color:#1e40af}
+  .pc-chevron{font-size:16px;color:#bbb;transition:transform 0.18s;flex-shrink:0;line-height:1}
+  .pc-chevron.open{transform:rotate(90deg)}
+
+  .pc-body{padding:0 12px 12px;border-top:1px solid #f0f0f0;display:none}
+  .pc-body.open{display:block}
+
+  .pc-meta-row{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap}
+  .pc-meta-item{display:flex;flex-direction:column;gap:2px}
+  .pc-meta-label{font-size:10px;color:#aaa;font-family:monospace;text-transform:uppercase}
+  .pc-meta-value{font-size:12px;color:#444;font-family:monospace}
+
+  .pc-section{font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.05em;margin:11px 0 5px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .pc-field-row{display:flex;gap:5px;align-items:center}
+  .pc-field-row input{font-size:13px;flex:1;padding:5px 9px;border:1px solid #ddd;border-radius:5px;background:#fff;color:#222}
+  .pc-field-row input:focus{outline:none;border-color:#666}
+  .pc-field-row input[type=number]{width:74px;flex:none}
+  .pc-field-row span{font-size:12px;color:#999;flex-shrink:0}
+
+  /* only toggles */
+  .pc-only-row{display:flex;gap:4px;align-items:center;margin-top:7px;flex-wrap:wrap}
+  .pc-only-row .lbl{font-size:12px;color:#999;flex-shrink:0}
+  .only-toggle{font-size:12px;padding:3px 9px;border:1px solid #ddd;border-radius:12px;background:#fafafa;cursor:pointer;color:#666;transition:all 0.1s}
+  .only-toggle.active{background:#333;color:#fff;border-color:#333}
+
+  /* candidates */
+  .cands-header-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+  .radius-inline{display:flex;align-items:center;gap:3px}
+  .radius-inline input{font-size:12px;width:54px;padding:3px 6px;border:1px solid #ddd;border-radius:4px;background:#fff;color:#222}
+  .radius-inline input:focus{outline:none;border-color:#666}
+  .radius-inline span{font-size:11px;color:#999}
+  .btn-sm{font-size:12px;padding:4px 10px;border:1px solid #aaa;border-radius:4px;background:#fff;cursor:pointer;display:flex;align-items:center;gap:3px;color:#444;transition:background 0.1s;white-space:nowrap}
+  .btn-sm:hover{background:#f5f5f5}
+  .btn-sm:disabled{opacity:0.45;cursor:not-allowed}
+  .spin{display:inline-block;animation:spin 0.7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .cands-list{display:flex;flex-direction:column;gap:3px;margin-top:5px;max-height:200px;overflow-y:auto}
+  .cand-item{display:flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid #e8e8e8;border-radius:5px;cursor:pointer;transition:border-color 0.1s,background 0.1s}
+  .cand-item:hover{border-color:#bbb;background:#fafafa}
+  .cand-item.selected{border-color:#555;background:#f0f0f0}
+  .cand-main{flex:1;min-width:0}
+  .cand-name{font-size:13px;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cand-type{font-size:10px;color:#aaa}
+  .cand-dist{font-size:11px;color:#bbb;white-space:nowrap}
+  .cands-empty{font-size:12px;color:#bbb;padding:5px 0}
+  .cands-loading{display:flex;align-items:center;gap:7px;font-size:12px;color:#999;padding:5px 0}
+
+  .pc-actions{display:flex;gap:5px;margin-top:11px;padding-top:11px;border-top:1px solid #f0f0f0;align-items:center;flex-wrap:wrap}
+  .btn-action{font-size:13px;padding:5px 13px;border:1px solid #ccc;border-radius:5px;background:#fff;cursor:pointer;transition:background 0.1s;color:#333;white-space:nowrap}
+  .btn-action:hover{background:#f5f5f5}
+  .btn-action.primary{background:#222;color:#fff;border-color:#222}
+  .btn-action.primary:hover{background:#444}
+  .btn-action.danger{border-color:#d33;color:#d33}
+  .btn-action.danger:hover{background:#fff5f5}
+  .pc-actions .spacer{flex:1}
+
+  /* ── geofences page ── */
+  .geo-list{flex:1;overflow-y:auto;padding:8px 12px;display:flex;flex-direction:column;gap:5px}
+  .geo-card{display:flex;align-items:center;gap:9px;padding:9px 12px;background:#fff;border:1px solid #e5e5e5;border-radius:7px;flex-wrap:wrap}
+  .geo-card:hover{border-color:#bbb}
+  .geo-circle{width:11px;height:11px;border-radius:50%;border:2px solid #4a7c4a;flex-shrink:0}
+  .geo-info{flex:1;min-width:0}
+  .geo-name{font-size:14px;font-weight:600;color:#222}
+  .geo-coords{font-size:10px;color:#bbb;font-family:monospace;margin-top:1px}
+  .geo-radius{font-size:12px;color:#999;flex-shrink:0;white-space:nowrap}
+  .geo-btns{display:flex;gap:3px}
+  .geo-btn{font-size:12px;padding:3px 9px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;color:#555;transition:background 0.1s;white-space:nowrap}
+  .geo-btn:hover{background:#f5f5f5}
+  .geo-btn.danger{border-color:#d33;color:#d33}
+  .geo-btn.danger:hover{background:#fff5f5}
+  .geo-edit-row{width:100%;display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:5px}
+  .geo-edit-row input{font-size:13px;padding:4px 8px;border:1px solid #ddd;border-radius:4px;background:#fff;color:#222}
+  .geo-edit-row input:focus{outline:none;border-color:#666}
+  .geo-add-bar{padding:10px 12px;border-top:1px solid #eee;background:#fff;display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+  .geo-add-bar .row{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .geo-add-bar input{font-size:13px;padding:5px 8px;border:1px solid #ddd;border-radius:5px;background:#fff;color:#222}
+  .geo-add-bar input:focus{outline:none;border-color:#666}
+  .geo-add-bar .lbl{font-size:12px;color:#999;flex-shrink:0}
+
+  /* ── old map popup ── */
+  .place-popup{min-width:220px}
+  .place-popup h3{font-size:14px;font-weight:600;color:#222;margin-bottom:3px}
+  .place-popup .meta{font-size:11px;color:#999;margin-bottom:7px;font-family:monospace}
+  .candidates{display:flex;flex-direction:column;gap:3px;margin-bottom:7px}
+  .candidate{display:flex;align-items:center;justify-content:space-between;padding:5px 9px;border:1px solid #ddd;border-radius:5px;cursor:pointer;transition:border-color 0.12s,background 0.12s}
+  .candidate:hover{border-color:#555;background:#f5f5f5}
+  .candidate.selected{border-color:#333;background:#efefef}
+  .cand-info{display:flex;flex-direction:column}
+  .custom-row{display:flex;gap:5px;margin-bottom:5px}
+  .custom-row input{font-size:13px;flex:1;border:1px solid #ccc;border-radius:4px;padding:4px 7px}
+  .custom-row input:focus{outline:none;border-color:#555}
+  .btn-row{display:flex;gap:5px}
+  .btn-row button{font-size:12px;border:1px solid #aaa;border-radius:4px;padding:4px 12px;cursor:pointer;background:#fff;transition:background 0.12s}
+  .btn-row button.primary{background:#222;color:#fff;border-color:#222}
+  .btn-row button.primary:hover{background:#444}
+  .btn-row button:hover{background:#f5f5f5}
+  .btn-row button.danger{border-color:#d33;color:#d33}
+  .radius-row{display:flex;align-items:center;gap:5px;margin-bottom:7px;font-size:12px;color:#777}
+  .radius-row input{width:56px;font-size:12px;border:1px solid #ccc;border-radius:4px;padding:3px 5px}
+
+  .places-badge{position:fixed;bottom:18px;right:18px;background:#222;color:#fff;font-size:13px;padding:7px 14px;border-radius:16px;cursor:pointer;display:none;box-shadow:0 2px 8px rgba(0,0,0,0.18);z-index:1000}
+  .places-badge.visible{display:block}
+  .empty-state{text-align:center;padding:2rem;color:#ccc;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Rodina Strachoňova</h1>
+  <div id="ws-status"><div class="dot" id="wsDot"></div><span id="wsText">připojuji...</span></div>
+</header>
+
+<div class="nav-tabs">
+  <button class="nav-tab active" id="tab-map"       onclick="showPage('map')">🗺 Mapa</button>
+  <button class="nav-tab"        id="tab-clock"     onclick="showPage('clock')">🕰 Hodiny</button>
+  <button class="nav-tab"        id="tab-places"    onclick="showPage('places')">📍 Místa <span class="nav-badge" id="badgeCount" style="display:none">0</span></button>
+  <button class="nav-tab"        id="tab-geofences" onclick="showPage('geofences')">⬤ Geofences</button>
+</div>
+
+<!-- MAP PAGE -->
+<div id="page-map">
+  <div class="members-bar" id="membersBar"></div>
+  <div id="map"></div>
+  <div class="places-badge" id="placesBadge" onclick="showPage('places')">📍 Nová místa k pojmenování</div>
+</div>
+
+<!-- CLOCK PAGE -->
+<div id="page-clock">
+  <div id="clock-svg-wrap">
+    <svg id="clockSvg" viewBox="0 0 500 500" style="width:min(90vw,90vh);height:min(90vw,90vh);display:block">
+      <defs id="clockDefs"></defs>
+      <g id="clockWedges"></g>
+      <g id="clockCenter"></g>
+    </svg>
+  </div>
+</div>
+
+<!-- PLACES PAGE -->
+<div id="page-places">
+  <div class="mgmt-toolbar">
+    <input type="text" id="placesSearch" placeholder="Hledat místo..." oninput="renderPlaces()">
+    <div class="filter-btns">
+      <button class="fbtn active" onclick="setFilter('all',this)">Vše</button>
+      <button class="fbtn"        onclick="setFilter('unnamed',this)">Nepojmenovaná</button>
+      <button class="fbtn"        onclick="setFilter('named',this)">Pojmenovaná</button>
+    </div>
+  </div>
+  <div class="mgmt-list" id="placesList"></div>
+</div>
+
+<!-- GEOFENCES PAGE -->
+<div id="page-geofences">
+  <div class="geo-list" id="geoList"></div>
+  <div class="geo-add-bar">
+    <div class="row">
+      <span class="lbl">+ Nový:</span>
+      <input type="text"   id="gName"   placeholder="název"  style="flex:1;min-width:80px">
+      <input type="number" id="gLat"    placeholder="lat"    style="width:105px" step="0.00001">
+      <input type="number" id="gLon"    placeholder="lon"    style="width:105px" step="0.00001">
+      <input type="number" id="gRadius" placeholder="radius" style="width:66px" value="150">
+      <span class="lbl">m</span>
+      <button class="btn-action primary" onclick="addGeofence()">Přidat</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const MEMBERS = {
+  mamka:{name:'MAMKA',color:'#B87070'},
+  tatka:{name:'TATKA',color:'#5B7A5A'},
+  misak:{name:'MIŠÁK',color:'#C49A3C'},
+  kubik:{name:'KUBÍK',color:'#6B8CB0'},
+};
+const MEMBER_KEYS = Object.keys(MEMBERS);
+
+const LABELS = {
+  doma:'doma',prace:'v práci',prace_tatka:'v práci',prace_mamka:'v práci',
+  skola:'ve škole',nakupy:'na nákupech',cesta:'na cestě',
+  zahrada:'na zahradě',nebezpeci:'v nebezpečí',neznamo:'neznámo'
+};
+
+// status → { icon, label, cssClass }
+const STATUS_DEFS = {
+  doma:       { icon:'🏠', label:'Doma',       cls:'s-doma'      },
+  prace:      { icon:'💼', label:'V práci',    cls:'s-prace'     },
+  prace_tatka:{ icon:'💼', label:'V práci',    cls:'s-prace'     },
+  prace_mamka:{ icon:'💼', label:'V práci',    cls:'s-prace'     },
+  skola:      { icon:'🎒', label:'Ve škole',   cls:'s-skola'     },
+  nakupy:     { icon:'🛒', label:'Na nákupech',cls:'s-nakupy'    },
+  cesta:      { icon:'🚗', label:'Na cestě',   cls:'s-cesta'     },
+  zahrada:    { icon:'🌱', label:'Na zahradě', cls:'s-zahrada'   },
+  nebezpeci:  { icon:'⚠️',  label:'Nebezpečí',  cls:'s-nebezpeci' },
+  neznamo:    { icon:'❓', label:'Neznámo',    cls:'s-neznamo'   },
+};
+function statusDef(s){ return STATUS_DEFS[s] || {icon:'❓',label:s,cls:'s-neznamo'}; }
+
+// ─── Map init ──────────────────────────────────────────────────────────
+const map = L.map('map').setView([50.07,14.43],12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(map);
+
+const markers={}, placeMarkers={}, memberState={};
+let allPlaces=[], allFences=[], currentPage='map';
+let placesFilter='all', expandedPlace=null;
+let loadingCands={}, editCands={};
+let editingFence=null;
+
+// ─── Page nav ──────────────────────────────────────────────────────────
+function showPage(p){
+  currentPage=p;
+  document.getElementById('page-map').style.display       = p==='map'       ? 'flex':'none';
+  document.getElementById('page-clock').style.display     = p==='clock'     ? 'flex':'none';
+  document.getElementById('page-places').style.display    = p==='places'    ? 'flex':'none';
+  document.getElementById('page-geofences').style.display = p==='geofences' ? 'flex':'none';
+  ['map','clock','places','geofences'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===p));
+  if(p==='places')    { loadPlaces().then(renderPlaces); }
+  if(p==='geofences') { loadGeofences(); }
+  if(p==='clock')     { renderClock(); }
+  if(p==='map')       { setTimeout(()=>map.invalidateSize(),50); }
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────
+function fmtT(ts){if(!ts)return'';const d=new Date(ts);return`${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`}
+function relT(ts){const m=Math.round((Date.now()-ts)/60000);if(m<60)return m+'min';const h=Math.round(m/60);if(h<24)return h+'h';return Math.round(h/24)+'d';}
+function fmtC(lat,lon){return lat.toFixed(5)+', '+lon.toFixed(5);}
+
+// ─── CLOCK page ────────────────────────────────────────────────────────
+// Obrázek vybírá server pomocí Claude — přichází v poli img ve WebSocket zprávě
+const STATUS_IMAGES_FALLBACK = {
+  'náš domeček': 'img/places/domov.png',
+  'doma':        'img/places/domov.png',
+  'školka':      'img/places/skola.png',
+  'školka bertík':'img/places/skola.png',
+};
+function statusImg(key, s){
+  const serverImg = memberState[key]?.img;
+  if (serverImg) return 'img/' + serverImg;
+  if (s) { const r = STATUS_IMAGES_FALLBACK[s.toLowerCase()]; if(r) return r; }
+  return null;
+}
+
+function polarXY(r,deg){ const a=(deg-90)*Math.PI/180; return [250+r*Math.cos(a),250+r*Math.sin(a)]; }
+function wedgeArc(r1,r2,s,e){
+  const lg=(e-s)>180?1:0;
+  const[x1,y1]=polarXY(r2,s);const[x2,y2]=polarXY(r2,e);
+  const[x3,y3]=polarXY(r1,e);const[x4,y4]=polarXY(r1,s);
+  return `M${x1},${y1} A${r2},${r2} 0 ${lg} 1 ${x2},${y2} L${x3},${y3} A${r1},${r1} 0 ${lg} 0 ${x4},${y4} Z`;
+}
+function svgEl(tag,attrs){
+  const el=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const[k,v]of Object.entries(attrs))el.setAttribute(k,v);
+  return el;
+}
+
+function renderClock(){
+  const R_CORE=68, R_NAME=95, R_OUT=238, R_LABEL=215, GAP=2, seg=90;
+  const ROTATION=0; // korekce natočení — otočí celý ciferník
+  const svg=document.getElementById('clockSvg');
+  if(!svg) return;
+  const defs=document.getElementById('clockDefs');
+  const wedgesG=document.getElementById('clockWedges');
+  const centerG=document.getElementById('clockCenter');
+  defs.innerHTML=''; wedgesG.innerHTML=''; centerG.innerHTML='';
+  wedgesG.setAttribute('transform',`rotate(${ROTATION} 250 250)`);
+
+  // Pozadí — fotka hodin
+  const bgClip=svgEl('clipPath',{id:'bgClip'});
+  bgClip.appendChild(svgEl('circle',{cx:'250',cy:'250',r:'238'}));
+  defs.appendChild(bgClip);
+  const bgImg=svgEl('image',{href:'img/hodiny.jpg',x:'12',y:'12',width:'476',height:'476','preserveAspectRatio':'xMidYMid slice','clip-path':'url(#bgClip)'});
+  wedgesG.appendChild(bgImg);
+  const bgLight=svgEl('circle',{cx:'250',cy:'250',r:'238',fill:'rgba(255,255,255,0.25)'});
+  wedgesG.appendChild(bgLight);
+
+  MEMBER_KEYS.forEach((key,i)=>{
+    const m=MEMBERS[key];
+    const s=memberState[key];
+    const status=s?.status||'neznamo';
+    const sk=i*seg+GAP, ek=(i+1)*seg-GAP, mid=(sk+ek)/2;
+    const img=statusImg(key, status);
+
+    // Obrázek — střed výseče mezi R_CORE a R_NAME+60, větší
+    const imgR=(R_CORE+R_NAME+60)/2;
+    const[mx,my]=polarXY(imgR,mid);
+    const sz=167;
+
+    // Clip obrázku
+    const clipId='ci'+key;
+    const cp=svgEl('clipPath',{id:clipId});
+    cp.appendChild(svgEl('rect',{x:mx-sz/2,y:my-sz/2,width:sz,height:sz,rx:'6'}));
+    defs.appendChild(cp);
+
+    // TextPath — na vnějším obvodu, kompenzuje rotaci
+    const tpId='tp'+key;
+    const textR=R_LABEL;
+    const adjMid=mid+ROTATION;
+    const flip=(adjMid%360>90&&adjMid%360<270);
+    const ts2=flip?ek+ROTATION-4:sk+ROTATION+4, te2=flip?sk+ROTATION+4:ek+ROTATION-4;
+    const sw=flip?0:1;
+    const[px1,py1]=polarXY(textR,ts2);
+    const[px2,py2]=polarXY(textR,te2);
+    defs.appendChild(svgEl('path',{id:tpId,d:`M${px1},${py1} A${textR},${textR} 0 0 ${sw} ${px2},${py2}`,fill:'none'}));
+
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.style.cursor='pointer';
+    g.onclick=()=>clockClick(key);
+
+    // Vnější výseč
+    const outerD=wedgeArc(R_NAME,R_OUT,sk,ek);
+    g.appendChild(svgEl('path',{d:outerD,fill:'none'}));
+
+    // Obrázek
+    if(img){
+      const imgEl=svgEl('image',{href:img,x:mx-sz/2,y:my-sz/2,width:sz,height:sz,'preserveAspectRatio':'xMidYMid slice','clip-path':`url(#${clipId})`});
+      imgEl.style.mixBlendMode='multiply';
+      g.appendChild(imgEl);
+    }
+
+    // Jméno — rotovaný text místo textPath
+    const textEl=document.createElementNS('http://www.w3.org/2000/svg','text');
+    textEl.setAttribute('font-family','"TopoRucni", cursive');
+    textEl.setAttribute('font-size','20');
+    textEl.setAttribute('font-weight','100');
+    textEl.setAttribute('fill','#000000');
+    textEl.setAttribute('opacity','0.85');
+    textEl.setAttribute('text-anchor','middle');
+    textEl.setAttribute('dominant-baseline','middle');
+    const[tx,ty]=polarXY(R_LABEL,mid+ROTATION);
+    textEl.setAttribute('x', tx);
+    textEl.setAttribute('y', ty);
+    textEl.setAttribute('transform',`rotate(${mid+ROTATION} ${tx} ${ty})`);
+    textEl.textContent=m.name;
+    g.appendChild(textEl);
+
+    wedgesG.appendChild(g);
+  });
+}
+
+function clockClick(key){
+  showPage('map');
+  setTimeout(()=>{
+    if(markers[key]){map.setView(markers[key].getLatLng(),15);markers[key].openPopup();}
+  },80);
+}
+
+// ─── Member icons & chips ──────────────────────────────────────────────
+function makeIcon(color,letter){
+  return L.divIcon({className:'',html:`<div style="width:34px;height:34px;border-radius:50%;background:${color};border:2px solid #333;display:flex;align-items:center;justify-content:center;font-family:sans-serif;font-size:14px;font-weight:700;color:#fff;box-shadow:1px 2px 5px rgba(0,0,0,0.22)">${letter}</div>`,iconSize:[34,34],iconAnchor:[17,17],popupAnchor:[0,-19]});
+}
+function makePlaceIcon(unnamed){
+  const color=unnamed?'#d97706':'#4a7c4a';
+  const sym=unnamed?'?':'✓';
+  return L.divIcon({className:'',html:`<div style="width:28px;height:28px;border-radius:50%;background:${color};border:2px dashed #333;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;box-shadow:1px 2px 4px rgba(0,0,0,0.18)">${sym}</div>`,iconSize:[28,28],iconAnchor:[14,14],popupAnchor:[0,-16]});
+}
+
+function updateMember(key,data){
+  memberState[key]=data;
+  const m=MEMBERS[key];if(!m)return;
+  const label=LABELS[data.status]||data.status;
+  const chip=document.getElementById('chip-'+key);
+  if(chip)chip.querySelector('.chip-status').textContent=label;
+  if(data.lat&&data.lon){
+    const ll=[data.lat,data.lon];
+    const popup=`<div class="popup-name">${m.name}</div><div class="popup-status">${label}</div><div class="popup-coords">${data.lat.toFixed(5)}, ${data.lon.toFixed(5)}</div><div class="popup-time">${fmtT(data.ts)}</div>`;
+    if(markers[key]){markers[key].setLatLng(ll);markers[key].setPopupContent(popup);}
+    else markers[key]=L.marker(ll,{icon:makeIcon(m.color,m.name[0])}).addTo(map).bindPopup(popup);
+  }
+  if(currentPage==='clock') renderClock();
+}
+
+function renderChips(){
+  const bar=document.getElementById('membersBar');bar.innerHTML='';
+  Object.entries(MEMBERS).forEach(([key,m])=>{
+    const s=memberState[key];
+    const label=s?(LABELS[s.status]||s.status):'neznámo';
+    const chip=document.createElement('div');
+    chip.className='member-chip';chip.id='chip-'+key;
+    chip.innerHTML=`<div class="chip-dot" style="background:${m.color}"></div><span class="chip-name">${m.name}</span><span class="chip-status">${label}</span>`;
+    chip.onclick=()=>{if(markers[key]){map.setView(markers[key].getLatLng(),15);markers[key].openPopup();}};
+    bar.appendChild(chip);
+  });
+}
+
+// ─── Map place popups ──────────────────────────────────────────────────
+function buildPlacePopup(place){
+  const cands=place.candidates||[];
+  let ch='';
+  if(cands.length){
+    ch='<div class="candidates" id="mc_'+place.id+'">';
+    cands.forEach((c,i)=>{ch+=`<div class="candidate" id="mc_${place.id}_${i}" onclick="mapSelCand('${place.id}','${c.name.replace(/'/g,"\\'")}',${i})"><div class="cand-info"><div style="font-size:13px;font-weight:600;color:#222">${c.name}</div><div style="font-size:10px;color:#aaa">${c.primaryType||''}${c.rating?' ★'+c.rating:''}</div></div><div style="font-size:11px;color:#bbb;margin-left:7px;white-space:nowrap">${c.dist}m</div></div>`;});
+    ch+='</div>';
+  }
+  return `<div class="place-popup"><h3>📍 Neznámé místo</h3><div class="meta">${place.lat.toFixed(5)}, ${place.lon.toFixed(5)} · ${place.duration} min · ${fmtT(place.detectedAt)}</div>${cands.length?'<div style="font-size:12px;color:#777;margin-bottom:5px">Vyber nebo napiš:</div>':''}${ch}<div class="custom-row"><input type="text" id="mp_${place.id}" placeholder="název místa..." value="${place.suggestedName||''}"/></div><div class="radius-row"><span>Radius:</span><input type="number" id="mr_${place.id}" value="150" min="50" max="500"/>m</div><div class="btn-row"><button class="primary" onclick="mapNamePlace('${place.id}')">✓ Uložit</button><button onclick="showPage('places')" style="font-size:12px">✏ Editor</button><button class="danger" onclick="mapDelPlace('${place.id}')">Smazat</button></div></div>`;
+}
+function mapSelCand(pid,name,idx){
+  document.querySelectorAll(`[id^="mc_${pid}_"]`).forEach(el=>el.classList.remove('selected'));
+  document.getElementById(`mc_${pid}_${idx}`)?.classList.add('selected');
+  const inp=document.getElementById('mp_'+pid);if(inp)inp.value=name;
+}
+async function mapNamePlace(id){
+  const name=document.getElementById('mp_'+id)?.value?.trim();
+  const radius=parseInt(document.getElementById('mr_'+id)?.value)||150;
+  if(!name){alert('Zadej název');return;}
+  const res=await fetch('/places/'+id+'/name',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,radius})});
+  if(res.ok){map.closePopup();reloadPlacesOnMap();}
+}
+async function mapDelPlace(id){
+  await fetch('/places/'+id,{method:'DELETE'});
+  map.closePopup();reloadPlacesOnMap();
+}
+
+async function reloadPlacesOnMap(){
+  const places=await fetch('/places').then(r=>r.json());
+  Object.values(placeMarkers).forEach(m=>map.removeLayer(m));
+  Object.keys(placeMarkers).forEach(k=>delete placeMarkers[k]);
+  const unnamed=places.filter(p=>!p.name);
+  document.getElementById('placesBadge').classList.toggle('visible',unnamed.length>0);
+  const cnt=document.getElementById('badgeCount');
+  cnt.style.display=unnamed.length>0?'':'none';
+  cnt.textContent=unnamed.length;
+  places.forEach(place=>{
+    const marker=L.marker([place.lat,place.lon],{icon:makePlaceIcon(!place.name)}).addTo(map);
+    if(!place.name) marker.bindPopup(buildPlacePopup(place),{maxWidth:290});
+    else marker.bindPopup(`<div class="popup-name">✓ ${place.name}</div><div class="popup-coords">${place.lat.toFixed(5)}, ${place.lon.toFixed(5)}</div>`);
+    placeMarkers[place.id]=marker;
+  });
+  allPlaces=places;
+}
+
+// ─── PLACES management page ────────────────────────────────────────────
+async function loadPlaces(){
+  allPlaces=await fetch('/places').then(r=>r.json());
+  const unnamed=allPlaces.filter(p=>!p.name);
+  const cnt=document.getElementById('badgeCount');
+  cnt.style.display=unnamed.length>0?'':'none';
+  cnt.textContent=unnamed.length;
+  document.getElementById('placesBadge').classList.toggle('visible',unnamed.length>0);
+}
+
+function setFilter(f,btn){
+  placesFilter=f;
+  document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderPlaces();
+}
+
+function renderPlaces(){
+  const q=(document.getElementById('placesSearch')?.value||'').toLowerCase();
+  const places=allPlaces.filter(p=>{
+    if(placesFilter==='unnamed'&&p.name)return false;
+    if(placesFilter==='named'&&!p.name)return false;
+    if(q&&!((p.name||'').toLowerCase().includes(q)||(p.suggestedName||'').toLowerCase().includes(q)||(p.detectedBy||'').toLowerCase().includes(q)))return false;
+    return true;
+  });
+  const list=document.getElementById('placesList');
+  if(!places.length){list.innerHTML='<div class="empty-state">Žádná místa</div>';return;}
+  list.innerHTML=places.map(p=>renderPlaceCard(p)).join('');
+}
+
+function renderPlaceCard(p){
+  const isExp=expandedPlace===p.id;
+  const isNamed=!!p.name;
+  const cands=editCands[p.id]||p.candidates||[];
+  const loading=loadingCands[p.id];
+  const curName=p._editName!=null?p._editName:(p.name||p.suggestedName||'');
+  const curRadius=p._editRadius||150;
+
+  let badge='';
+  if(isNamed)                   badge='<span class="pbadge pbadge-ok">pojmenováno</span>';
+  else if(p.confidence==='high') badge='<span class="pbadge pbadge-auto">auto-návrh</span>';
+  else                           badge='<span class="pbadge pbadge-new">nepojmenováno</span>';
+
+  let candsHtml='';
+  if(loading){
+    candsHtml='<div class="cands-loading"><span class="spin">↻</span> Načítám Places API...</div>';
+  } else if(cands.length){
+    candsHtml=cands.map((c,i)=>`<div class="cand-item" id="ci_${p.id}_${i}" onclick="selCand('${p.id}','${c.name.replace(/'/g,"\\'")}',${i})"><div class="cand-main"><div class="cand-name">${c.name}</div><div class="cand-type">${c.primaryType||''}${c.rating?' · ★'+c.rating:''}</div></div><div class="cand-dist">${c.dist} m</div></div>`).join('');
+  } else {
+    candsHtml='<div class="cands-empty">Klikni Načíst pro návrhy z Google Places</div>';
+  }
+
+  const onlyArr=p._only||[];
+  return `<div class="place-card${isExp?' expanded':''}" id="pcard_${p.id}">
+  <div class="pc-header" onclick="togglePC('${p.id}')">
+    <div class="pc-dot ${isNamed?'pc-dot-named':'pc-dot-new'}"></div>
+    <div class="pc-info">
+      <div class="pc-title">${isNamed?p.name:(p.suggestedName?'? '+p.suggestedName:'Neznámé místo')}</div>
+      <div class="pc-sub">${fmtC(p.lat,p.lon)} · ${relT(p.detectedAt)} zpět · ${p.detectedBy}</div>
+    </div>
+    <div class="pc-badges">${badge}</div>
+    <div class="pc-chevron${isExp?' open':''}">›</div>
+  </div>
+  <div class="pc-body${isExp?' open':''}">
+    <div class="pc-meta-row">
+      <div class="pc-meta-item"><div class="pc-meta-label">trvání</div><div class="pc-meta-value">${p.duration} min</div></div>
+      <div class="pc-meta-item"><div class="pc-meta-label">bodů GPS</div><div class="pc-meta-value">${p.points}</div></div>
+      <div class="pc-meta-item"><div class="pc-meta-label">souřadnice</div><div class="pc-meta-value">${fmtC(p.lat,p.lon)}</div></div>
+    </div>
+    <div class="pc-section">Název a radius</div>
+    <div class="pc-field-row">
+      <input type="text"   id="pn_${p.id}" value="${curName}"   placeholder="název místa..."     oninput="storeN('${p.id}',this.value)">
+      <input type="number" id="pr_${p.id}" value="${curRadius}" placeholder="radius" min="50" max="1000" oninput="storeR('${p.id}',parseInt(this.value)||150)">
+      <span>m</span>
+    </div>
+    <div class="pc-only-row">
+      <span class="lbl">Jen pro:</span>
+      ${MEMBER_KEYS.map(mk=>`<button class="only-toggle${onlyArr.includes(mk)?' active':''}" id="ot_${p.id}_${mk}" onclick="togOnly('${p.id}','${mk}')">${MEMBERS[mk].name}</button>`).join('')}
+      <span style="font-size:10px;color:#ccc">(prázdné = všichni)</span>
+    </div>
+    <div class="pc-section">
+      <span>Kandidáti z Google Places</span>
+      <div class="cands-header-row">
+        <div class="radius-inline"><input type="number" id="ar_${p.id}" value="300" min="50" max="1000"><span>m</span></div>
+        <button class="btn-sm" id="loadBtn_${p.id}" onclick="fetchCands('${p.id}',${p.lat},${p.lon})" ${loading?'disabled':''}><span${loading?' class="spin"':''}>↻</span> Načíst</button>
+      </div>
+    </div>
+    <div class="cands-list" id="cl_${p.id}">${candsHtml}</div>
+    <div class="pc-actions">
+      <button class="btn-action primary" onclick="savePlace('${p.id}')">✓ Uložit</button>
+      <button class="btn-action"         onclick="goToMap('${p.id}',${p.lat},${p.lon})">🗺 Na mapě</button>
+      <div class="spacer"></div>
+      <button class="btn-action danger"  onclick="deletePlace('${p.id}')">Smazat</button>
+    </div>
+  </div>
+</div>`;
+}
+
+function togglePC(id){expandedPlace=expandedPlace===id?null:id;renderPlaces();}
+function storeN(id,v){const p=allPlaces.find(x=>x.id===id);if(p)p._editName=v;}
+function storeR(id,v){const p=allPlaces.find(x=>x.id===id);if(p)p._editRadius=v;}
+function togOnly(id,mk){
+  const p=allPlaces.find(x=>x.id===id);if(!p)return;
+  if(!p._only)p._only=[];
+  const i=p._only.indexOf(mk);
+  if(i>-1)p._only.splice(i,1);else p._only.push(mk);
+  document.getElementById('ot_'+id+'_'+mk)?.classList.toggle('active',p._only.includes(mk));
+}
+function selCand(pid,name,idx){
+  document.querySelectorAll(`[id^="ci_${pid}_"]`).forEach(el=>el.classList.remove('selected'));
+  document.getElementById(`ci_${pid}_${idx}`)?.classList.add('selected');
+  const inp=document.getElementById('pn_'+pid);if(inp)inp.value=name;
+  storeN(pid,name);
+}
+async function fetchCands(id,lat,lon){
+  const radius=parseInt(document.getElementById('ar_'+id)?.value)||300;
+  loadingCands[id]=true;renderPlaces();
+  try{const data=await fetch(`/nearby?lat=${lat}&lon=${lon}&radius=${radius}`).then(r=>r.json());editCands[id]=data.places||[];}
+  catch(e){editCands[id]=[];}
+  loadingCands[id]=false;renderPlaces();
+}
+async function savePlace(id){
+  const p=allPlaces.find(x=>x.id===id);if(!p)return;
+  const name=(document.getElementById('pn_'+id)?.value||'').trim();
+  const radius=parseInt(document.getElementById('pr_'+id)?.value)||150;
+  if(!name){document.getElementById('pn_'+id)?.focus();return;}
+  const only=p._only&&p._only.length?p._only:undefined;
+  let res;
+  if(p.name){
+    res=await fetch('/places/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,radius,...(only?{only}:{})})});
+  } else {
+    res=await fetch('/places/'+id+'/name',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,radius,...(only?{only}:{})})});
+  }
+  if(res.ok){p.name=name;p._editName=null;expandedPlace=null;await loadPlaces();renderPlaces();reloadPlacesOnMap();}
+}
+async function deletePlace(id){
+  if(!confirm('Smazat toto místo?'))return;
+  await fetch('/places/'+id,{method:'DELETE'});
+  allPlaces=allPlaces.filter(x=>x.id!==id);
+  delete editCands[id];delete loadingCands[id];
+  if(expandedPlace===id)expandedPlace=null;
+  await loadPlaces();renderPlaces();reloadPlacesOnMap();
+}
+function goToMap(id,lat,lon){
+  showPage('map');
+  setTimeout(()=>{map.setView([lat,lon],17);if(placeMarkers[id])placeMarkers[id].openPopup();},80);
+}
+
+// ─── GEOFENCES page ────────────────────────────────────────────────────
+async function loadGeofences(){
+  allFences=await fetch('/geofences').then(r=>r.json());
+  renderGeofences();
+}
+function renderGeofences(){
+  const list=document.getElementById('geoList');
+  if(!allFences.length){list.innerHTML='<div class="empty-state">Žádné geofences</div>';return;}
+  list.innerHTML=allFences.map(f=>renderGeoCard(f)).join('');
+}
+function renderGeoCard(f){
+  if(editingFence===f.id){
+    return `<div class="geo-card" style="flex-direction:column;align-items:stretch">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="geo-circle"></div>
+        <div class="geo-info"><div class="geo-name">${f.name}</div><div class="geo-coords">${fmtC(f.lat,f.lon)}</div></div>
+      </div>
+      <div class="geo-edit-row">
+        <input type="text"   id="en_${f.id}" value="${f.name}"   placeholder="název"  style="flex:1;min-width:70px">
+        <input type="number" id="er_${f.id}" value="${f.radius}" placeholder="radius" style="width:66px">
+        <span style="font-size:12px;color:#999">m</span>
+        <button class="btn-action primary" style="font-size:12px;padding:3px 10px" onclick="saveGeo('${f.id}')">Uložit</button>
+        <button class="btn-action"         style="font-size:12px;padding:3px 10px" onclick="cancelGeoEdit()">Zrušit</button>
+      </div>
+    </div>`;
+  }
+  return `<div class="geo-card">
+    <div class="geo-circle"></div>
+    <div class="geo-info">
+      <div class="geo-name">${f.name}</div>
+      <div class="geo-coords">${fmtC(f.lat,f.lon)}${f.only?' · jen: '+f.only.join(', '):''}</div>
+    </div>
+    <div class="geo-radius">${f.radius} m</div>
+    <div class="geo-btns">
+      <button class="geo-btn" onclick="editingFence='${f.id}';renderGeofences()">✏ Upravit</button>
+      <button class="geo-btn" onclick="showPage('map');setTimeout(()=>map.setView([${f.lat},${f.lon}],16),80)">🗺</button>
+      <button class="geo-btn danger" onclick="deleteFence('${f.id}')">✕</button>
+    </div>
+  </div>`;
+}
+function cancelGeoEdit(){editingFence=null;renderGeofences();}
+async function saveGeo(id){
+  const name=(document.getElementById('en_'+id)?.value||'').trim();
+  const radius=parseInt(document.getElementById('er_'+id)?.value)||150;
+  if(!name)return;
+  await fetch('/geofences/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,radius})});
+  editingFence=null;await loadGeofences();
+}
+async function deleteFence(id){
+  if(!confirm('Smazat geofence?'))return;
+  await fetch('/geofences/'+id,{method:'DELETE'});
+  await loadGeofences();
+}
+async function addGeofence(){
+  const name=document.getElementById('gName').value.trim();
+  const lat=parseFloat(document.getElementById('gLat').value);
+  const lon=parseFloat(document.getElementById('gLon').value);
+  const radius=parseInt(document.getElementById('gRadius').value)||150;
+  if(!name||isNaN(lat)||isNaN(lon)){alert('Vyplň název, lat a lon');return;}
+  const res=await fetch('/geofences',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,lat,lon,radius})});
+  if(res.ok){document.getElementById('gName').value='';document.getElementById('gLat').value='';document.getElementById('gLon').value='';await loadGeofences();}
+}
+
+// ─── Init ──────────────────────────────────────────────────────────────
+fetch('/status').then(r=>r.json()).then(data=>{
+  Object.entries(data).forEach(([key,val])=>updateMember(key,val));
+  renderChips();
+  const pts=Object.values(markers).map(m=>m.getLatLng());
+  if(pts.length>0)map.fitBounds(L.latLngBounds(pts).pad(0.5));
+});
+reloadPlacesOnMap();
+
+// ─── WebSocket ─────────────────────────────────────────────────────────
+const ws=new WebSocket('ws://'+window.location.hostname+':3000');
+ws.onopen=()=>{document.getElementById('wsDot').classList.add('live');document.getElementById('wsText').textContent='živě'};
+ws.onclose=()=>{document.getElementById('wsDot').classList.remove('live');document.getElementById('wsText').textContent='odpojeno'};
+ws.onmessage=(e)=>{
+  try{
+    const msg=JSON.parse(e.data);
+    if(msg.type==='update'){updateMember(msg.member,msg);renderChips();}
+    if(msg.type==='stop_detected'||msg.type==='fence_added'){
+      reloadPlacesOnMap();
+      if(currentPage==='places') loadPlaces().then(renderPlaces);
+      if(currentPage==='geofences') loadGeofences();
+    }
+    if(msg.type==='fence_updated'||msg.type==='fence_deleted'){
+      if(currentPage==='geofences') loadGeofences();
+    }
+  }catch(err){}
+};
+
+setInterval(()=>{
+  reloadPlacesOnMap();
+  if(currentPage==='geofences')loadGeofences();
+},2*60*1000);
+</script>
+</body>
+</html>
