@@ -89,27 +89,21 @@ const SKIP_PLACE_TYPES = [
 async function getNearbyPlaces(lat, lon, radius = 300) {
   if (!GOOGLE_API_KEY) return [];
   try {
-    const data = await httpPost(
-      'places.googleapis.com',
-      '/v1/places:searchNearby',
-      {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': GOOGLE_API_KEY,
-        'X-Goog-FieldMask': 'places.displayName,places.types,places.location,places.primaryType,places.rating'
-      },
-      JSON.stringify({
-        locationRestriction: { circle: { center: { latitude: lat, longitude: lon }, radius } },
-        maxResultCount: 20,
-        languageCode: 'cs'
-      })
-    );
-    if (!data.places) return [];
-    return data.places
+    const url = `/maps/api/place/nearbysearch/json?location=${lat},${lon}&radius=${radius}&language=cs&key=${GOOGLE_API_KEY}`;
+    const data = await new Promise((resolve, reject) => {
+      https.get({ hostname: 'maps.googleapis.com', path: url }, (res) => {
+        let d = '';
+        res.on('data', chunk => d += chunk);
+        res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
+      }).on('error', reject);
+    });
+    if (!data.results) return [];
+    return data.results
       .map(p => ({
-        name: p.displayName?.text || '',
-        primaryType: p.primaryType || '',
+        name: p.name || '',
+        primaryType: p.types?.[0] || '',
         types: (p.types || []).slice(0, 5),
-        dist: Math.round(distance(lat, lon, p.location.latitude, p.location.longitude)),
+        dist: Math.round(distance(lat, lon, p.geometry.location.lat, p.geometry.location.lng)),
         rating: p.rating || null,
       }))
       .filter(p => !SKIP_PLACE_TYPES.includes(p.primaryType) && p.name)
