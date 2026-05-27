@@ -297,6 +297,9 @@ function resolveMotion(motionActivities, vel) {
 const trackers = {};
 const recentlyDetected = {};
 
+// Paměť posledního způsobu pohybu — aby rozjezd autem neskočil na kolo
+const lastMotion = {};  // member → { motion, ts }
+
 function getTracker(member) {
   if (!trackers[member]) trackers[member] = { cluster: null, lastPoint: null };
   return trackers[member];
@@ -577,7 +580,23 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0) {
   const ts = Date.now();
   let status = resolveStatus(member, lat, lon);
   // Pohyb má přednost před geofence — kromě doma
-  const motion = resolveMotion(motionActivities, vel);
+  let motion = resolveMotion(motionActivities, vel);
+
+  // Pokud je pohyb nejasný (kolo při nízkých rychlostech), zkus použít poslední známý pohyb
+  // — aby rozjezd autem neskočil na kolo
+  const MOTION_MEMORY_MS = 5 * 60 * 1000; // 5 minut
+  if (motion && motion !== 'auto' && motion !== 'pěšky' && motion !== 'běh') {
+    const last = lastMotion[member];
+    if (last && last.motion === 'auto' && (ts - last.ts) < MOTION_MEMORY_MS) {
+      motion = 'auto';
+    }
+  }
+
+  // Ulož poslední pohyb do paměti (jen smysluplné hodnoty)
+  if (motion) {
+    lastMotion[member] = { motion, ts };
+  }
+
   const homeFences = dynamicFences.filter(f => f.name === 'doma' || f.name === 'Náš domeček').map(f => f.name);
   if (motion && !homeFences.includes(status)) status = motion;
   else if (status === 'cesta' && motion) status = motion;
