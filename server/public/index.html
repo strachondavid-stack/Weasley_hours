@@ -42,6 +42,8 @@
 
   /* ── map ── */
   #map{flex:1}
+  @keyframes ping{0%{transform:scale(1);opacity:0.8}70%{transform:scale(2.2);opacity:0}100%{transform:scale(2.2);opacity:0}}
+  .member-ping{position:absolute;width:100%;height:100%;border-radius:50%;animation:ping 1.8s ease-out infinite}
   #map.sim-picking { cursor: crosshair !important; }
   #map.sim-picking .leaflet-container { cursor: crosshair !important; }
   .leaflet-popup-content-wrapper{border-radius:8px;border:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:rgba(20,20,30,0.82);backdrop-filter:blur(8px);box-shadow:0 4px 16px rgba(0,0,0,0.3)}
@@ -826,13 +828,14 @@ function clockClick(key){
 
 // ─── Member icons & chips ──────────────────────────────────────────────
 function makeIcon(color,letter){
-  // Převeď hex barvu na rgba s průhledností
-  const hex = color.replace('#','');
-  const r = parseInt(hex.slice(0,2),16);
-  const g = parseInt(hex.slice(2,4),16);
-  const b = parseInt(hex.slice(4,6),16);
-  const bg = `rgba(${r},${g},${b},0.25)`;
-  return L.divIcon({className:'',html:`<div style="width:34px;height:34px;border-radius:50%;background:${bg};border:2px solid #222;display:flex;align-items:center;justify-content:center;font-family:sans-serif;font-size:14px;font-weight:700;color:#222;box-shadow:0 2px 8px rgba(0,0,0,0.25)">${letter}</div>`,iconSize:[34,34],iconAnchor:[17,17],popupAnchor:[0,-19]});
+  return L.divIcon({
+    className:'',
+    html:`<div style="position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center">
+      <div class="member-ping" style="background:${color};opacity:0.35;position:absolute;top:0;left:0;width:40px;height:40px;border-radius:50%;animation:ping 1.8s ease-out infinite"></div>
+      <div style="position:relative;width:26px;height:26px;border-radius:50%;background:${color};border:2.5px solid #fff;display:flex;align-items:center;justify-content:center;font-family:sans-serif;font-size:11px;font-weight:800;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);letter-spacing:0.02em">${letter}</div>
+    </div>`,
+    iconSize:[40,40],iconAnchor:[20,20],popupAnchor:[0,-22]
+  });
 }
 function makePlaceIcon(unnamed){
   const color=unnamed?'#d97706':'#4a7c4a';
