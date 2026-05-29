@@ -834,7 +834,6 @@ function makeIcon(color,letter,emoji){
   return L.divIcon({
     className:'',
     html:`<div style="position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center">
-      <div style="background:${color};opacity:0.3;position:absolute;top:0;left:0;width:40px;height:40px;border-radius:50%;animation:ping 1.8s ease-out infinite"></div>
       ${inner}
     </div>`,
     iconSize:[40,40],iconAnchor:[20,20],popupAnchor:[0,-22]
