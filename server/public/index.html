@@ -1161,19 +1161,31 @@ function simReset() {
   map.getContainer().classList.add('sim-picking');
 }
 
+function simPin(latlng, label, color) {
+  return L.marker(latlng, {
+    icon: L.divIcon({
+      className: '',
+      html: `<div style="display:flex;flex-direction:column;align-items:center">
+        <div style="background:${color};color:#fff;padding:3px 9px;border-radius:4px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.3)">${label}</div>
+        <div style="width:2px;height:10px;background:${color}"></div>
+        <div style="width:8px;height:8px;border-radius:50%;background:${color}"></div>
+      </div>`,
+      iconSize: [60, 44],
+      iconAnchor: [30, 44],
+      popupAnchor: [0, -44]
+    })
+  });
+}
+
 function simMapClick(e) {
   if (simState.active) return;
   if (!simState.pointA) {
     simState.pointA = e.latlng;
-    simState.markerA = L.marker(e.latlng, {
-      icon: L.divIcon({ className:'', html:'<div style="background:#22c55e;color:#fff;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap">A START</div>' })
-    }).addTo(map);
+    simState.markerA = simPin(e.latlng, '📍 START', '#22c55e').addTo(map);
     document.getElementById('simStatus').textContent = 'Klikni na mapu pro CÍL';
   } else if (!simState.pointB) {
     simState.pointB = e.latlng;
-    simState.markerB = L.marker(e.latlng, {
-      icon: L.divIcon({ className:'', html:'<div style="background:#dc2626;color:#fff;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap">B CÍL</div>' })
-    }).addTo(map);
+    simState.markerB = simPin(e.latlng, '🏁 CÍL', '#dc2626').addTo(map);
     document.getElementById('simStatus').textContent = 'Trasa připravena — stiskni Spustit';
     document.getElementById('simStartBtn').style.display = '';
     map.off('click', simMapClick);
@@ -1365,8 +1377,8 @@ function simAskNext(prevDest) {
           simState.pointB = L.latLng(home.lat, home.lon);
           if (simState.markerA) map.removeLayer(simState.markerA);
           if (simState.markerB) map.removeLayer(simState.markerB);
-          simState.markerA = L.marker(prevDest, { icon: L.divIcon({ className:'', html:'<div style="background:#22c55e;color:#fff;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:600">A</div>' }) }).addTo(map);
-          simState.markerB = L.marker([home.lat, home.lon], { icon: L.divIcon({ className:'', html:'<div style="background:#dc2626;color:#fff;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:600">B 🏠</div>' }) }).addTo(map);
+          simState.markerA = simPin(prevDest, '📍 START', '#22c55e').addTo(map);
+          simState.markerB = simPin(L.latLng(home.lat, home.lon), '🏠 DOMŮ', '#dc2626').addTo(map);
           simState.coords = [];
           simState.step = 0;
           simState.active = true;
@@ -1382,7 +1394,7 @@ function simAskNext(prevDest) {
         if (simState.markerB) { map.removeLayer(simState.markerB); simState.markerB = null; }
         map.once('click', async (e) => {
           simState.pointB = e.latlng;
-          simState.markerB = L.marker(e.latlng, { icon: L.divIcon({ className:'', html:'<div style="background:#dc2626;color:#fff;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:600">B CÍL</div>' }) }).addTo(map);
+          simState.markerB = simPin(e.latlng, '🏁 CÍL', '#dc2626').addTo(map);
           await simFetchRoute(prevDest, e.latlng);
         });
       }
