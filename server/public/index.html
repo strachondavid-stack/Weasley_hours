@@ -333,8 +333,8 @@
     <div class="card">
       <div class="card-header"><span class="card-icon">✦</span><span class="card-title">AI rozhodnutí</span></div>
       <div class="card-body">
-        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">ai_response</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/logs?limit=50&amp;type=ai_response&amp;member=mamka" | python3 -m json.tool | grep -E "member|name|confidence|reason"</span><button class="copy-btn">⧉</button></div>
-        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">zamítnuto</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/logs?limit=50&amp;type=place_rejected" | python3 -m json.tool | grep -E "member|reason"</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">ai_response</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/logs?limit=50&amp;type=ai_response&amp;member=mamka" | python3 /volume1/docker/weasley/scripts/logs.py</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">zamítnuto</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/logs?limit=50&amp;type=place_rejected" | python3 /volume1/docker/weasley/scripts/logs.py</span><button class="copy-btn">⧉</button></div>
         <div class="divider"></div>
         <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">smazat logy</span><span class="cmd-text">curl -X DELETE "http://192.168.0.228:3000/logs"</span><button class="copy-btn">⧉</button></div>
       </div>
