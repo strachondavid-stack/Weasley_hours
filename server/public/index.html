@@ -1218,21 +1218,27 @@ async function simStep() {
 
 function simArrived() {
   const dest = simState.pointB;
+  const member = document.getElementById('simMember').value;
   document.getElementById('simStatus').textContent = '📍 Dorazili jsme do cíle';
-  // Zobraz dialog
+
   showSimDialog(
     '📍 Dorazili jsme!',
-    'Jak dlouho se tu Mišák staví?',
+    `Jak dlouho se tu ${member} staví?`,
     [
+      { label: '⚡ Odjet hned', value: 0 },
       { label: '5 min', value: 5 },
       { label: '10 min', value: 10 },
       { label: '20 min', value: 20 },
       { label: '30 min', value: 30 },
-      { label: 'Odjet hned', value: 0 },
+      { label: '⏹ Konec simulace', value: 'stop' },
     ],
-    async (minutes) => {
-      if (minutes > 0) {
-        await simStay(dest.lat, dest.lng, minutes);
+    async (choice) => {
+      if (choice === 'stop') {
+        document.getElementById('simStatus').textContent = '✓ Simulace dokončena';
+        return;
+      }
+      if (choice > 0) {
+        await simStay(dest.lat, dest.lng, choice);
       }
       // Po stání — dialog kam dál
       simAskNext(dest);
@@ -1263,7 +1269,7 @@ async function simStay(lat, lon, minutes) {
 function simAskNext(prevDest) {
   showSimDialog(
     '🚗 Kam dál?',
-    'Vyber další cíl:',
+    'Vyber další zastávku:',
     [
       { label: '🏠 Domů', value: 'home' },
       { label: '📍 Kliknu na mapu', value: 'map' },
