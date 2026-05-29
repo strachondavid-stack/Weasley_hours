@@ -1597,12 +1597,25 @@ function logInitListeners() {
   });
 }
 
+const LOG_LIMITS = {
+  'gps_received': 50,
+  'ai_response': 20,
+  'ai_request': 20,
+  'ai_error': 20,
+  'stop_candidate': 30,
+  'place_saved': 30,
+  'place_rejected': 30,
+  'fence_added': 50,
+  'img_selected': 20,
+};
+
 async function loadLog() {
   const list = document.getElementById('logList');
   if (!list) return;
   list.innerHTML = '<div class="log-empty">Načítám...</div>';
   
-  let url = '/logs?limit=100';
+  const limit = _logType ? (LOG_LIMITS[_logType] || 50) : 100;
+  let url = '/logs?limit=' + limit;
   if (_logType) url += '&type=' + _logType;
   if (_logMember) url += '&member=' + _logMember;
   
@@ -1612,7 +1625,7 @@ async function loadLog() {
     if (!logs.length) { list.innerHTML = '<div class="log-empty">Žádné záznamy</div>'; return; }
     list.innerHTML = logs.map((l, i) => logRenderEntry(l, i)).join('');
   } catch(e) {
-    list.innerHTML = '<div class="log-empty">Chyba načtení</div>';
+    list.innerHTML = '<div class="log-empty">Chyba načtení: ' + e.message + '</div>';
   }
 }
 
