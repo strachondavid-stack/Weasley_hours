@@ -643,7 +643,7 @@ function showPage(p){
   if(p==='geofences') { loadGeofences(); }
   if(p==='clock')     { renderClock(); }
   if(p==='admin')     { loadMode(); }
-  if(p==='map')       { setTimeout(()=>map.invalidateSize(),50); if(currentMode==='test') simReset(); }
+  if(p==='map')       { setTimeout(()=>map.invalidateSize(),50); fetch('/mode').then(r=>r.json()).then(d=>{ if(d.mode==='test') simReset(); }); }
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────
@@ -1318,24 +1318,41 @@ function showSimDialog(title, text, options, callback) {
 
   const overlay = document.createElement('div');
   overlay.id = 'simDialogOverlay';
-  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;pointer-events:all';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px';
 
   const box = document.createElement('div');
-  box.style.cssText = 'background:#fff;border-radius:12px;padding:20px;max-width:320px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.3);position:relative;z-index:100001;pointer-events:all';
-  box.innerHTML = `
-    <div style="font-size:16px;font-weight:600;color:#222;margin-bottom:6px">${title}</div>
-    <div style="font-size:13px;color:#666;margin-bottom:14px">${text}</div>
-    <div style="display:flex;flex-direction:column;gap:6px">
-      ${options.map(o => `<button onclick="simDialogChoice(${JSON.stringify(o.value)})" style="font-size:13px;padding:8px 14px;border-radius:6px;border:1px solid #ddd;background:#fafafa;cursor:pointer;text-align:left;transition:background 0.1s" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='#fafafa'">${o.label}</button>`).join('')}
-    </div>`;
+  box.style.cssText = 'background:#fff;border-radius:12px;padding:20px;max-width:320px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+
+  const titleEl = document.createElement('div');
+  titleEl.style.cssText = 'font-size:16px;font-weight:600;color:#222;margin-bottom:6px';
+  titleEl.textContent = title;
+  box.appendChild(titleEl);
+
+  const textEl = document.createElement('div');
+  textEl.style.cssText = 'font-size:13px;color:#666;margin-bottom:14px';
+  textEl.textContent = text;
+  box.appendChild(textEl);
+
+  const btns = document.createElement('div');
+  btns.style.cssText = 'display:flex;flex-direction:column;gap:6px';
+
+  options.forEach(o => {
+    const btn = document.createElement('button');
+    btn.style.cssText = 'font-size:13px;padding:8px 14px;border-radius:6px;border:1px solid #ddd;background:#fafafa;cursor:pointer;text-align:left';
+    btn.textContent = o.label;
+    btn.addEventListener('mouseover', () => btn.style.background = '#f0f0f0');
+    btn.addEventListener('mouseout', () => btn.style.background = '#fafafa');
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hideSimDialog();
+      callback(o.value);
+    });
+    btns.appendChild(btn);
+  });
+
+  box.appendChild(btns);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
-  window._simDialogCallback = callback;
-}
-
-function simDialogChoice(value) {
-  hideSimDialog();
-  if (window._simDialogCallback) window._simDialogCallback(value);
 }
 
 function hideSimDialog() {
