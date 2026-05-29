@@ -386,7 +386,7 @@
     <div class="card">
       <div class="card-header"><span class="card-icon">📌</span><span class="card-title">Správa míst</span></div>
       <div class="card-body">
-        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">čekající</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/places" | python3 -c "import json,sys;[print(p['id'],p.get('suggestedName','?')) for p in json.load(sys.stdin) if not p.get('name')]"</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">čekající</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/places" | python3 /volume1/docker/weasley/scripts/places.py</span><button class="copy-btn">⧉</button></div>
         <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">reset všech</span><span class="cmd-text">curl -X DELETE "http://192.168.0.228:3000/places/all"</span><button class="copy-btn">⧉</button></div>
       </div>
     </div>
