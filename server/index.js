@@ -597,9 +597,19 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0) {
     lastMotion[member] = { motion, ts };
   }
 
-  const homeFences = dynamicFences.filter(f => f.name === 'doma' || f.name === 'Náš domeček').map(f => f.name);
-  if (motion && !homeFences.includes(status)) status = motion;
-  else if (status === 'cesta' && motion) status = motion;
+  // Motion přepisuje status pouze pokud jsme na cestě (ne uvnitř geofence)
+  // GPS drift — bod těsně mimo fence radius, ale stále u místa
+  if (motion) {
+    if (status === 'cesta') {
+      const nearFence = dynamicFences.find(f =>
+        (!f.only || f.only.includes(member)) &&
+        distance(lat, lon, f.lat, f.lon) < f.radius * 1.5
+      );
+      if (nearFence) status = nearFence.name;
+      else status = motion;
+    }
+    // Pokud jsme doma a pohybujeme se — necháme doma
+  }
   const img = await suggestImageForStatus(status);
   const data = { status, lat, lon, ts, img };
   await redis.set('member:' + member, JSON.stringify(data));
