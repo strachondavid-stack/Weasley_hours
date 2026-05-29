@@ -701,7 +701,7 @@ function showPage(p){
   if(p==='geofences') { loadGeofences(); }
   if(p==='clock')     { renderClock(); }
   if(p==='admin')     { loadMode(); }
-  if(p==='log')       { loadLog(); }
+  if(p==='log')       { logInitListeners(); loadLog(); }
   if(p==='map')       { setTimeout(()=>map.invalidateSize(),50); fetch('/mode').then(r=>r.json()).then(d=>{ if(d.mode==='test') simReset(); }); }
 }
 
@@ -1552,24 +1552,24 @@ setInterval(()=>{
 .badge-default{background:#1a1a1a;color:#666}
 </style>
 
-<div class="log-toolbar">
-  <button class="log-fbtn active" onclick="logSetType(null,this)">Vše</button>
-  <button class="log-fbtn gps" onclick="logSetType('gps_received',this)">GPS</button>
-  <button class="log-fbtn ai" onclick="logSetType('ai_response',this)">AI odpověď</button>
-  <button class="log-fbtn ai" onclick="logSetType('ai_request',this)">AI dotaz</button>
-  <button class="log-fbtn place" onclick="logSetType('stop_candidate',this)">Zastávka</button>
-  <button class="log-fbtn place" onclick="logSetType('place_saved',this)">Uloženo</button>
-  <button class="log-fbtn err" onclick="logSetType('place_rejected',this)">Zamítnuto</button>
-  <button class="log-fbtn err" onclick="logSetType('ai_error',this)">Chyba</button>
-  <button class="log-fbtn" onclick="logSetType('fence_added',this)">Geofence</button>
-  <button class="log-refresh" onclick="loadLog()">↻ Obnovit</button>
+<div class="log-toolbar" id="logTypeBar">
+  <button class="log-fbtn active" data-type="">Vše</button>
+  <button class="log-fbtn gps" data-type="gps_received">GPS</button>
+  <button class="log-fbtn ai" data-type="ai_response">AI odpověď</button>
+  <button class="log-fbtn ai" data-type="ai_request">AI dotaz</button>
+  <button class="log-fbtn place" data-type="stop_candidate">Zastávka</button>
+  <button class="log-fbtn place" data-type="place_saved">Uloženo</button>
+  <button class="log-fbtn err" data-type="place_rejected">Zamítnuto</button>
+  <button class="log-fbtn err" data-type="ai_error">Chyba</button>
+  <button class="log-fbtn" data-type="fence_added">Geofence</button>
+  <button class="log-refresh" id="logRefreshBtn">↻ Obnovit</button>
 </div>
-<div class="log-toolbar" style="padding-top:4px;padding-bottom:6px">
-  <button class="log-member-btn active" onclick="logSetMember(null,this)">Všichni</button>
-  <button class="log-member-btn" onclick="logSetMember('mamka',this)">mamka</button>
-  <button class="log-member-btn" onclick="logSetMember('tatka',this)">tatka</button>
-  <button class="log-member-btn" onclick="logSetMember('misak',this)">mišák</button>
-  <button class="log-member-btn" onclick="logSetMember('kubik',this)">kubík</button>
+<div class="log-toolbar" style="padding-top:4px;padding-bottom:6px" id="logMemberBar">
+  <button class="log-member-btn active" data-member="">Všichni</button>
+  <button class="log-member-btn" data-member="mamka">mamka</button>
+  <button class="log-member-btn" data-member="tatka">tatka</button>
+  <button class="log-member-btn" data-member="misak">mišák</button>
+  <button class="log-member-btn" data-member="kubik">kubík</button>
 </div>
 <div class="log-list" id="logList"><div class="log-empty">Načítám...</div></div>
 </div>
@@ -1577,18 +1577,24 @@ setInterval(()=>{
 <script>
 let _logType = null, _logMember = null;
 
-function logSetType(type, btn) {
-  _logType = type;
-  document.querySelectorAll('.log-fbtn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  loadLog();
-}
-
-function logSetMember(member, btn) {
-  _logMember = member;
-  document.querySelectorAll('.log-member-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  loadLog();
+function logInitListeners() {
+  document.querySelectorAll('#logTypeBar .log-fbtn, #logTypeBar .log-refresh').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.id === 'logRefreshBtn') { loadLog(); return; }
+      _logType = btn.dataset.type || null;
+      document.querySelectorAll('#logTypeBar .log-fbtn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadLog();
+    });
+  });
+  document.querySelectorAll('#logMemberBar .log-member-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _logMember = btn.dataset.member || null;
+      document.querySelectorAll('#logMemberBar .log-member-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadLog();
+    });
+  });
 }
 
 async function loadLog() {
