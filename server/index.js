@@ -649,10 +649,28 @@ app.post('/status/:member', async (req, res) => {
   const { member } = req.params;
   if (!MEMBERS.includes(member)) return res.status(404).json({ error: 'Unknown member' });
   const { status } = req.body;
-  const data = { status, lat: null, lon: null, ts: Date.now(), manual: true };
+  // Zachovej poslední GPS pozici
+  const existing = await redis.get('member:' + member);
+  const prev = existing ? JSON.parse(existing) : {};
+  // Pokud je cesta, upřesni pohyb z posledního známého stavu
+  let finalStatus = status;
+  if (status === 'cesta' && prev.lat) {
+    const history = await redis.lRange('history:' + member, 0, 2);
+    if (history.length >= 2) {
+      const p1 = JSON.parse(history[0]);
+      const p2 = JSON.parse(history[1]);
+      const timeDiff = (p1.ts - p2.ts) / 1000;
+      const distM = distance(p1.lat, p1.lon, p2.lat, p2.lon);
+      const vel = timeDiff > 0 ? (distM / timeDiff) * 3.6 : 0;
+      const motion = resolveMotion([], vel);
+      if (motion) finalStatus = motion;
+    }
+  }
+  const img = await suggestImageForStatus(finalStatus);
+  const data = { status: finalStatus, lat: prev.lat || null, lon: prev.lon || null, ts: Date.now(), manual: true, img };
   await redis.set('member:' + member, JSON.stringify(data));
   broadcast({ type: 'update', member, ...data });
-  res.json({ ok: true, member, status });
+  res.json({ ok: true, member, status: finalStatus });
 });
 
 app.get('/places', async (req, res) => {
