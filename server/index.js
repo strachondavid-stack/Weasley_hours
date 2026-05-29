@@ -120,12 +120,28 @@ async function getNearbyPlaces(lat, lon, radius = 300) {
 async function countNearbyHistory(member, lat, lon, radiusM = 100) {
   try {
     const raw = await redis.lRange('history:' + member, 0, 999);
-    let count = 0;
-    for (const r of raw) {
-      const p = JSON.parse(r);
-      if (distance(lat, lon, p.lat, p.lon) <= radiusM) count++;
+    // Skupinuj body do návštěv — mezera > 30 minut = nová návštěva
+    const VISIT_GAP = 30 * 60 * 1000;
+    let visits = 0;
+    let inVisit = false;
+    let lastTs = null;
+    // History je seřazena od nejnovějšího — obratime
+    const points = raw.map(r => JSON.parse(r)).reverse();
+    for (const p of points) {
+      const nearby = distance(lat, lon, p.lat, p.lon) <= radiusM;
+      if (nearby) {
+        if (!inVisit || (lastTs && p.ts - lastTs > VISIT_GAP)) {
+          visits++;
+          inVisit = true;
+        }
+        lastTs = p.ts;
+      } else {
+        if (inVisit && lastTs && p.ts - lastTs > VISIT_GAP) {
+          inVisit = false;
+        }
+      }
     }
-    return count;
+    return visits;
   } catch(e) { return 0; }
 }
 
