@@ -556,8 +556,20 @@ function adminCopied(btn) {
 async function allHome() {
   const members = ['mamka','tatka','misak','kubik'];
   document.getElementById('allActionStatus').textContent = '⏳ Odesílám...';
+  // Najdi souradnice domova z geofence
+  const fences = await fetch('/geofences').then(r => r.json());
+  const home = fences.find(f => f.name.toLowerCase().includes('dom') || f.name.toLowerCase().includes('náš'));
   await Promise.all(members.map(m =>
-    fetch('/status/' + m, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status:'doma'}) })
+    fetch('/gps/' + m, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        lat: home ? home.lat : 50.779,
+        lon: home ? home.lon : 15.058,
+        vel: 0,
+        motionactivities: ['stationary']
+      })
+    })
   ));
   document.getElementById('allActionStatus').textContent = '✓ Všichni doma';
   setTimeout(() => document.getElementById('allActionStatus').textContent = '', 3000);
