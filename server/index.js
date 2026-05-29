@@ -223,7 +223,12 @@ Odpověz POUZE jako JSON:
 
     let result;
     try {
-      result = JSON.parse(raw.replace(/```json|```/g, '').trim());
+      // Odstraň markdown backticky, komentáře a vše před { a za }
+      const cleaned = raw.replace(/```json|```/g, '').trim();
+      const jsonStart = cleaned.indexOf('{');
+      const jsonEnd = cleaned.lastIndexOf('}');
+      if (jsonStart === -1 || jsonEnd === -1) throw new Error('No JSON object found');
+      result = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
     } catch(e) {
       await logEvent('ai_error', { member, lat, lon, error: 'Nelze parsovat JSON: ' + raw, durationMs });
       return null;
