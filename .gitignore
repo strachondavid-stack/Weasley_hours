@@ -1,2 +1,8 @@
 node_modules/
 *.env
+server/public/img/
+server/public/fonts/
+mosquitto/
+docker-compose.yml
+package.json
+package-lock.json
