@@ -842,19 +842,28 @@ app.get('/logs', async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 50, 500);
     const filterType = req.query.type || null;
     const filterMember = req.query.member || null;
-    const keys = await redis.lRange('log:index', 0, filterType ? Math.min(limit * 50, 5000) : limit * 5);
+    const totalKeys = await redis.lLen('log:index');
+    const BATCH = 200;
     const results = [];
-    for (const key of keys) {
-      if (results.length >= limit) break;
-      try {
-        const raw = await redis.get(key);
-        if (!raw) continue;
-        const entry = JSON.parse(raw);
-        if (filterType && entry.type !== filterType) continue;
-        if (filterMember && entry.member !== filterMember) continue;
-        results.push(entry);
-      } catch(e) { continue; }
+    let offset = 0;
+
+    while (results.length < limit && offset < totalKeys) {
+      const keys = await redis.lRange('log:index', offset, offset + BATCH - 1);
+      if (!keys.length) break;
+      for (const key of keys) {
+        if (results.length >= limit) break;
+        try {
+          const raw = await redis.get(key);
+          if (!raw) continue;
+          const entry = JSON.parse(raw);
+          if (filterType && entry.type !== filterType) continue;
+          if (filterMember && entry.member !== filterMember) continue;
+          results.push(entry);
+        } catch(e) { continue; }
+      }
+      offset += BATCH;
     }
+
     res.json({ count: results.length, logs: results });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
