@@ -466,7 +466,9 @@ async function detectSilentStop(member, prevPoint, newLat, newLon, newTs) {
 // Move mode: husté body v malém okruhu = reálná zastávka.
 async function evaluateCluster(member, cluster) {
   if (!cluster || cluster.points.length < MIN_STOP_POINTS) return;
-  const duration = Date.now() - cluster.startTs;
+  // Pouzij ts posledniho bodu misto Date.now() — funguje i se simulovanym casem
+  const lastTs = cluster.points[cluster.points.length - 1].ts;
+  const duration = lastTs - cluster.startTs;
   if (duration < MIN_STOP_DURATION) return;
   const center = clusterCenter(cluster.points);
   await processStopCandidate(member, center.lat, center.lon, Math.round(duration / 60000), 'cluster');
