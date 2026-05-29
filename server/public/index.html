@@ -191,6 +191,10 @@
   <div id="ws-status"><div class="dot" id="wsDot"></div><span id="wsText">připojuji...</span></div>
 </header>
 
+<div id="mode-banner" style="display:none;background:#dc2626;color:#fff;text-align:center;font-size:13px;font-weight:600;padding:6px;letter-spacing:0.05em">
+  🧪 TESTOVACÍ REŽIM — data se neukládají do live
+  <button onclick="switchMode('live')" style="margin-left:12px;font-size:12px;padding:2px 10px;border:1px solid #fff;border-radius:10px;background:none;color:#fff;cursor:pointer">Přepnout na LIVE</button>
+</div>
 <div class="nav-tabs">
   <button class="nav-tab active" id="tab-map"       onclick="showPage('map')">🗺 Mapa</button>
   <button class="nav-tab"        id="tab-clock"     onclick="showPage('clock')">🕰 Hodiny</button>
@@ -283,6 +287,23 @@
 #page-admin .status-btn:hover { background:#f5f5f5;color:#555 }
 #page-admin .status-btn.active { background:#333;color:#fff;border-color:#333 }
 </style>
+
+<div class="section">
+  <div class="section-title">Prostředí</div>
+  <div class="cards">
+    <div class="card" style="grid-column:1/-1">
+      <div class="card-header"><span class="card-icon">⚡</span><span class="card-title">Live / Test mód</span></div>
+      <div class="card-body" style="padding:12px">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button id="btnLive" onclick="switchMode('live')" style="font-size:13px;padding:6px 18px;border-radius:6px;border:2px solid #4a7c4a;background:#4a7c4a;color:#fff;cursor:pointer;font-weight:600">✓ LIVE</button>
+          <button id="btnTest" onclick="switchMode('test')" style="font-size:13px;padding:6px 18px;border-radius:6px;border:2px solid #ddd;background:#fafafa;color:#666;cursor:pointer;font-weight:600">🧪 TEST</button>
+          <span id="modeDesc" style="font-size:12px;color:#888">Živá data rodiny</span>
+        </div>
+        <div style="font-size:11px;color:#bbb;margin-top:8px">TEST mód zkopíruje geofences z live — GPS simulace neovlivní živá data</div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="section">
   <div class="section-title">Update a restart</div>
@@ -489,6 +510,44 @@ function adminCopied(btn) {
   setTimeout(() => { btn.classList.remove('copied'); btn.textContent = '⧉'; }, 1500);
 }
 
+async function switchMode(mode) {
+  try {
+    const res = await fetch('/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
+    const data = await res.json();
+    updateModeUI(data.mode);
+  } catch(e) { alert('Chyba přepnutí módu: ' + e.message); }
+}
+
+function updateModeUI(mode) {
+  const isTest = mode === 'test';
+  const banner = document.getElementById('mode-banner');
+  const btnLive = document.getElementById('btnLive');
+  const btnTest = document.getElementById('btnTest');
+  const desc = document.getElementById('modeDesc');
+  if (banner) banner.style.display = isTest ? 'block' : 'none';
+  if (btnLive) {
+    btnLive.style.background = isTest ? '#fafafa' : '#4a7c4a';
+    btnLive.style.color = isTest ? '#666' : '#fff';
+    btnLive.style.borderColor = isTest ? '#ddd' : '#4a7c4a';
+    btnLive.textContent = isTest ? 'LIVE' : '✓ LIVE';
+  }
+  if (btnTest) {
+    btnTest.style.background = isTest ? '#dc2626' : '#fafafa';
+    btnTest.style.color = isTest ? '#fff' : '#666';
+    btnTest.style.borderColor = isTest ? '#dc2626' : '#ddd';
+    btnTest.textContent = isTest ? '✓ TEST' : '🧪 TEST';
+  }
+  if (desc) desc.textContent = isTest ? '🧪 Testovací data — živá data jsou v bezpečí' : 'Živá data rodiny';
+}
+
+// Načti aktuální mód při otevření Admin záložky
+async function loadMode() {
+  try {
+    const data = await fetch('/mode').then(r => r.json());
+    updateModeUI(data.mode);
+  } catch(e) {}
+}
+
 function adminCopy(row){
   const textEl = row.querySelector('.cmd-text');
   if (!textEl) return;
@@ -552,6 +611,7 @@ function showPage(p){
   if(p==='places')    { loadPlaces().then(renderPlaces); }
   if(p==='geofences') { loadGeofences(); }
   if(p==='clock')     { renderClock(); }
+  if(p==='admin')     { loadMode(); }
   if(p==='map')       { setTimeout(()=>map.invalidateSize(),50); }
 }
 
