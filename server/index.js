@@ -680,7 +680,9 @@ app.post('/gps/:member', async (req, res) => {
   const lat = parseFloat(req.body.lat);
   const lon = parseFloat(req.body.lon);
   if (isNaN(lat) || isNaN(lon)) return res.status(400).json({ error: 'lat and lon required' });
-  const status = await processGPS(member, lat, lon);
+  const motionactivities = req.body.motionactivities || [];
+  const vel = parseFloat(req.body.vel) || 0;
+  const status = await processGPS(member, lat, lon, motionactivities, vel);
   res.json({ ok: true, member, status });
 });
 
