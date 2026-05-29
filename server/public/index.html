@@ -462,18 +462,37 @@ function adminUpdateOverride(){
   else el.textContent='← vyber člena a status výše';
 }
 
+function adminCopyText(text, btn) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => adminCopied(btn));
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      adminCopied(btn);
+    }
+  } catch(e) { console.error('Copy failed', e); }
+}
+
+function adminCopied(btn) {
+  if (!btn) return;
+  btn.classList.add('copied');
+  btn.textContent = '✓';
+  setTimeout(() => { btn.classList.remove('copied'); btn.textContent = '⧉'; }, 1500);
+}
+
 function adminCopy(row){
-  const textEl=row.querySelector('.cmd-text');
-  if(!textEl)return;
-  const text=textEl.textContent.trim();
-  if(!text||text.startsWith('←'))return;
-  navigator.clipboard.writeText(text).then(()=>{
-    const btn=row.querySelector('.copy-btn');
-    if(!btn)return;
-    btn.classList.add('copied');
-    btn.textContent='✓';
-    setTimeout(()=>{btn.classList.remove('copied');btn.textContent='⧉';},1500);
-  });
+  const textEl = row.querySelector('.cmd-text');
+  if (!textEl) return;
+  const text = textEl.textContent.trim();
+  if (!text || text.startsWith('←')) return;
+  const btn = row.querySelector('.copy-btn');
+  adminCopyText(text, btn);
 }
 </script>
 
