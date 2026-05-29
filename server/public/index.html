@@ -1659,47 +1659,36 @@ function logTitle(l) {
 }
 
 function logDetail(l) {
+  const nl = '<br>';
   switch(l.type) {
     case 'ai_response': {
       const r = l.result || {};
-      return [
-        `důvod:      ${r.reason || '?'}`,
-        `confidence: ${r.confidence}`,
-        `name:       ${r.name || '–'}`,
-        `save:       ${r.should_save}`,
-        `latence:    ${l.durationMs}ms`,
-      ].join('
-');
+      return 'duvod: ' + (r.reason || '?') + nl +
+        'confidence: ' + r.confidence + nl +
+        'name: ' + (r.name || '-') + nl +
+        'save: ' + r.should_save + nl +
+        'latence: ' + l.durationMs + 'ms';
     }
-    case 'stop_candidate': return [
-      `zdroj:      ${l.source}`,
-      `délka:      ${l.gapMinutes} min`,
-      `POI:        ${l.placesCount}`,
-      `návštěv:    ${l.historyVisits}x`,
-      `čas:        ${l.dayOfWeek} ${l.timeStr}`,
-    ].join('
-');
-    case 'place_saved': return [
-      `jméno:      ${l.name || l.suggestedName || '?'}`,
-      `confidence: ${l.aiConfidence}`,
-      `auto:       ${l.autoSave}`,
-      `zdroj:      ${l.source}`,
-      `důvod AI:   ${l.aiReason || '–'}`,
-    ].join('
-');
-    case 'place_rejected': return [
-      `důvod:      ${l.reason}`,
-      `AI jméno:   ${l.aiName || '–'}`,
-      `confidence: ${l.aiConfidence || '–'}`,
-      `AI důvod:   ${l.aiReason || '–'}`,
-    ].join('
-');
-    case 'ai_error': return `chyba: ${l.error}
-latence: ${l.durationMs}ms`;
-    case 'gps_received': return `lat: ${l.lat}
-lon: ${l.lon}
-status: ${l.status}`;
-    default: return JSON.stringify(l, null, 2);
+    case 'stop_candidate':
+      return 'zdroj: ' + l.source + nl +
+        'delka: ' + l.gapMinutes + ' min' + nl +
+        'POI: ' + l.placesCount + nl +
+        'navstev: ' + l.historyVisits + 'x';
+    case 'place_saved':
+      return 'jmeno: ' + (l.name || l.suggestedName || '?') + nl +
+        'confidence: ' + l.aiConfidence + nl +
+        'auto: ' + l.autoSave + nl +
+        'duvod: ' + (l.aiReason || '-');
+    case 'place_rejected':
+      return 'duvod: ' + (l.reason || '?') + nl +
+        'confidence: ' + (l.aiConfidence || '-') + nl +
+        'AI duvod: ' + (l.aiReason || '-');
+    case 'ai_error':
+      return 'chyba: ' + (l.error || '?') + nl + 'latence: ' + l.durationMs + 'ms';
+    case 'gps_received':
+      return 'lat: ' + l.lat + nl + 'lon: ' + l.lon + nl + 'status: ' + l.status;
+    default:
+      return JSON.stringify(l, null, 2);
   }
 }
 </script>
