@@ -42,7 +42,10 @@
 
   /* ── map ── */
   #map{flex:1}
-  .leaflet-popup-content-wrapper{border-radius:6px;border:1px solid #ccc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+  #map.sim-picking { cursor: crosshair !important; }
+  #map.sim-picking .leaflet-container { cursor: crosshair !important; }
+  .leaflet-popup-content-wrapper{border-radius:6px;border:1px solid #ccc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:rgba(255,255,255,0.85);backdrop-filter:blur(6px)}
+  .leaflet-popup-tip{background:rgba(255,255,255,0.85)}
   .popup-name{font-size:15px;font-weight:600;color:#222}
   .popup-status{font-size:13px;color:#555;margin-top:2px}
   .popup-coords{font-family:monospace;font-size:10px;color:#aaa;margin-top:4px}
@@ -1130,11 +1133,13 @@ function simReset() {
   if (simState.markerA) { map.removeLayer(simState.markerA); }
   if (simState.markerB) { map.removeLayer(simState.markerB); }
   simState = { active: false, pointA: null, pointB: null, markerA: null, markerB: null, interval: null, step: 0, coords: [], simTime: Date.now() };
+  if (map) map.getContainer().classList.remove('sim-picking');
   document.getElementById('simStartBtn').style.display = 'none';
   document.getElementById('simStopBtn').style.display = 'none';
   document.getElementById('simStatus').textContent = 'Klikni na mapu pro START bod';
   map.off('click', simMapClick);
   map.on('click', simMapClick);
+  map.getContainer().classList.add('sim-picking');
 }
 
 function simMapClick(e) {
@@ -1153,6 +1158,7 @@ function simMapClick(e) {
     document.getElementById('simStatus').textContent = 'Trasa připravena — stiskni Spustit';
     document.getElementById('simStartBtn').style.display = '';
     map.off('click', simMapClick);
+    map.getContainer().classList.remove('sim-picking');
   }
 }
 
