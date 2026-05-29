@@ -183,6 +183,8 @@
   .places-badge{position:fixed;bottom:18px;right:18px;background:#222;color:#fff;font-size:13px;padding:7px 14px;border-radius:16px;cursor:pointer;display:none;box-shadow:0 2px 8px rgba(0,0,0,0.18);z-index:1000}
   .places-badge.visible{display:block}
   .empty-state{text-align:center;padding:2rem;color:#ccc;font-size:13px}
+.leaflet-pane, .leaflet-control, .leaflet-top, .leaflet-bottom { z-index: 400 !important; }
+#simDialogOverlay { z-index: 100000 !important; }
 </style>
 </head>
 <body>
@@ -1316,10 +1318,10 @@ function showSimDialog(title, text, options, callback) {
 
   const overlay = document.createElement('div');
   overlay.id = 'simDialogOverlay';
-  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;pointer-events:all';
 
   const box = document.createElement('div');
-  box.style.cssText = 'background:#fff;border-radius:12px;padding:20px;max-width:320px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+  box.style.cssText = 'background:#fff;border-radius:12px;padding:20px;max-width:320px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.3);position:relative;z-index:100001;pointer-events:all';
   box.innerHTML = `
     <div style="font-size:16px;font-weight:600;color:#222;margin-bottom:6px">${title}</div>
     <div style="font-size:13px;color:#666;margin-bottom:14px">${text}</div>
