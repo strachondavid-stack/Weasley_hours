@@ -10,8 +10,6 @@ const PORT = process.env.PORT || 3000;
 const MQTT_HOST = process.env.MQTT_HOST || 'localhost';
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
 const REDIS_TEST_HOST = process.env.REDIS_TEST_HOST || 'localhost';
-const REDIS_TEST_HOST = process.env.REDIS_TEST_HOST || 'localhost';
-const REDIS_TEST_HOST = process.env.REDIS_TEST_HOST || 'localhost';
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || null;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || null;
 
