@@ -196,6 +196,7 @@
   <button class="nav-tab"        id="tab-clock"     onclick="showPage('clock')">🕰 Hodiny</button>
   <button class="nav-tab"        id="tab-places"    onclick="showPage('places')">📍 Místa <span class="nav-badge" id="badgeCount" style="display:none">0</span></button>
   <button class="nav-tab"        id="tab-geofences" onclick="showPage('geofences')">⬤ Geofences</button>
+  <button class="nav-tab"        id="tab-admin"     onclick="showPage('admin')">🛠 Admin</button>
 </div>
 
 <!-- MAP PAGE -->
@@ -245,6 +246,237 @@
   </div>
 </div>
 
+
+<!-- ADMIN PAGE -->
+<div id="page-admin" style="display:none;flex-direction:column;flex:1;overflow-y:auto;padding:1rem">
+
+<style>
+#page-admin .section { margin-bottom:1.5rem }
+#page-admin .section-title { font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:#aaa;margin-bottom:8px;padding:0 2px }
+#page-admin .cards { display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px }
+#page-admin .card { background:#fff;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden;transition:border-color 0.15s }
+#page-admin .card:hover { border-color:#bbb }
+#page-admin .card-header { display:flex;align-items:center;gap:8px;padding:10px 12px 8px;border-bottom:1px solid #f0f0f0 }
+#page-admin .card-icon { font-size:15px;color:#888;flex-shrink:0 }
+#page-admin .card-title { font-size:13px;font-weight:600;color:#222;flex:1 }
+#page-admin .card-body { padding:6px 4px 4px }
+#page-admin .cmd-row { display:flex;align-items:center;border-radius:6px;margin:2px 6px;border:1px solid transparent;transition:border-color 0.1s,background 0.1s;cursor:pointer;position:relative }
+#page-admin .cmd-row:hover { border-color:#ddd;background:#fafafa }
+#page-admin .cmd-row:hover .copy-btn { opacity:1 }
+#page-admin .cmd-text { font-family:monospace;font-size:11px;color:#666;padding:6px 8px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.5 }
+#page-admin .cmd-label { font-size:10px;color:#bbb;padding:6px 0 6px 8px;flex-shrink:0;white-space:nowrap }
+#page-admin .copy-btn { opacity:0;flex-shrink:0;background:none;border:none;cursor:pointer;padding:6px 8px;color:#bbb;font-size:13px;transition:color 0.1s,opacity 0.15s }
+#page-admin .copy-btn:hover { color:#444 }
+#page-admin .copy-btn.copied { color:#4a7c4a;opacity:1 }
+#page-admin .cmd-row.full { flex-direction:column;align-items:stretch;cursor:default }
+#page-admin .cmd-row.full .cmd-text { white-space:pre-wrap;word-break:break-all;font-size:10.5px }
+#page-admin .cmd-row.full .row-top { display:flex;align-items:center }
+#page-admin .cmd-row.full .row-top .cmd-text { white-space:normal;overflow:visible;text-overflow:unset }
+#page-admin .cmd-row.full .copy-btn { opacity:1;align-self:flex-end;padding:2px 8px 6px }
+#page-admin .divider { height:1px;background:#f0f0f0;margin:3px 8px }
+#page-admin .member-grid { display:flex;gap:4px;flex-wrap:wrap;padding:4px 8px 8px }
+#page-admin .member-btn { font-size:12px;padding:3px 10px;border:1px solid #ddd;border-radius:12px;background:#fafafa;cursor:pointer;color:#666;transition:background 0.1s,color 0.1s }
+#page-admin .member-btn:hover { background:#f0f0f0;color:#222 }
+#page-admin .member-btn.active { background:#222;color:#fff;border-color:#222 }
+#page-admin .status-grid { display:flex;gap:4px;flex-wrap:wrap;padding:0 8px 8px }
+#page-admin .status-btn { font-size:11px;padding:2px 8px;border:1px solid #eee;border-radius:10px;background:none;cursor:pointer;color:#aaa;font-family:monospace;transition:background 0.1s,color 0.1s }
+#page-admin .status-btn:hover { background:#f5f5f5;color:#555 }
+#page-admin .status-btn.active { background:#333;color:#fff;border-color:#333 }
+</style>
+
+<div class="section">
+  <div class="section-title">Update a restart</div>
+  <div class="cards">
+    <div class="card">
+      <div class="card-header"><span class="card-icon">↻</span><span class="card-title">Nasadit nový kód</span></div>
+      <div class="card-body">
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">full update</span><span class="cmd-text">cd /volume1/docker/weasley && git pull && sudo docker restart weasley-server</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">jen restart</span><span class="cmd-text">sudo docker restart weasley-server</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">vše</span><span class="cmd-text">sudo docker restart weasley-server weasley-mqtt weasley-redis</span><button class="copy-btn">⧉</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-icon">■</span><span class="card-title">Docker logy</span></div>
+      <div class="card-body">
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">ps</span><span class="cmd-text">sudo docker ps</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">server log</span><span class="cmd-text">sudo docker logs weasley-server --tail 50</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">server live</span><span class="cmd-text">sudo docker logs weasley-server -f</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">mqtt log</span><span class="cmd-text">sudo docker logs weasley-mqtt --tail 20</span><button class="copy-btn">⧉</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Logy — aktivita člena (posledních 60 min)</div>
+  <div class="cards">
+    <div class="card" style="grid-column:1/-1">
+      <div class="card-header"><span class="card-icon">◎</span><span class="card-title">Vyber člena</span></div>
+      <div class="card-body">
+        <div class="member-grid" id="adminLogMembers">
+          <button class="member-btn" onclick="adminSetLogMember('mamka',this)">mamka</button>
+          <button class="member-btn" onclick="adminSetLogMember('tatka',this)">tatka</button>
+          <button class="member-btn" onclick="adminSetLogMember('misak',this)">mišák</button>
+          <button class="member-btn" onclick="adminSetLogMember('kubik',this)">kubík</button>
+        </div>
+        <div class="cmd-row full" onclick="adminCopy(this)">
+          <div class="row-top"><span class="cmd-text" id="adminLogCmd">← vyber člena výše</span><button class="copy-btn">⧉</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Logy — filtrované</div>
+  <div class="cards">
+    <div class="card">
+      <div class="card-header"><span class="card-icon">✦</span><span class="card-title">AI rozhodnutí</span></div>
+      <div class="card-body">
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">ai_response</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/logs?limit=50&type=ai_response" | python3 -c "import json,sys;[print(f'{l[chr(34)]member{chr(34)}]:8} conf={l.get(chr(34)]result{chr(34)},{}).get(chr(34)]confidence{chr(34)},0):.2f} {l.get(chr(34)]result{chr(34)},{}).get(chr(34)]name{chr(34)},chr(45))}') for l in json.load(sys.stdin)[chr(34)]logs{chr(34)}]]"</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">zamítnuto</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/logs?limit=50&type=place_rejected" | python3 -c "import json,sys;[print(f'{l[chr(34)]member{chr(34)}]:8} {l.get(chr(34)]reason{chr(34)},chr(63))}') for l in json.load(sys.stdin)[chr(34)]logs{chr(34)}]]"</span><button class="copy-btn">⧉</button></div>
+        <div class="divider"></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">smazat logy</span><span class="cmd-text">curl -X DELETE "http://192.168.0.228:3000/logs"</span><button class="copy-btn">⧉</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-icon">◉</span><span class="card-title">Stav a tracker</span></div>
+      <div class="card-body">
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">stav členů</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/status" | python3 -m json.tool</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">gps cluster</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/tracker" | python3 -m json.tool</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">geofences</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/geofences" | python3 -c "import json,sys;[print(f'{f[chr(34)]name{chr(34)}]:25} r={f[chr(34)]radius{chr(34)}]}m') for f in json.load(sys.stdin)]"</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">img cache reset</span><span class="cmd-text">curl -X DELETE "http://192.168.0.228:3000/img-cache"</span><button class="copy-btn">⧉</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Manuální override statusu</div>
+  <div class="cards">
+    <div class="card" style="grid-column:1/-1">
+      <div class="card-header"><span class="card-icon">→</span><span class="card-title">Pošli člena někam</span></div>
+      <div class="card-body">
+        <div class="member-grid" id="adminOverrideMembers">
+          <button class="member-btn" onclick="adminSetOM('mamka',this)">mamka</button>
+          <button class="member-btn" onclick="adminSetOM('tatka',this)">tatka</button>
+          <button class="member-btn" onclick="adminSetOM('misak',this)">mišák</button>
+          <button class="member-btn" onclick="adminSetOM('kubik',this)">kubík</button>
+        </div>
+        <div class="status-grid" id="adminOverrideStatuses">
+          <button class="status-btn" onclick="adminSetOS('doma',this)">doma</button>
+          <button class="status-btn" onclick="adminSetOS('cesta',this)">cesta</button>
+          <button class="status-btn" onclick="adminSetOS('prace',this)">prace</button>
+          <button class="status-btn" onclick="adminSetOS('skola',this)">skola</button>
+          <button class="status-btn" onclick="adminSetOS('nakupy',this)">nakupy</button>
+          <button class="status-btn" onclick="adminSetOS('zahrada',this)">zahrada</button>
+          <button class="status-btn" onclick="adminSetOS('neznamo',this)">neznamo</button>
+        </div>
+        <div class="cmd-row full" onclick="adminCopy(this)">
+          <div class="row-top"><span class="cmd-text" id="adminOverrideCmd">← vyber člena a status výše</span><button class="copy-btn">⧉</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Detekovaná místa</div>
+  <div class="cards">
+    <div class="card">
+      <div class="card-header"><span class="card-icon">📌</span><span class="card-title">Správa míst</span></div>
+      <div class="card-body">
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">čekající</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/places" | python3 -c "import json,sys;[print(p['id'],p.get('suggestedName','?')) for p in json.load(sys.stdin) if not p.get('name')]"</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">reset všech</span><span class="cmd-text">curl -X DELETE "http://192.168.0.228:3000/places/all"</span><button class="copy-btn">⧉</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-icon">⎇</span><span class="card-title">Git</span></div>
+      <div class="card-body">
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">pull</span><span class="cmd-text">cd /volume1/docker/weasley && git pull</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">log</span><span class="cmd-text">cd /volume1/docker/weasley && git log --oneline -10</span><button class="copy-btn">⧉</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+let _adminOM=null,_adminOS=null;
+
+function adminLogCmd(m){
+  return `curl -s "http://192.168.0.228:3000/logs?limit=500&member=${m}" | python3 -c "
+import json,sys,math,urllib.request
+from datetime import datetime
+def dist(a,b,c,d):
+    R=6371000;dl=(c-a)*3.14159/180;dn=(d-b)*3.14159/180
+    x=math.sin(dl/2)**2+math.cos(a*3.14159/180)*math.cos(c*3.14159/180)*math.sin(dn/2)**2
+    return R*2*math.atan2(math.sqrt(x),math.sqrt(1-x))
+fences=json.loads(urllib.request.urlopen('http://192.168.0.228:3000/geofences').read())
+data=json.load(sys.stdin);cutoff=(datetime.now().timestamp()-3600)*1000
+recent=sorted([l for l in data['logs'] if l.get('ts',0)>cutoff],key=lambda x:x['ts'])
+prev=None
+for l in recent:
+    t=datetime.fromtimestamp(l['ts']/1000).strftime('%H:%M:%S');typ=l.get('type')
+    if typ=='gps_received':
+        lat,lon,s=l.get('lat'),l.get('lon'),l.get('status','?')
+        n=min(fences,key=lambda f:dist(lat,lon,f['lat'],f['lon'])) if lat and fences else None
+        d=dist(lat,lon,n['lat'],n['lon']) if n else 0
+        fi=('[ok '+n['name']+']') if n and d<=n['radius'] else ('[x '+n['name']+' '+str(int(d))+'m]') if n else ''
+        print(t,'GPS',s.ljust(18),fi,('<< ZMENA' if s!=prev else ''));prev=s
+    elif typ=='stop_candidate': print(t,'ZASTAVKA',l.get('source'),str(l.get('gapMinutes'))+'min')
+    elif typ=='ai_response':
+        r=l.get('result',{});print(t,'AI',('OK' if r.get('should_save') else 'NE'),'conf='+str(round(r.get('confidence',0),2)),r.get('name','-'))
+        print('     ',r.get('reason','?'))
+    elif typ=='place_rejected': print(t,'ZAMITNUTO:',l.get('reason','?'))
+    elif typ=='place_saved': print(t,'ULOZENO',('(auto)' if l.get('autoSave') else '(ceka)'),l.get('name') or l.get('suggestedName','?'))
+" 2>&1`;
+}
+
+function adminSetLogMember(m,btn){
+  document.querySelectorAll('#adminLogMembers .member-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('adminLogCmd').textContent=adminLogCmd(m);
+}
+
+function adminSetOM(m,btn){
+  _adminOM=m;
+  document.querySelectorAll('#adminOverrideMembers .member-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  adminUpdateOverride();
+}
+
+function adminSetOS(s,btn){
+  _adminOS=s;
+  document.querySelectorAll('#adminOverrideStatuses .status-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  adminUpdateOverride();
+}
+
+function adminUpdateOverride(){
+  const el=document.getElementById('adminOverrideCmd');
+  if(_adminOM&&_adminOS)
+    el.textContent=`curl -X POST "http://192.168.0.228:3000/status/${_adminOM}" -H "Content-Type: application/json" -d '{"status":"${_adminOS}"}'`;
+  else if(_adminOM) el.textContent=`← vyber status pro ${_adminOM}`;
+  else el.textContent='← vyber člena a status výše';
+}
+
+function adminCopy(row){
+  const textEl=row.querySelector('.cmd-text');
+  if(!textEl)return;
+  const text=textEl.textContent.trim();
+  if(!text||text.startsWith('←'))return;
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn=row.querySelector('.copy-btn');
+    if(!btn)return;
+    btn.classList.add('copied');
+    btn.textContent='✓';
+    setTimeout(()=>{btn.classList.remove('copied');btn.textContent='⧉';},1500);
+  });
+}
+</script>
+
 <script>
 const MEMBERS = {
   mamka:{name:'MAMKA',color:'#B87070'},
@@ -292,7 +524,8 @@ function showPage(p){
   document.getElementById('page-clock').style.display     = p==='clock'     ? 'flex':'none';
   document.getElementById('page-places').style.display    = p==='places'    ? 'flex':'none';
   document.getElementById('page-geofences').style.display = p==='geofences' ? 'flex':'none';
-  ['map','clock','places','geofences'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===p));
+  document.getElementById('page-admin').style.display     = p==='admin'     ? 'flex':'none';
+  ['map','clock','places','geofences','admin'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===p));
   if(p==='places')    { loadPlaces().then(renderPlaces); }
   if(p==='geofences') { loadGeofences(); }
   if(p==='clock')     { renderClock(); }
