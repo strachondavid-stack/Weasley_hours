@@ -9,6 +9,8 @@ const fs = require('fs');
 const PORT = process.env.PORT || 3000;
 const MQTT_HOST = process.env.MQTT_HOST || 'localhost';
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
+const REDIS_TEST_HOST = process.env.REDIS_TEST_HOST || 'localhost';
+const REDIS_TEST_HOST = process.env.REDIS_TEST_HOST || 'localhost';
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || null;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || null;
 
@@ -226,8 +228,19 @@ Odpověz POUZE jako JSON:
 }
 
 // ─── Redis ────────────────────────────────────────────────────────────────────
-const redis = createClient({ socket: { host: REDIS_HOST, port: 6379 } });
-redis.on('error', e => console.error('Redis error:', e));
+const redisLive = createClient({ socket: { host: REDIS_HOST, port: 6379 } });
+const redisTest = createClient({ socket: { host: REDIS_TEST_HOST, port: 6379 } });
+redisLive.on('error', e => console.error('Redis LIVE error:', e));
+redisTest.on('error', e => console.error('Redis TEST error:', e));
+
+let currentMode = 'live';
+let redis = redisLive;
+
+function setMode(mode) {
+  currentMode = mode;
+  redis = mode === 'live' ? redisLive : redisTest;
+  console.log(`[MODE] Přepnuto na: ${mode.toUpperCase()}`);
+}
 
 const app = express();
 app.use(express.json());
@@ -625,6 +638,57 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0) {
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
+// ─── Mode přepínání ──────────────────────────────────────────────────────────
+app.get('/mode', (req, res) => {
+  res.json({ mode: currentMode });
+});
+
+app.post('/mode', async (req, res) => {
+  const { mode } = req.body;
+  if (!['live', 'test'].includes(mode)) return res.status(400).json({ error: 'mode must be live or test' });
+  
+  // Při přepnutí do testu zkopíruj geofences z live
+  if (mode === 'test' && currentMode === 'live') {
+    const fencesRaw = await redisLive.get('geofences');
+    if (fencesRaw) {
+      await redisTest.set('geofences', fencesRaw);
+      console.log('[MODE] Geofences zkopírovány z LIVE do TEST');
+    }
+  }
+  
+  setMode(mode);
+  
+  // Reset trackerů při přepnutí
+  Object.keys(trackers).forEach(m => { trackers[m] = { cluster: null, lastPoint: null }; });
+  
+  broadcast({ type: 'mode_changed', mode: currentMode });
+  res.json({ ok: true, mode: currentMode });
+});
+
+app.get('/mode', (req, res) => res.json({ mode: currentMode }));
+
+app.post('/mode', async (req, res) => {
+  const { mode } = req.body;
+  if (!['live', 'test'].includes(mode)) return res.status(400).json({ error: 'mode must be live or test' });
+  setMode(mode);
+  // Při přepnutí do test módu zkopíruj geofences z live
+  if (mode === 'test') {
+    try {
+      const liveFences = await redisLive.get('geofences');
+      if (liveFences) {
+        await redisTest.set('geofences', liveFences);
+        dynamicFences = JSON.parse(liveFences);
+        console.log('[MODE] Geofences zkopírovány z live do test');
+      }
+    } catch(e) { console.error('[MODE] Chyba kopírování geofences:', e.message); }
+  }
+  // Přenačti geofences a trackery pro nový mód
+  await loadFences();
+  await loadTrackers();
+  broadcast({ type: 'mode_changed', mode });
+  res.json({ ok: true, mode });
+});
+
 app.get('/status', async (req, res) => {
   try {
     const result = {};
@@ -882,8 +946,10 @@ async function startMqtt() {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 async function main() {
-  await redis.connect();
-  console.log('✓ Redis připojeno');
+  await redisLive.connect();
+  await redisTest.connect();
+  console.log('✓ Redis LIVE připojeno');
+  console.log('✓ Redis TEST připojeno');
   await loadFences();
   await loadTrackers();
   await startMqtt();
