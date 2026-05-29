@@ -344,7 +344,7 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source) {
   }
 
   // Známé místo — nepřidávat znovu
-  const alreadyKnown = dynamicFences.some(f => distance(lat, lon, f.lat, f.lon) < CLUSTER_RADIUS);
+  const alreadyKnown = dynamicFences.some(f => distance(lat, lon, f.lat, f.lon) < Math.max(f.radius, CLUSTER_RADIUS));
   if (alreadyKnown) {
     console.log(`[STOP] Známé místo @ ${lat.toFixed(5)},${lon.toFixed(5)}, přeskakuji`);
     return;
