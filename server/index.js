@@ -515,6 +515,7 @@ function getAvailableImages(dir) {
 async function suggestImageForStatus(status) {
   if (!status || status === 'cesta' || status === 'neznamo') return null;
 
+  console.log(`[IMG] suggestImageForStatus called: "${status}"`);
   const cacheKey = 'imgcache:' + status.toLowerCase();
   try {
     const cached = await redis.get(cacheKey);
@@ -522,7 +523,7 @@ async function suggestImageForStatus(status) {
       console.log(`[IMG] Cache hit: "${status}" → "${cached || 'žádný'}"`);
       return cached || null;
     }
-  } catch(e) {}
+  } catch(e) { console.log(`[IMG] Cache error: ${e.message}`); }
 
   // Vyber správnou složku podle typu statusu
   const dir = isMotionStatus(status) ? IMG_DIR_MOTION : IMG_DIR_PLACES;
