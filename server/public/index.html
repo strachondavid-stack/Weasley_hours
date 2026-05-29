@@ -1412,6 +1412,7 @@ async function simFetchRoute(from, to) {
   simState.coords = coords;
   simState.step = 0;
   simState.active = true;
+  if (!simState.simTime) simState.simTime = Date.now();
   const speed = parseInt(document.getElementById('simSpeed').value) || 5;
   document.getElementById('simStatus').textContent = `▶ ${coords.length} bodů`;
   simStep();
