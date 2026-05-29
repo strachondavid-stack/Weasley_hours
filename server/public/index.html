@@ -832,7 +832,7 @@ function makeIcon(color,letter){
   const g = parseInt(hex.slice(2,4),16);
   const b = parseInt(hex.slice(4,6),16);
   const bg = `rgba(${r},${g},${b},0.25)`;
-  return L.divIcon({className:'',html:`<div style="width:34px;height:34px;border-radius:50%;background:${bg};border:2px solid rgba(255,255,255,0.6);display:flex;align-items:center;justify-content:center;font-family:sans-serif;font-size:14px;font-weight:700;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.25);backdrop-filter:blur(2px)">${letter}</div>`,iconSize:[34,34],iconAnchor:[17,17],popupAnchor:[0,-19]});
+  return L.divIcon({className:'',html:`<div style="width:34px;height:34px;border-radius:50%;background:${bg};border:2px solid #222;display:flex;align-items:center;justify-content:center;font-family:sans-serif;font-size:14px;font-weight:700;color:#222;box-shadow:0 2px 8px rgba(0,0,0,0.25)">${letter}</div>`,iconSize:[34,34],iconAnchor:[17,17],popupAnchor:[0,-19]});
 }
 function makePlaceIcon(unnamed){
   const color=unnamed?'#d97706':'#4a7c4a';
