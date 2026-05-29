@@ -842,7 +842,7 @@ app.get('/logs', async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 50, 500);
     const filterType = req.query.type || null;
     const filterMember = req.query.member || null;
-    const keys = await redis.lRange('log:index', 0, limit * 5);
+    const keys = await redis.lRange('log:index', 0, filterType ? Math.min(limit * 50, 5000) : limit * 5);
     const results = [];
     for (const key of keys) {
       if (results.length >= limit) break;
