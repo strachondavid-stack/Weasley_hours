@@ -647,10 +647,10 @@ function adminCopy(row){
 
 <script>
 const MEMBERS = {
-  mamka:{name:'MAMKA',color:'#B87070'},
-  tatka:{name:'TATKA',color:'#5B7A5A'},
-  misak:{name:'MIŠÁK',color:'#C49A3C'},
-  kubik:{name:'KUBÍK',color:'#6B8CB0'},
+  mamka:{name:'MAMKA',color:'#B87070',emoji:'👩'},
+  tatka:{name:'TATKA',color:'#5B7A5A',emoji:'👨'},
+  misak:{name:'MIŠÁK',color:'#C49A3C',emoji:'🧒'},
+  kubik:{name:'KUBÍK',color:'#6B8CB0',emoji:'👦'},
 };
 const MEMBER_KEYS = Object.keys(MEMBERS);
 
@@ -827,12 +827,15 @@ function clockClick(key){
 }
 
 // ─── Member icons & chips ──────────────────────────────────────────────
-function makeIcon(color,letter){
+function makeIcon(color,letter,emoji){
+  const inner = emoji
+    ? `<div style="position:relative;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.9);border:2.5px solid ${color};display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 6px rgba(0,0,0,0.25)">${emoji}</div>`
+    : `<div style="position:relative;width:26px;height:26px;border-radius:50%;background:${color};border:2.5px solid #fff;display:flex;align-items:center;justify-content:center;font-family:sans-serif;font-size:11px;font-weight:800;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">${letter}</div>`;
   return L.divIcon({
     className:'',
     html:`<div style="position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center">
-      <div class="member-ping" style="background:${color};opacity:0.35;position:absolute;top:0;left:0;width:40px;height:40px;border-radius:50%;animation:ping 1.8s ease-out infinite"></div>
-      <div style="position:relative;width:26px;height:26px;border-radius:50%;background:${color};border:2.5px solid #fff;display:flex;align-items:center;justify-content:center;font-family:sans-serif;font-size:11px;font-weight:800;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);letter-spacing:0.02em">${letter}</div>
+      <div style="background:${color};opacity:0.3;position:absolute;top:0;left:0;width:40px;height:40px;border-radius:50%;animation:ping 1.8s ease-out infinite"></div>
+      ${inner}
     </div>`,
     iconSize:[40,40],iconAnchor:[20,20],popupAnchor:[0,-22]
   });
@@ -852,8 +855,8 @@ function updateMember(key,data){
   if(data.lat&&data.lon){
     const ll=[data.lat,data.lon];
     const popup=`<div class="popup-name">${m.name}</div><div class="popup-status">${label}</div><div class="popup-coords">${data.lat.toFixed(5)}, ${data.lon.toFixed(5)}</div><div class="popup-time">${fmtT(data.ts)}</div>`;
-    if(markers[key]){markers[key].setLatLng(ll);markers[key].setPopupContent(popup);}
-    else markers[key]=L.marker(ll,{icon:makeIcon(m.color,m.name[0])}).addTo(map).bindPopup(popup);
+    if(markers[key]){markers[key].setLatLng(ll);markers[key].setPopupContent(popup);markers[key].setIcon(makeIcon(m.color,m.name[0],m.emoji));}
+    else markers[key]=L.marker(ll,{icon:makeIcon(m.color,m.name[0],m.emoji)}).addTo(map).bindPopup(popup);
   }
   if(currentPage==='clock') renderClock();
 }
