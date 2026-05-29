@@ -1066,7 +1066,7 @@ async function addGeofence(){
 }
 
 // ─── Simulace trasy ──────────────────────────────────────────────────────────
-let simState = { active: false, pointA: null, pointB: null, markerA: null, markerB: null, interval: null, step: 0, coords: [] };
+let simState = { active: false, pointA: null, pointB: null, markerA: null, markerB: null, interval: null, step: 0, coords: [], simTime: 0 };
 
 function simSetPanel(visible) {
   const p = document.getElementById('sim-panel');
@@ -1083,7 +1083,7 @@ function simReset() {
   simStop();
   if (simState.markerA) { map.removeLayer(simState.markerA); }
   if (simState.markerB) { map.removeLayer(simState.markerB); }
-  simState = { active: false, pointA: null, pointB: null, markerA: null, markerB: null, interval: null, step: 0, coords: [] };
+  simState = { active: false, pointA: null, pointB: null, markerA: null, markerB: null, interval: null, step: 0, coords: [], simTime: Date.now() };
   document.getElementById('simStartBtn').style.display = 'none';
   document.getElementById('simStopBtn').style.display = 'none';
   document.getElementById('simStatus').textContent = 'Klikni na mapu pro START bod';
@@ -1159,13 +1159,13 @@ async function simStart() {
   }
 }
 
-async function simSendGPS(lat, lon, vel=0, motionactivities=[]) {
+async function simSendGPS(lat, lon, vel=0, motionactivities=[], ts=null) {
   const member = document.getElementById('simMember').value;
   try {
     await fetch('/gps/' + member, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lat, lon, vel, motionactivities })
+      body: JSON.stringify({ lat, lon, vel, motionactivities, ts: ts || simState.simTime })
     });
   } catch(e) {}
 }
@@ -1203,14 +1203,16 @@ async function simStep() {
   const { lat, lon } = coords[step];
   const speed = parseInt(document.getElementById('simSpeed').value) || 5;
   const intervalMs = 3000 / speed;
+  // Simulovaný čas posuneme o 3 sekundy per krok (reálný interval mezi GPS body)
+  simState.simTime += 3000;
   // Vypočítej rychlost z předchozího bodu
   let vel = 0;
   if (step > 0) {
     const prev = coords[step - 1];
-    vel = simCalcVel(prev.lat, prev.lon, lat, lon, intervalMs);
+    vel = simCalcVel(prev.lat, prev.lon, lat, lon, 3000);
   }
   const motionactivities = simMotionFromProfile();
-  await simSendGPS(lat, lon, Math.round(vel), motionactivities);
+  await simSendGPS(lat, lon, Math.round(vel), motionactivities, simState.simTime);
   simState.step++;
   document.getElementById('simStatus').textContent = `▶ jízda ${simState.step}/${coords.length} · ${vel.toFixed(0)} km/h`;
   simState.interval = setTimeout(simStep, intervalMs);
@@ -1258,7 +1260,9 @@ async function simStay(lat, lon, minutes) {
     // GPS drift ±15m
     const dLat = (Math.random() - 0.5) * 0.00025;
     const dLon = (Math.random() - 0.5) * 0.00025;
-    await simSendGPS(lat + dLat, lon + dLon, 0, ['stationary']);
+    // Každý bod = 30 simulovaných sekund stání
+    simState.simTime += 30000;
+    await simSendGPS(lat + dLat, lon + dLon, 0, ['stationary'], simState.simTime);
     document.getElementById('simStatus').textContent = `⏱ Stojím ${Math.round((i+1)/totalPoints*minutes)} / ${minutes} min · bod ${i+1}/${totalPoints}`;
     await new Promise(r => setTimeout(r, interval));
   }
