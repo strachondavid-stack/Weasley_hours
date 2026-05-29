@@ -589,8 +589,8 @@ Odpověz POUZE názvem souboru nebo prázdným stringem, bez jakéhokoliv dalš�
   }
 }
 
-async function processGPS(member, lat, lon, motionActivities = [], vel = 0) {
-  const ts = Date.now();
+async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simTs = null) {
+  const ts = simTs || Date.now();
   let status = resolveStatus(member, lat, lon);
   // Pohyb má přednost před geofence — kromě doma
   let motion = resolveMotion(motionActivities, vel);
@@ -682,7 +682,8 @@ app.post('/gps/:member', async (req, res) => {
   if (isNaN(lat) || isNaN(lon)) return res.status(400).json({ error: 'lat and lon required' });
   const motionactivities = req.body.motionactivities || [];
   const vel = parseFloat(req.body.vel) || 0;
-  const status = await processGPS(member, lat, lon, motionactivities, vel);
+  const simTs = req.body.ts ? parseInt(req.body.ts) : null;
+  const status = await processGPS(member, lat, lon, motionactivities, vel, simTs);
   res.json({ ok: true, member, status });
 });
 
