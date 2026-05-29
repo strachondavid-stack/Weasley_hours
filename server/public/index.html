@@ -1159,15 +1159,32 @@ async function simStart() {
   }
 }
 
-async function simSendGPS(lat, lon) {
+async function simSendGPS(lat, lon, vel=0, motionactivities=[]) {
   const member = document.getElementById('simMember').value;
   try {
     await fetch('/gps/' + member, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lat, lon })
+      body: JSON.stringify({ lat, lon, vel, motionactivities })
     });
   } catch(e) {}
+}
+
+function simCalcVel(lat1, lon1, lat2, lon2, intervalMs) {
+  const R = 6371000;
+  const dLat = (lat2-lat1)*Math.PI/180;
+  const dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  const dist = R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return (dist / (intervalMs/1000)) * 3.6; // km/h
+}
+
+function simMotionFromProfile() {
+  const profile = document.getElementById('simMode').value;
+  if (profile === 'driving-car') return ['automotive'];
+  if (profile === 'cycling-regular') return ['cycling'];
+  if (profile === 'foot-walking') return ['walking'];
+  return ['automotive'];
 }
 
 async function simStep() {
@@ -1184,11 +1201,19 @@ async function simStep() {
   }
 
   const { lat, lon } = coords[step];
-  await simSendGPS(lat, lon);
-  simState.step++;
-  document.getElementById('simStatus').textContent = `▶ jízda ${simState.step}/${coords.length} · ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
   const speed = parseInt(document.getElementById('simSpeed').value) || 5;
-  simState.interval = setTimeout(simStep, 3000 / speed);
+  const intervalMs = 3000 / speed;
+  // Vypočítej rychlost z předchozího bodu
+  let vel = 0;
+  if (step > 0) {
+    const prev = coords[step - 1];
+    vel = simCalcVel(prev.lat, prev.lon, lat, lon, intervalMs);
+  }
+  const motionactivities = simMotionFromProfile();
+  await simSendGPS(lat, lon, Math.round(vel), motionactivities);
+  simState.step++;
+  document.getElementById('simStatus').textContent = `▶ jízda ${simState.step}/${coords.length} · ${vel.toFixed(0)} km/h`;
+  simState.interval = setTimeout(simStep, intervalMs);
 }
 
 function simArrived() {
@@ -1227,7 +1252,7 @@ async function simStay(lat, lon, minutes) {
     // GPS drift ±15m
     const dLat = (Math.random() - 0.5) * 0.00025;
     const dLon = (Math.random() - 0.5) * 0.00025;
-    await simSendGPS(lat + dLat, lon + dLon);
+    await simSendGPS(lat + dLat, lon + dLon, 0, ['stationary']);
     document.getElementById('simStatus').textContent = `⏱ Stojím ${Math.round((i+1)/totalPoints*minutes)} / ${minutes} min · bod ${i+1}/${totalPoints}`;
     await new Promise(r => setTimeout(r, interval));
   }
