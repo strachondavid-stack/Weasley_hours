@@ -213,6 +213,7 @@
   <button class="nav-tab"        id="tab-places"    onclick="showPage('places')">📍 Místa <span class="nav-badge" id="badgeCount" style="display:none">0</span></button>
   <button class="nav-tab"        id="tab-geofences" onclick="showPage('geofences')">⬤ Geofences</button>
   <button class="nav-tab"        id="tab-admin"     onclick="showPage('admin')">🛠 Admin</button>
+  <button class="nav-tab"        id="tab-log"       onclick="showPage('log')">📋 Log</button>
 </div>
 
 <!-- MAP PAGE -->
@@ -694,11 +695,13 @@ function showPage(p){
   document.getElementById('page-places').style.display    = p==='places'    ? 'flex':'none';
   document.getElementById('page-geofences').style.display = p==='geofences' ? 'flex':'none';
   document.getElementById('page-admin').style.display     = p==='admin'     ? 'flex':'none';
-  ['map','clock','places','geofences','admin'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===p));
+  document.getElementById('page-log').style.display       = p==='log'       ? 'flex':'none';
+  ['map','clock','places','geofences','admin','log'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===p));
   if(p==='places')    { loadPlaces().then(renderPlaces); }
   if(p==='geofences') { loadGeofences(); }
   if(p==='clock')     { renderClock(); }
   if(p==='admin')     { loadMode(); }
+  if(p==='log')       { loadLog(); }
   if(p==='map')       { setTimeout(()=>map.invalidateSize(),50); fetch('/mode').then(r=>r.json()).then(d=>{ if(d.mode==='test') simReset(); }); }
 }
 
@@ -1504,5 +1507,196 @@ setInterval(()=>{
   if(currentPage==='geofences')loadGeofences();
 },2*60*1000);
 </script>
+<!-- LOG PAGE -->
+<div id="page-log" style="display:none;flex-direction:column;flex:1;overflow:hidden;background:#0f0f14">
+
+<style>
+#page-log .log-toolbar{display:flex;gap:6px;padding:8px 10px;background:#1a1a22;border-bottom:1px solid #2a2a35;flex-wrap:wrap;flex-shrink:0;align-items:center}
+#page-log .log-fbtn{font-size:11px;padding:3px 10px;border-radius:12px;border:1px solid #333;background:none;color:#777;cursor:pointer;transition:all 0.12s;white-space:nowrap}
+#page-log .log-fbtn:hover{border-color:#555;color:#aaa}
+#page-log .log-fbtn.active{background:#333;color:#fff;border-color:#555}
+#page-log .log-fbtn.ai{border-color:#7c3aed;color:#a78bfa}
+#page-log .log-fbtn.ai.active{background:#7c3aed;color:#fff}
+#page-log .log-fbtn.gps{border-color:#0369a1;color:#38bdf8}
+#page-log .log-fbtn.gps.active{background:#0369a1;color:#fff}
+#page-log .log-fbtn.place{border-color:#065f46;color:#34d399}
+#page-log .log-fbtn.place.active{background:#065f46;color:#fff}
+#page-log .log-fbtn.err{border-color:#991b1b;color:#f87171}
+#page-log .log-fbtn.err.active{background:#991b1b;color:#fff}
+#page-log .log-member-btn{font-size:11px;padding:3px 9px;border-radius:12px;border:1px solid #333;background:none;color:#666;cursor:pointer;transition:all 0.12s}
+#page-log .log-member-btn.active{background:#444;color:#fff;border-color:#666}
+#page-log .log-list{flex:1;overflow-y:auto;padding:6px 8px;display:flex;flex-direction:column;gap:4px}
+#page-log .log-entry{border-radius:6px;padding:8px 10px;border:1px solid #1e1e28;background:#16161f;transition:border-color 0.1s;cursor:pointer}
+#page-log .log-entry:hover{border-color:#333}
+#page-log .log-entry.expanded{border-color:#333;background:#1a1a25}
+#page-log .log-row1{display:flex;align-items:center;gap:8px}
+#page-log .log-time{font-size:10px;color:#444;font-family:monospace;flex-shrink:0;white-space:nowrap}
+#page-log .log-badge{font-size:10px;padding:1px 7px;border-radius:10px;font-weight:600;flex-shrink:0;white-space:nowrap}
+#page-log .log-member{font-size:11px;color:#666;flex-shrink:0}
+#page-log .log-title{font-size:12px;color:#aaa;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#page-log .log-detail{margin-top:7px;padding-top:7px;border-top:1px solid #222;font-size:11px;color:#666;font-family:monospace;line-height:1.6;white-space:pre-wrap;word-break:break-all;display:none}
+#page-log .log-entry.expanded .log-detail{display:block}
+#page-log .log-refresh{font-size:11px;padding:3px 10px;border-radius:12px;border:1px solid #333;background:none;color:#666;cursor:pointer;margin-left:auto}
+#page-log .log-refresh:hover{color:#aaa;border-color:#555}
+#page-log .log-empty{text-align:center;padding:3rem;color:#333;font-size:13px}
+/* Badge barvy */
+.badge-gps_received{background:#0c3045;color:#38bdf8}
+.badge-ai_response{background:#2e1065;color:#a78bfa}
+.badge-ai_request{background:#1e1050;color:#818cf8}
+.badge-ai_error{background:#450a0a;color:#f87171}
+.badge-stop_candidate{background:#1c1c00;color:#facc15}
+.badge-place_saved{background:#052e16;color:#34d399}
+.badge-place_rejected{background:#1c0a0a;color:#f97316}
+.badge-fence_added{background:#0c2340;color:#60a5fa}
+.badge-img_selected{background:#1a0a2e;color:#c084fc}
+.badge-default{background:#1a1a1a;color:#666}
+</style>
+
+<div class="log-toolbar">
+  <button class="log-fbtn active" onclick="logSetType(null,this)">Vše</button>
+  <button class="log-fbtn gps" onclick="logSetType('gps_received',this)">GPS</button>
+  <button class="log-fbtn ai" onclick="logSetType('ai_response',this)">AI odpověď</button>
+  <button class="log-fbtn ai" onclick="logSetType('ai_request',this)">AI dotaz</button>
+  <button class="log-fbtn place" onclick="logSetType('stop_candidate',this)">Zastávka</button>
+  <button class="log-fbtn place" onclick="logSetType('place_saved',this)">Uloženo</button>
+  <button class="log-fbtn err" onclick="logSetType('place_rejected',this)">Zamítnuto</button>
+  <button class="log-fbtn err" onclick="logSetType('ai_error',this)">Chyba</button>
+  <button class="log-fbtn" onclick="logSetType('fence_added',this)">Geofence</button>
+  <button class="log-refresh" onclick="loadLog()">↻ Obnovit</button>
+</div>
+<div class="log-toolbar" style="padding-top:4px;padding-bottom:6px">
+  <button class="log-member-btn active" onclick="logSetMember(null,this)">Všichni</button>
+  <button class="log-member-btn" onclick="logSetMember('mamka',this)">mamka</button>
+  <button class="log-member-btn" onclick="logSetMember('tatka',this)">tatka</button>
+  <button class="log-member-btn" onclick="logSetMember('misak',this)">mišák</button>
+  <button class="log-member-btn" onclick="logSetMember('kubik',this)">kubík</button>
+</div>
+<div class="log-list" id="logList"><div class="log-empty">Načítám...</div></div>
+</div>
+
+<script>
+let _logType = null, _logMember = null;
+
+function logSetType(type, btn) {
+  _logType = type;
+  document.querySelectorAll('.log-fbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadLog();
+}
+
+function logSetMember(member, btn) {
+  _logMember = member;
+  document.querySelectorAll('.log-member-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadLog();
+}
+
+async function loadLog() {
+  const list = document.getElementById('logList');
+  if (!list) return;
+  list.innerHTML = '<div class="log-empty">Načítám...</div>';
+  
+  let url = '/logs?limit=100';
+  if (_logType) url += '&type=' + _logType;
+  if (_logMember) url += '&member=' + _logMember;
+  
+  try {
+    const data = await fetch(url).then(r => r.json());
+    const logs = data.logs || [];
+    if (!logs.length) { list.innerHTML = '<div class="log-empty">Žádné záznamy</div>'; return; }
+    list.innerHTML = logs.map((l, i) => logRenderEntry(l, i)).join('');
+  } catch(e) {
+    list.innerHTML = '<div class="log-empty">Chyba načtení</div>';
+  }
+}
+
+function logRenderEntry(l, i) {
+  const t = new Date(l.ts).toLocaleTimeString('cs-CZ', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const d = new Date(l.ts).toLocaleDateString('cs-CZ', {day:'2-digit',month:'2-digit'});
+  const type = l.type || 'unknown';
+  const badgeClass = 'badge-' + (type in {gps_received:1,ai_response:1,ai_request:1,ai_error:1,stop_candidate:1,place_saved:1,place_rejected:1,fence_added:1,img_selected:1} ? type : 'default');
+  
+  const title = logTitle(l);
+  const detail = logDetail(l);
+  
+  return `<div class="log-entry" id="loge_${i}" onclick="logToggle(${i})">
+    <div class="log-row1">
+      <span class="log-time">${d} ${t}</span>
+      <span class="log-badge ${badgeClass}">${type}</span>
+      ${l.member ? `<span class="log-member">${l.member}</span>` : ''}
+      <span class="log-title">${title}</span>
+    </div>
+    <div class="log-detail">${detail}</div>
+  </div>`;
+}
+
+function logToggle(i) {
+  document.getElementById('loge_' + i)?.classList.toggle('expanded');
+}
+
+function logTitle(l) {
+  switch(l.type) {
+    case 'gps_received': return `${l.status || '?'} · ${l.lat?.toFixed(4)},${l.lon?.toFixed(4)}`;
+    case 'ai_response': {
+      const r = l.result || {};
+      return `${r.should_save ? '✓' : '✗'} conf=${r.confidence?.toFixed(2)} · "${r.name || '–'}"`;
+    }
+    case 'ai_request': return `${l.lat?.toFixed(4)},${l.lon?.toFixed(4)} · ${l.context?.placesCount || 0} POI`;
+    case 'ai_error': return l.error || '?';
+    case 'stop_candidate': return `${l.source} · ${l.gapMinutes}min · ${l.placesCount || 0} POI`;
+    case 'place_saved': return `"${l.name || l.suggestedName || '?'}" ${l.autoSave ? '(auto)' : '(čeká)'}`;
+    case 'place_rejected': return l.reason || '?';
+    case 'fence_added': return `"${l.name}" r=${l.radius}m`;
+    case 'img_selected': return `${l.status} → ${l.selectedImg || 'žádný'}`;
+    default: return JSON.stringify(l).slice(0, 80);
+  }
+}
+
+function logDetail(l) {
+  switch(l.type) {
+    case 'ai_response': {
+      const r = l.result || {};
+      return [
+        `důvod:      ${r.reason || '?'}`,
+        `confidence: ${r.confidence}`,
+        `name:       ${r.name || '–'}`,
+        `save:       ${r.should_save}`,
+        `latence:    ${l.durationMs}ms`,
+      ].join('
+');
+    }
+    case 'stop_candidate': return [
+      `zdroj:      ${l.source}`,
+      `délka:      ${l.gapMinutes} min`,
+      `POI:        ${l.placesCount}`,
+      `návštěv:    ${l.historyVisits}x`,
+      `čas:        ${l.dayOfWeek} ${l.timeStr}`,
+    ].join('
+');
+    case 'place_saved': return [
+      `jméno:      ${l.name || l.suggestedName || '?'}`,
+      `confidence: ${l.aiConfidence}`,
+      `auto:       ${l.autoSave}`,
+      `zdroj:      ${l.source}`,
+      `důvod AI:   ${l.aiReason || '–'}`,
+    ].join('
+');
+    case 'place_rejected': return [
+      `důvod:      ${l.reason}`,
+      `AI jméno:   ${l.aiName || '–'}`,
+      `confidence: ${l.aiConfidence || '–'}`,
+      `AI důvod:   ${l.aiReason || '–'}`,
+    ].join('
+');
+    case 'ai_error': return `chyba: ${l.error}
+latence: ${l.durationMs}ms`;
+    case 'gps_received': return `lat: ${l.lat}
+lon: ${l.lon}
+status: ${l.status}`;
+    default: return JSON.stringify(l, null, 2);
+  }
+}
+</script>
+
 </body>
 </html>
