@@ -333,17 +333,8 @@
     <div class="card">
       <div class="card-header"><span class="card-icon">✦</span><span class="card-title">AI rozhodnutí</span></div>
       <div class="card-body">
-        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">ai_response</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/logs?limit=50&type=ai_response" | python3 -c "import json,sys
-data=json.load(sys.stdin)
-for l in data['logs']:
-    r=l.get('result',{})
-    print(f&quot;{l['member']:8} conf={r.get('confidence',0):.2f} {r.get('name','-')}&quot;)
-    print(f&quot;         {r.get('reason','?')}&quot;)
-"</span><button class="copy-btn">⧉</button></div>
-        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">zamítnuto</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/logs?limit=50&type=place_rejected" | python3 -c "import json,sys
-for l in json.load(sys.stdin)['logs']:
-    print(f&quot;{l['member']:8} {l.get('reason','?')}&quot;)
-"</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">ai_response</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/logs?limit=50&amp;type=ai_response&amp;member=mamka" | python3 -m json.tool | grep -E "member|name|confidence|reason"</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">zamítnuto</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/logs?limit=50&amp;type=place_rejected" | python3 -m json.tool | grep -E "member|reason"</span><button class="copy-btn">⧉</button></div>
         <div class="divider"></div>
         <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">smazat logy</span><span class="cmd-text">curl -X DELETE "http://192.168.0.228:3000/logs"</span><button class="copy-btn">⧉</button></div>
       </div>
@@ -353,10 +344,7 @@ for l in json.load(sys.stdin)['logs']:
       <div class="card-body">
         <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">stav členů</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/status" | python3 -m json.tool</span><button class="copy-btn">⧉</button></div>
         <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">gps cluster</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/tracker" | python3 -m json.tool</span><button class="copy-btn">⧉</button></div>
-        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">geofences</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/geofences" | python3 -c "import json,sys
-for f in json.load(sys.stdin):
-    print(f&quot;{f['name']:25} r={f['radius']}m&quot;)
-"</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">geofences</span><span class="cmd-text">curl -s "http://192.168.0.228:3000/geofences" | python3 -m json.tool</span><button class="copy-btn">⧉</button></div>
         <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">img cache reset</span><span class="cmd-text">curl -X DELETE "http://192.168.0.228:3000/img-cache"</span><button class="copy-btn">⧉</button></div>
       </div>
     </div>
