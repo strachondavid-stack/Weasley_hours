@@ -1157,16 +1157,7 @@ async function simStart() {
   }
 }
 
-async function simStep() {
-  if (!simState.active) return;
-  const { coords, step } = simState;
-  if (step >= coords.length) {
-    document.getElementById('simStatus').textContent = '✓ Simulace dokončena';
-    document.getElementById('simStopBtn').style.display = 'none';
-    simState.active = false;
-    return;
-  }
-  const { lat, lon } = coords[step];
+async function simSendGPS(lat, lon) {
   const member = document.getElementById('simMember').value;
   try {
     await fetch('/gps/' + member, {
@@ -1175,10 +1166,179 @@ async function simStep() {
       body: JSON.stringify({ lat, lon })
     });
   } catch(e) {}
+}
+
+async function simStep() {
+  if (!simState.active) return;
+  const { coords, step } = simState;
+
+  // Hotovo — přijeli jsme do cíle
+  if (step >= coords.length) {
+    simState.active = false;
+    document.getElementById('simStopBtn').style.display = 'none';
+    // Zobraz dialog pro stání
+    simArrived();
+    return;
+  }
+
+  const { lat, lon } = coords[step];
+  await simSendGPS(lat, lon);
   simState.step++;
-  document.getElementById('simStatus').textContent = `▶ krok ${simState.step}/${coords.length} · ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+  document.getElementById('simStatus').textContent = `▶ jízda ${simState.step}/${coords.length} · ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
   const speed = parseInt(document.getElementById('simSpeed').value) || 5;
   simState.interval = setTimeout(simStep, 3000 / speed);
+}
+
+function simArrived() {
+  const dest = simState.pointB;
+  document.getElementById('simStatus').textContent = '📍 Dorazili jsme do cíle';
+  // Zobraz dialog
+  showSimDialog(
+    '📍 Dorazili jsme!',
+    'Jak dlouho se tu Mišák staví?',
+    [
+      { label: '5 min', value: 5 },
+      { label: '10 min', value: 10 },
+      { label: '20 min', value: 20 },
+      { label: '30 min', value: 30 },
+      { label: 'Odjet hned', value: 0 },
+    ],
+    async (minutes) => {
+      if (minutes > 0) {
+        await simStay(dest.lat, dest.lng, minutes);
+      }
+      // Po stání — dialog kam dál
+      simAskNext(dest);
+    }
+  );
+}
+
+async function simStay(lat, lon, minutes) {
+  const speed = parseInt(document.getElementById('simSpeed').value) || 5;
+  const totalPoints = Math.max(minutes * 2, 5); // 1 bod per 30s simulovaných
+  const interval = (minutes * 60 * 1000) / speed / totalPoints;
+  document.getElementById('simStopBtn').style.display = '';
+  simState.active = true;
+
+  for (let i = 0; i < totalPoints; i++) {
+    if (!simState.active) break;
+    // GPS drift ±15m
+    const dLat = (Math.random() - 0.5) * 0.00025;
+    const dLon = (Math.random() - 0.5) * 0.00025;
+    await simSendGPS(lat + dLat, lon + dLon);
+    document.getElementById('simStatus').textContent = `⏱ Stojím ${Math.round((i+1)/totalPoints*minutes)} / ${minutes} min · bod ${i+1}/${totalPoints}`;
+    await new Promise(r => setTimeout(r, interval));
+  }
+  simState.active = false;
+  document.getElementById('simStopBtn').style.display = 'none';
+}
+
+function simAskNext(prevDest) {
+  showSimDialog(
+    '🚗 Kam dál?',
+    'Vyber další cíl:',
+    [
+      { label: '🏠 Domů', value: 'home' },
+      { label: '📍 Kliknu na mapu', value: 'map' },
+      { label: '⏹ Konec simulace', value: 'stop' },
+    ],
+    async (choice) => {
+      hideSimDialog();
+      if (choice === 'stop') {
+        document.getElementById('simStatus').textContent = '✓ Simulace dokončena';
+        return;
+      }
+      if (choice === 'home') {
+        // Najdi doma geofence
+        const fences = await fetch('/geofences').then(r => r.json());
+        const home = fences.find(f => f.name.toLowerCase().includes('dom') || f.name.toLowerCase().includes('náš'));
+        if (home) {
+          simState.pointA = prevDest;
+          simState.pointB = L.latLng(home.lat, home.lon);
+          if (simState.markerA) map.removeLayer(simState.markerA);
+          if (simState.markerB) map.removeLayer(simState.markerB);
+          simState.markerA = L.marker(prevDest, { icon: L.divIcon({ className:'', html:'<div style="background:#22c55e;color:#fff;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:600">A</div>' }) }).addTo(map);
+          simState.markerB = L.marker([home.lat, home.lon], { icon: L.divIcon({ className:'', html:'<div style="background:#dc2626;color:#fff;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:600">B 🏠</div>' }) }).addTo(map);
+          simState.coords = [];
+          simState.step = 0;
+          simState.active = true;
+          document.getElementById('simStartBtn').style.display = 'none';
+          document.getElementById('simStopBtn').style.display = '';
+          await simFetchRoute(prevDest, L.latLng(home.lat, home.lon));
+        }
+      }
+      if (choice === 'map') {
+        document.getElementById('simStatus').textContent = 'Klikni na mapu pro nový CÍL';
+        simState.pointA = prevDest;
+        simState.pointB = null;
+        if (simState.markerB) { map.removeLayer(simState.markerB); simState.markerB = null; }
+        map.once('click', async (e) => {
+          simState.pointB = e.latlng;
+          simState.markerB = L.marker(e.latlng, { icon: L.divIcon({ className:'', html:'<div style="background:#dc2626;color:#fff;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:600">B CÍL</div>' }) }).addTo(map);
+          await simFetchRoute(prevDest, e.latlng);
+        });
+      }
+    }
+  );
+}
+
+async function simFetchRoute(from, to) {
+  document.getElementById('simStatus').textContent = '⏳ Načítám trasu...';
+  const profile = document.getElementById('simMode').value;
+  let coords = [];
+  try {
+    const osrmProfile = profile === 'cycling-regular' ? 'bike' : profile === 'foot-walking' ? 'foot' : 'driving';
+    const url = `https://router.project-osrm.org/route/v1/${osrmProfile}/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.routes && data.routes[0]) {
+      coords = data.routes[0].geometry.coordinates.map(c => ({ lat: c[1], lon: c[0] }));
+    }
+  } catch(e) {}
+  if (coords.length === 0) {
+    const steps = 30;
+    for (let i = 0; i <= steps; i++) {
+      coords.push({ lat: from.lat + (to.lat - from.lat) * i / steps, lon: from.lng + (to.lng - from.lng) * i / steps });
+    }
+  }
+  simState.coords = coords;
+  simState.step = 0;
+  simState.active = true;
+  const speed = parseInt(document.getElementById('simSpeed').value) || 5;
+  document.getElementById('simStatus').textContent = `▶ ${coords.length} bodů`;
+  simStep();
+}
+
+// ── Dialog helper ─────────────────────────────────────────────────────────────
+function showSimDialog(title, text, options, callback) {
+  let existing = document.getElementById('simDialogOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'simDialogOverlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:12px;padding:20px;max-width:320px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+  box.innerHTML = `
+    <div style="font-size:16px;font-weight:600;color:#222;margin-bottom:6px">${title}</div>
+    <div style="font-size:13px;color:#666;margin-bottom:14px">${text}</div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      ${options.map(o => `<button onclick="simDialogChoice(${JSON.stringify(o.value)})" style="font-size:13px;padding:8px 14px;border-radius:6px;border:1px solid #ddd;background:#fafafa;cursor:pointer;text-align:left;transition:background 0.1s" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='#fafafa'">${o.label}</button>`).join('')}
+    </div>`;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  window._simDialogCallback = callback;
+}
+
+function simDialogChoice(value) {
+  hideSimDialog();
+  if (window._simDialogCallback) window._simDialogCallback(value);
+}
+
+function hideSimDialog() {
+  const el = document.getElementById('simDialogOverlay');
+  if (el) el.remove();
 }
 
 function simStop() {
