@@ -1370,6 +1370,8 @@ function simArrived() {
         const speed = parseInt(document.getElementById('simSpeed').value) || 5;
         const lat = parseFloat(dest.lat);
         const lon = parseFloat(dest.lng || dest.lon);
+        // Zastav předchozí simulaci na serveru před spuštěním nové
+        await fetch('/simulate/stop', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({member})});
         console.log('[SIM] Stay request:', member, lat, lon, minutes, speed);
         simState.active = true;
         simSetDisplay('simStopBtn', '');
@@ -1569,6 +1571,7 @@ ws.onmessage=(e)=>{
       simSetDisplay('simStopBtn', 'none');
       const dest = {lat: msg.lat, lng: msg.lon, lon: msg.lon};
       simState.pointB = dest;
+      simState.dialogOpen = false; // reset aby dialog mohl vyjit
       if (msg.afterStay) {
         simAskNext(dest);
       } else {
