@@ -73,22 +73,21 @@ function resolveStatus(member, lat, lon, vel = 0, motionActivities = [], ts = Da
     return currentFence.name;
   }
 
-  // Dwell tracking — sleduj jak dlouho je člen uvnitř
+  // Dwell tracking — sleduj jak dlouho je člen uvnitř (vždy reálný čas)
+  const realNow = Date.now();
   const state = memberFenceState[member];
   if (!state || state.fenceId !== currentFence.id) {
-    // Nová geofence — zaznamenej vstup
-    memberFenceState[member] = { fenceId: currentFence.id, enteredAt: ts, name: currentFence.name };
-    // Zatím vrať cesta — ještě nevíme jestli stojí
+    // Nová geofence — zaznamenej vstup (reálný čas)
+    memberFenceState[member] = { fenceId: currentFence.id, enteredAt: realNow, name: currentFence.name };
     return 'cesta';
   }
 
-  // Jsme v téže geofence — zkontroluj dwell time
-  const dwellMs = ts - state.enteredAt;
+  // Jsme v téže geofence — zkontroluj reálný dwell time
+  const dwellMs = realNow - state.enteredAt;
   if (dwellMs >= FENCE_DWELL_MS) {
-    return currentFence.name; // Dost dlouho — aplikuj geofence
+    return currentFence.name;
   }
 
-  // Ještě jsme tam krátce — vrať cesta
   return 'cesta';
 }
 
