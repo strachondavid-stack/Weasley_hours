@@ -1164,6 +1164,7 @@ function simReset() {
 
 async function simWaitHere() {
   if (simState.active) return;
+  // Nejdřív klik na mapu, pak dialog
   document.getElementById('simStatus').textContent = 'Klikni na mapu kde chceš stát';
   map.getContainer().classList.add('sim-picking');
   map.once('click', async (e) => {
@@ -1171,6 +1172,8 @@ async function simWaitHere() {
     if (simState.markerA) map.removeLayer(simState.markerA);
     simState.markerA = simPin(e.latlng, '⏱ STÁNÍ', '#f59e0b').addTo(map);
     if (!simState.simTime) simState.simTime = Date.now();
+    // Krátká pauza aby se mapa settled
+    await new Promise(r => setTimeout(r, 100));
     showSimDialog(
       '⏱ Stát na místě',
       'Jak dlouho se tu čeká?',
@@ -1187,7 +1190,6 @@ async function simWaitHere() {
         document.getElementById('simStopBtn').style.display = '';
         await simStay(e.latlng.lat, e.latlng.lng, minutes);
         simState.active = false;
-        // Po stání — dialog kam dál
         simState.pointB = e.latlng;
         simAskNext(e.latlng);
       }
@@ -1474,6 +1476,7 @@ function showSimDialog(title, text, options, callback) {
   const overlay = document.createElement('div');
   overlay.id = 'simDialogOverlay';
   overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.addEventListener('click', e => e.stopPropagation());
 
   const box = document.createElement('div');
   box.style.cssText = 'background:#fff;border-radius:12px;padding:20px;max-width:320px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
