@@ -907,7 +907,7 @@ app.post('/simulate/stay', async (req, res) => {
   // Reset tracker před stáním — aby cluster obsahoval jen stationary body
   const stayStartTs = activeSimulations[member].simTime;
   const tracker = getTracker(member);
-  tracker.cluster = { points: [], startTs: stayStartTs };
+  tracker.cluster = null;  // reset — prvni stationary bod inicializuje novy cluster
   await saveTracker(member);
 
   runSimStay(member, lat, lon, minutes, async () => {
