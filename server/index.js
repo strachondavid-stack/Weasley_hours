@@ -890,7 +890,7 @@ app.post('/simulate/stay', async (req, res) => {
 
   console.log(`[SIM] Stání pro ${member}: ${minutes} min na ${lat.toFixed(5)},${lon.toFixed(5)}`);
   runSimStay(member, lat, lon, minutes, () => {
-    broadcast({ type: 'sim_arrived', member, lat, lon });
+    broadcast({ type: 'sim_arrived', member, lat, lon, afterStay: true });
     delete activeSimulations[member];
   });
   res.json({ ok: true, member, minutes });
