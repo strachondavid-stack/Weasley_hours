@@ -1949,6 +1949,7 @@ async function scRun(scenarioId) {
   ).join('');
 
   const totalSteps = sc.steps.length;
+  let simTime = null; // průběžný simulovaný čas — předává se mezi kroky
 
   for (let i = 0; i < sc.steps.length; i++) {
     if (scAbort) break;
@@ -1963,7 +1964,7 @@ async function scRun(scenarioId) {
     if (step.stayMin > 0) {
       progStatus.textContent = `⏱ Stání: ${step.name} (${step.stayMin} min)`;
       globalStatus.textContent = `⏱ ${step.name}`;
-      await scDoStay(member, step.lat, step.lon, step.stayMin, speed, (cur, total) => {
+      simTime = await scDoStay(member, step.lat, step.lon, step.stayMin, speed, simTime, (cur, total) => {
         progStatus.textContent = `⏱ ${step.name} — ${cur}/${total} min`;
       });
       if (scAbort) break;
@@ -1974,7 +1975,7 @@ async function scRun(scenarioId) {
       progStatus.textContent = `🚗 Jízda → ${next.name}`;
       globalStatus.textContent = `→ ${next.name}`;
       const coords = await scFetchRoute(step, next, step.mode);
-      await scDoRoute(member, coords, step.mode, speed, (s, t, v) => {
+      simTime = await scDoRoute(member, coords, step.mode, speed, simTime, (s, t, v) => {
         progStatus.textContent = `🚗 → ${next.name} (${s}/${t} · ${v} km/h)`;
       });
       if (scAbort) break;
@@ -1995,18 +1996,19 @@ async function scRun(scenarioId) {
 }
 
 // Stání přes /simulate/stay + čekání na sim_arrived
-function scDoStay(member, lat, lon, minutes, speed, onProgress) {
+function scDoStay(member, lat, lon, minutes, speed, simTime, onProgress) {
   return new Promise(async (resolve) => {
-    if (scAbort) return resolve();
+    if (scAbort) return resolve(simTime);
 
     let done = false;
+    let finalSimTime = simTime;
     const handler = (msg) => {
       try {
         const d = JSON.parse(msg.data);
         if ((d.type === 'sim_arrived' || d.type === 'sim_stopped') && d.member === member) {
           ws.removeEventListener('message', handler);
           done = true;
-          resolve();
+          resolve(finalSimTime);
         }
         if (d.type === 'sim_staying' && d.member === member) {
           const cur = Math.round(d.step / d.total * d.minutes);
@@ -2017,37 +2019,40 @@ function scDoStay(member, lat, lon, minutes, speed, onProgress) {
     ws.addEventListener('message', handler);
 
     try {
-      await fetch('/simulate/stay', {
+      const resp = await fetch('/simulate/stay', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ member, lat, lon, minutes, speed }),
+        body: JSON.stringify({ member, lat, lon, minutes, speed, startSimTime: simTime || undefined }),
       });
+      const data = await resp.json();
+      // Server vrátí výsledný simTime po dokončení stání
+      if (data.simTime) finalSimTime = data.simTime + Math.round(minutes * 60 * 1000);
     } catch(e) {
       ws.removeEventListener('message', handler);
-      resolve();
+      return resolve(simTime);
     }
 
-    // Safety timeout: 2× simulovaný čas + 10s
     const safetyMs = (minutes * 60 * 1000) / speed * 2 + 10000;
     setTimeout(() => {
-      if (!done) { ws.removeEventListener('message', handler); resolve(); }
+      if (!done) { ws.removeEventListener('message', handler); resolve(finalSimTime); }
     }, safetyMs);
   });
 }
 
 // Jízda přes /simulate/route + čekání na sim_arrived
-function scDoRoute(member, coords, mode, speed, onProgress) {
+function scDoRoute(member, coords, mode, speed, simTime, onProgress) {
   return new Promise(async (resolve) => {
-    if (scAbort) return resolve();
+    if (scAbort) return resolve(simTime);
 
     let done = false;
+    let finalSimTime = simTime;
     const handler = (msg) => {
       try {
         const d = JSON.parse(msg.data);
         if ((d.type === 'sim_arrived' || d.type === 'sim_stopped') && d.member === member) {
           ws.removeEventListener('message', handler);
           done = true;
-          resolve();
+          resolve(finalSimTime);
         }
         if (d.type === 'sim_progress' && d.member === member) {
           onProgress(d.step, d.total, d.vel);
@@ -2057,20 +2062,21 @@ function scDoRoute(member, coords, mode, speed, onProgress) {
     ws.addEventListener('message', handler);
 
     try {
-      await fetch('/simulate/route', {
+      const resp = await fetch('/simulate/route', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ member, coords, profile: mode, speed }),
+        body: JSON.stringify({ member, coords, profile: mode, speed, startSimTime: simTime || undefined }),
       });
+      const data = await resp.json();
+      if (data.simTime) finalSimTime = data.simTime;
     } catch(e) {
       ws.removeEventListener('message', handler);
-      resolve();
+      return resolve(simTime);
     }
 
-    // Safety timeout: délka trasy odhadnuta jako max 2h / speed + 15s
     const safetyMs = (2 * 3600 * 1000) / speed + 15000;
     setTimeout(() => {
-      if (!done) { ws.removeEventListener('message', handler); resolve(); }
+      if (!done) { ws.removeEventListener('message', handler); resolve(finalSimTime); }
     }, safetyMs);
   });
 }

@@ -879,7 +879,7 @@ app.post('/mode', async (req, res) => {
 
 // Simulace — start trasy
 app.post('/simulate/route', async (req, res) => {
-  const { member, coords, profile = 'driving-car', speed = 5 } = req.body;
+  const { member, coords, profile = 'driving-car', speed = 5, startSimTime } = req.body;
   if (!member || !coords || !coords.length) return res.status(400).json({ error: 'member a coords required' });
   if (!MEMBERS.includes(member)) return res.status(404).json({ error: 'Unknown member' });
 
@@ -893,17 +893,17 @@ app.post('/simulate/route', async (req, res) => {
   activeSimulations[member] = {
     active: true, stayActive: false,
     coords, step: 0, profile, speed,
-    simTime: Date.now(), timer: null
+    simTime: startSimTime || Date.now(), timer: null
   };
 
-  console.log(`[SIM] Start trasy pro ${member}: ${coords.length} bodů, profil=${profile}, rychlost=${speed}x`);
+  console.log(`[SIM] Start trasy pro ${member}: ${coords.length} bodů, profil=${profile}, rychlost=${speed}x, simTime=${new Date(activeSimulations[member].simTime).toISOString()}`);
   runSimStep(member);
-  res.json({ ok: true, member, points: coords.length });
+  res.json({ ok: true, member, points: coords.length, simTime: activeSimulations[member].simTime });
 });
 
 // Simulace — stání na místě
 app.post('/simulate/stay', async (req, res) => {
-  const { member, lat, lon, minutes = 10, speed = 5 } = req.body;
+  const { member, lat, lon, minutes = 10, speed = 5, startSimTime } = req.body;
   if (!member || !lat || !lon) return res.status(400).json({ error: 'member, lat, lon required' });
 
   if (activeSimulations[member]) {
@@ -915,7 +915,7 @@ app.post('/simulate/stay', async (req, res) => {
   activeSimulations[member] = {
     active: false, stayActive: false,
     coords: [], step: 0, speed,
-    simTime: Date.now(), timer: null
+    simTime: startSimTime || Date.now(), timer: null
   };
 
   console.log(`[SIM] Stání pro ${member}: ${minutes} min na ${lat.toFixed(5)},${lon.toFixed(5)}`);
@@ -939,7 +939,7 @@ app.post('/simulate/stay', async (req, res) => {
     broadcast({ type: 'sim_arrived', member, lat, lon, afterStay: true });
     delete activeSimulations[member];
   });
-  res.json({ ok: true, member, minutes });
+  res.json({ ok: true, member, minutes, simTime: activeSimulations[member]?.simTime });
 });
 
 // Simulace — stop
