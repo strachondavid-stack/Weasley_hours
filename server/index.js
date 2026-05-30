@@ -572,7 +572,7 @@ async function evaluateCluster(member, cluster) {
 }
 
 // ─── Hlavní tracker ───────────────────────────────────────────────────────────
-async function updateTracker(member, lat, lon, ts) {
+async function updateTracker(member, lat, lon, ts, motionActivities = []) {
   const tracker = getTracker(member);
 
   if (tracker.lastPoint) {
@@ -589,11 +589,15 @@ async function updateTracker(member, lat, lon, ts) {
   const center = clusterCenter(tracker.cluster.points);
   const dist = distance(lat, lon, center.lat, center.lon);
 
-  if (dist <= CLUSTER_RADIUS) {
+  // Automotive = okamžitě uzavřít cluster bez čekání na LEAVE_RADIUS
+  const isAutomotive = motionActivities.includes('automotive') || motionActivities.includes('cycling');
+
+  if (dist <= CLUSTER_RADIUS && !isAutomotive) {
     tracker.cluster.points.push({ lat, lon, ts });
     console.log(`[TRACK] [${member}] V clusteru dist=${Math.round(dist)}m dur=${Math.round((ts - tracker.cluster.startTs)/60000)}min pts=${tracker.cluster.points.length}`);
-  } else if (dist > LEAVE_RADIUS) {
-    console.log(`[TRACK] [${member}] odchod dist=${Math.round(dist)}m`);
+  } else if (dist > LEAVE_RADIUS || isAutomotive) {
+    if (isAutomotive) console.log(`[TRACK] [${member}] automotive odchod dist=${Math.round(dist)}m`);
+    else console.log(`[TRACK] [${member}] odchod dist=${Math.round(dist)}m`);
     await evaluateCluster(member, tracker.cluster);
     tracker.cluster = { points: [{ lat, lon, ts }], startTs: ts };
   } else {
@@ -737,7 +741,7 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   broadcast({ type: 'update', member, ...data });
   await logEvent('gps_received', { member, lat, lon, status });
   console.log(`[GPS] [${member}] ${status} (${lat.toFixed(5)}, ${lon.toFixed(5)}) vel=${vel} motion=${(motionActivities||[]).join(",")}`);
-  await updateTracker(member, lat, lon, ts);
+  await updateTracker(member, lat, lon, ts, motionActivities);
   return status;
 }
 
