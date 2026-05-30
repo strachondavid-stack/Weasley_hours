@@ -309,12 +309,17 @@ function resolveMotion(motionActivities, vel) {
   // Stojí — nepřepisuj geofence status
   if (acts.includes('stationary') && speed < 3) return null;
 
+  // Automotive nebo cycling vždy vrátí auto/kolo bez ohledu na vel
+  // (GPS drift způsobuje nízké vel i při jízdě)
+  if (acts.includes('automotive')) return 'auto';
+  if (acts.includes('cycling') && speed > 1) return 'kolo';
+
   // Velmi pomalý pohyb nebo stojí
   if (speed < 1) return null;
 
   // ── Pěšky: 1–5 km/h ──────────────────────────────────────────────────────
   if (speed <= 5) {
-    if (acts.includes('running')) return 'běh';  // kratší krok, ale rychlý
+    if (acts.includes('running')) return 'běh';
     return 'pěšky';
   }
 
