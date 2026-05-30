@@ -741,6 +741,84 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   return status;
 }
 
+// ─── Server-side simulace ────────────────────────────────────────────────────
+const activeSimulations = {}; // { member: { timer, step, coords, simTime, stayTimer } }
+
+function simCalcVel(lat1, lon1, lat2, lon2, intervalMs) {
+  const d = distance(lat1, lon1, lat2, lon2);
+  return (d / (intervalMs / 1000)) * 3.6;
+}
+
+async function simSendGPSServer(member, lat, lon, vel, motionactivities, simTs) {
+  await processGPS(member, lat, lon, motionactivities, vel, simTs);
+}
+
+async function runSimStep(member) {
+  const sim = activeSimulations[member];
+  if (!sim || !sim.active) return;
+
+  const { coords, step, speed } = sim;
+
+  if (step >= coords.length) {
+    // Dorazili jsme — spustí callback
+    sim.active = false;
+    broadcast({ type: 'sim_arrived', member, lat: coords[coords.length-1][0], lon: coords[coords.length-1][1] });
+    return;
+  }
+
+  const [lat, lon] = coords[step];
+  const intervalMs = 3000 / speed;
+  sim.simTime += 3000;
+
+  // Vypočítej rychlost z posledních 10 bodů
+  const lookback = Math.min(10, step);
+  let vel = 0;
+  if (lookback > 0) {
+    const [fromLat, fromLon] = coords[step - lookback];
+    vel = simCalcVel(fromLat, fromLon, lat, lon, lookback * 3000);
+  }
+
+  const motionactivities = sim.profile === 'foot-walking' ? ['walking'] :
+                           sim.profile === 'cycling-regular' ? ['cycling'] : ['automotive'];
+
+  await simSendGPSServer(member, lat, lon, Math.round(vel), motionactivities, sim.simTime);
+  sim.step++;
+
+  broadcast({ type: 'sim_progress', member, step: sim.step, total: coords.length, vel: Math.round(vel) });
+
+  sim.timer = setTimeout(() => runSimStep(member), intervalMs);
+}
+
+async function runSimStay(member, lat, lon, minutes, onDone) {
+  const sim = activeSimulations[member];
+  if (!sim) return;
+
+  const speed = sim.speed;
+  const totalPoints = Math.max(minutes * 2, 5);
+  const interval = (minutes * 60 * 1000) / speed / totalPoints;
+  sim.stayActive = true;
+  sim.stayStep = 0;
+  sim.stayTotal = totalPoints;
+
+  const doStep = async () => {
+    if (!sim.stayActive || !activeSimulations[member]) return;
+    const dLat = (Math.random() - 0.5) * 0.00025;
+    const dLon = (Math.random() - 0.5) * 0.00025;
+    sim.simTime += 30000;
+    await simSendGPSServer(member, lat + dLat, lon + dLon, 0, ['stationary'], sim.simTime);
+    sim.stayStep++;
+    broadcast({ type: 'sim_staying', member, step: sim.stayStep, total: totalPoints, minutes });
+
+    if (sim.stayStep >= totalPoints) {
+      sim.stayActive = false;
+      if (onDone) onDone();
+    } else {
+      sim.timer = setTimeout(doStep, interval);
+    }
+  };
+  doStep();
+}
+
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 // ─── Mode přepínání ──────────────────────────────────────────────────────────
@@ -767,6 +845,77 @@ app.post('/mode', async (req, res) => {
   await loadTrackers();
   broadcast({ type: 'mode_changed', mode: currentMode });
   res.json({ ok: true, mode: currentMode });
+});
+
+// Simulace — start trasy
+app.post('/simulate/route', async (req, res) => {
+  const { member, coords, profile = 'driving-car', speed = 5 } = req.body;
+  if (!member || !coords || !coords.length) return res.status(400).json({ error: 'member a coords required' });
+  if (!MEMBERS.includes(member)) return res.status(404).json({ error: 'Unknown member' });
+
+  // Zastav předchozí simulaci
+  if (activeSimulations[member]) {
+    activeSimulations[member].active = false;
+    activeSimulations[member].stayActive = false;
+    if (activeSimulations[member].timer) clearTimeout(activeSimulations[member].timer);
+  }
+
+  activeSimulations[member] = {
+    active: true, stayActive: false,
+    coords, step: 0, profile, speed,
+    simTime: Date.now(), timer: null
+  };
+
+  console.log(`[SIM] Start trasy pro ${member}: ${coords.length} bodů, profil=${profile}, rychlost=${speed}x`);
+  runSimStep(member);
+  res.json({ ok: true, member, points: coords.length });
+});
+
+// Simulace — stání na místě
+app.post('/simulate/stay', async (req, res) => {
+  const { member, lat, lon, minutes = 10, speed = 5 } = req.body;
+  if (!member || !lat || !lon) return res.status(400).json({ error: 'member, lat, lon required' });
+
+  if (activeSimulations[member]) {
+    activeSimulations[member].active = false;
+    activeSimulations[member].stayActive = false;
+    if (activeSimulations[member].timer) clearTimeout(activeSimulations[member].timer);
+  }
+
+  activeSimulations[member] = {
+    active: false, stayActive: false,
+    coords: [], step: 0, speed,
+    simTime: Date.now(), timer: null
+  };
+
+  console.log(`[SIM] Stání pro ${member}: ${minutes} min na ${lat.toFixed(5)},${lon.toFixed(5)}`);
+  runSimStay(member, lat, lon, minutes, () => {
+    broadcast({ type: 'sim_arrived', member, lat, lon });
+    delete activeSimulations[member];
+  });
+  res.json({ ok: true, member, minutes });
+});
+
+// Simulace — stop
+app.post('/simulate/stop', (req, res) => {
+  const { member } = req.body;
+  if (activeSimulations[member]) {
+    activeSimulations[member].active = false;
+    activeSimulations[member].stayActive = false;
+    if (activeSimulations[member].timer) clearTimeout(activeSimulations[member].timer);
+    delete activeSimulations[member];
+    broadcast({ type: 'sim_stopped', member });
+  }
+  res.json({ ok: true });
+});
+
+// Simulace — stav
+app.get('/simulate/status', (req, res) => {
+  const out = {};
+  for (const [m, s] of Object.entries(activeSimulations)) {
+    out[m] = { active: s.active, stayActive: s.stayActive, step: s.step, total: s.coords.length, speed: s.speed };
+  }
+  res.json(out);
 });
 
 app.get('/status', async (req, res) => {
