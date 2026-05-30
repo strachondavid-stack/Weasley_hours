@@ -1333,14 +1333,15 @@ function simArrived() {
 }
 
 async function simStay(lat, lon, minutes) {
-  const speed = parseInt(document.getElementById('simSpeed').value) || 5;
   const totalPoints = Math.max(minutes * 2, 5); // 1 bod per 30s simulovaných
-  const interval = (minutes * 60 * 1000) / speed / totalPoints;
   document.getElementById('simStopBtn').style.display = '';
   simState.active = true;
 
   for (let i = 0; i < totalPoints; i++) {
     if (!simState.active) break;
+    // Čti rychlost dynamicky — reaguje na změnu slideru během stání
+    const speed = parseInt(document.getElementById('simSpeed').value) || 5;
+    const interval = (minutes * 60 * 1000) / speed / totalPoints;
     // GPS drift ±15m
     const dLat = (Math.random() - 0.5) * 0.00025;
     const dLon = (Math.random() - 0.5) * 0.00025;
