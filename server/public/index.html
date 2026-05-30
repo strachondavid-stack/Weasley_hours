@@ -1285,13 +1285,15 @@ async function simStep() {
   const { lat, lon } = coords[step];
   const speed = parseInt(document.getElementById('simSpeed').value) || 5;
   const intervalMs = 3000 / speed;
-  // Simulovaný čas posuneme o 3 sekundy per krok (reálný interval mezi GPS body)
   simState.simTime += 3000;
-  // Vypočítej rychlost z předchozího bodu
+  // Vypočítej rychlost z průměru posledních 3 bodů — vyhlazení GPS skoku
   let vel = 0;
   if (step > 0) {
-    const prev = coords[step - 1];
-    vel = simCalcVel(prev.lat, prev.lon, lat, lon, 3000);
+    const lookback = Math.min(3, step);
+    const fromIdx = step - lookback;
+    const from = coords[fromIdx];
+    const totalDist = simCalcVel(from.lat, from.lon, lat, lon, lookback * 3000) * (lookback * 3000 / 1000) / 3.6;
+    vel = simCalcVel(from.lat, from.lon, lat, lon, lookback * 3000);
   }
   const motionactivities = simMotionFromProfile();
   await simSendGPS(lat, lon, Math.round(vel), motionactivities, simState.simTime);
