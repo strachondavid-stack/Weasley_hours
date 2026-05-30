@@ -1572,6 +1572,7 @@ ws.onmessage=(e)=>{
     if(msg.type==='sim_arrived'){
       simState.active = false;
       simSetDisplay('simStopBtn', 'none');
+      if(scRunning) return; // scénář si řídí tok sám — dialog nechceme
       const dest = {lat: msg.lat, lng: msg.lon, lon: msg.lon};
       simState.pointB = dest;
       simState.dialogOpen = false; // reset aby dialog mohl vyjit
