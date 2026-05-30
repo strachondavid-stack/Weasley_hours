@@ -1154,9 +1154,9 @@ function simReset() {
   if (simState.markerB) { map.removeLayer(simState.markerB); }
   simState = { active: false, pointA: null, pointB: null, markerA: null, markerB: null, interval: null, step: 0, coords: [], simTime: Date.now() };
   if (map) map.getContainer().classList.remove('sim-picking');
-  document.getElementById('simStartBtn').style.display = 'none';
-  document.getElementById('simStopBtn').style.display = 'none';
-  document.getElementById('simStatus').textContent = 'Klikni na mapu pro START bod';
+  simSetDisplay('simStartBtn', 'none');
+  simSetDisplay('simStopBtn', 'none');
+  simSetStatus('Klikni na mapu pro START bod');
   map.off('click', simMapClick);
   map.on('click', simMapClick);
   map.getContainer().classList.add('sim-picking');
@@ -1165,7 +1165,7 @@ function simReset() {
 async function simWaitHere() {
   if (simState.active) return;
   // Nejdřív klik na mapu, pak dialog
-  document.getElementById('simStatus').textContent = 'Klikni na mapu kde chceš stát';
+  simSetStatus('Klikni na mapu kde chceš stát');
   map.getContainer().classList.add('sim-picking');
   map.once('click', async (e) => {
     map.getContainer().classList.remove('sim-picking');
@@ -1185,9 +1185,9 @@ async function simWaitHere() {
         { label: '⏹ Zrušit', value: 0 },
       ],
       async (minutes) => {
-        if (!minutes) { document.getElementById('simStatus').textContent = 'Klikni na mapu pro START bod'; return; }
+        if (!minutes) { simSetStatus('Klikni na mapu pro START bod'); return; }
         simState.active = true;
-        document.getElementById('simStopBtn').style.display = '';
+        simSetDisplay('simStopBtn', '');
         await simStay(e.latlng.lat, e.latlng.lng, minutes);
         simState.active = false;
         simState.pointB = e.latlng;
@@ -1196,6 +1196,11 @@ async function simWaitHere() {
     );
   });
 }
+
+// Bezpečný přístup k sim UI elementům — funguje i když záložka není aktivní
+function simUI(id) { return document.getElementById(id); }
+function simSetStatus(text) { const el = simUI('simStatus'); if (el) el.textContent = text; }
+function simSetDisplay(id, val) { const el = simUI(id); if (el) el.style.display = val; }
 
 function simPin(latlng, label, color) {
   return L.marker(latlng, {
@@ -1217,12 +1222,12 @@ function simMapClick(e) {
   if (!simState.pointA) {
     simState.pointA = e.latlng;
     simState.markerA = simPin(e.latlng, '📍 START', '#22c55e').addTo(map);
-    document.getElementById('simStatus').textContent = 'Klikni na mapu pro CÍL';
+    simSetStatus('Klikni na mapu pro CÍL');
   } else if (!simState.pointB) {
     simState.pointB = e.latlng;
     simState.markerB = simPin(e.latlng, '🏁 CÍL', '#dc2626').addTo(map);
-    document.getElementById('simStatus').textContent = 'Trasa připravena — stiskni Spustit';
-    document.getElementById('simStartBtn').style.display = '';
+    simSetStatus('Trasa připravena — stiskni Spustit');
+    simSetDisplay('simStartBtn', '');
     map.off('click', simMapClick);
     map.getContainer().classList.remove('sim-picking');
   }
@@ -1234,8 +1239,8 @@ async function simStart() {
   const b = simState.pointB;
   const profile = document.getElementById('simMode').value;
 
-  document.getElementById('simStatus').textContent = '⏳ Načítám trasu...';
-  document.getElementById('simStartBtn').style.display = 'none';
+  simSetStatus('⏳ Načítám trasu...');
+  simSetDisplay('simStartBtn', 'none');
 
   try {
     // OSRM pro auto, jinak přímá trasa interpolovaná
@@ -1268,12 +1273,12 @@ async function simStart() {
     simState.coords = coords;
     simState.step = 0;
     simState.active = true;
-    document.getElementById('simStopBtn').style.display = '';
-    document.getElementById('simStatus').textContent = `▶ ${coords.length} bodů · krok 0/${coords.length}`;
+    simSetDisplay('simStopBtn', '');
+    simSetStatus(`▶ ${coords.length} bodů · krok 0/${coords.length}`);
     simStep();
   } catch(e) {
-    document.getElementById('simStatus').textContent = '⚠ Chyba načtení trasy: ' + e.message;
-    document.getElementById('simStartBtn').style.display = '';
+    simSetStatus('⚠ Chyba načtení trasy: ' + e.message);
+    simSetDisplay('simStartBtn', '');
   }
 }
 
@@ -1312,7 +1317,7 @@ async function simStep() {
   // Hotovo — přijeli jsme do cíle
   if (step >= coords.length) {
     simState.active = false;
-    document.getElementById('simStopBtn').style.display = 'none';
+    simSetDisplay('simStopBtn', 'none');
     // Zobraz dialog pro stání
     simArrived();
     return;
@@ -1334,14 +1339,14 @@ async function simStep() {
   const motionactivities = simMotionFromProfile();
   await simSendGPS(lat, lon, Math.round(vel), motionactivities, simState.simTime);
   simState.step++;
-  document.getElementById('simStatus').textContent = `▶ jízda ${simState.step}/${coords.length} · ${vel.toFixed(0)} km/h`;
+  simSetStatus(`▶ jízda ${simState.step}/${coords.length} · ${vel.toFixed(0)} km/h`);
   simState.interval = setTimeout(simStep, intervalMs);
 }
 
 function simArrived() {
   const dest = simState.pointB;
   const member = document.getElementById('simMember').value;
-  document.getElementById('simStatus').textContent = '📍 Dorazili jsme do cíle';
+  simSetStatus('📍 Dorazili jsme do cíle');
 
   showSimDialog(
     '📍 Dorazili jsme!',
@@ -1356,7 +1361,7 @@ function simArrived() {
     ],
     async (choice) => {
       if (choice === 'stop') {
-        document.getElementById('simStatus').textContent = '✓ Simulace dokončena';
+        simSetStatus('✓ Simulace dokončena');
         return;
       }
       if (choice > 0) {
@@ -1370,7 +1375,7 @@ function simArrived() {
 
 async function simStay(lat, lon, minutes) {
   const totalPoints = Math.max(minutes * 2, 5); // 1 bod per 30s simulovaných
-  document.getElementById('simStopBtn').style.display = '';
+  simSetDisplay('simStopBtn', '');
   simState.active = true;
 
   for (let i = 0; i < totalPoints; i++) {
@@ -1384,11 +1389,11 @@ async function simStay(lat, lon, minutes) {
     // Každý bod = 30 simulovaných sekund stání
     simState.simTime += 30000;
     await simSendGPS(lat + dLat, lon + dLon, 0, ['stationary'], simState.simTime);
-    document.getElementById('simStatus').textContent = `⏱ Stojím ${Math.round((i+1)/totalPoints*minutes)} / ${minutes} min · bod ${i+1}/${totalPoints}`;
+    simSetStatus(`⏱ Stojím ${Math.round((i+1)/totalPoints*minutes)} / ${minutes} min · bod ${i+1}/${totalPoints}`);
     await new Promise(r => setTimeout(r, interval));
   }
   simState.active = false;
-  document.getElementById('simStopBtn').style.display = 'none';
+  simSetDisplay('simStopBtn', 'none');
 }
 
 function simAskNext(prevDest) {
@@ -1403,7 +1408,7 @@ function simAskNext(prevDest) {
     async (choice) => {
       hideSimDialog();
       if (choice === 'stop') {
-        document.getElementById('simStatus').textContent = '✓ Simulace dokončena';
+        simSetStatus('✓ Simulace dokončena');
         return;
       }
       if (choice === 'home') {
@@ -1420,13 +1425,13 @@ function simAskNext(prevDest) {
           simState.coords = [];
           simState.step = 0;
           simState.active = true;
-          document.getElementById('simStartBtn').style.display = 'none';
-          document.getElementById('simStopBtn').style.display = '';
+          simSetDisplay('simStartBtn', 'none');
+          simSetDisplay('simStopBtn', '');
           await simFetchRoute(prevDest, L.latLng(home.lat, home.lon));
         }
       }
       if (choice === 'map') {
-        document.getElementById('simStatus').textContent = 'Klikni na mapu pro nový CÍL';
+        simSetStatus('Klikni na mapu pro nový CÍL');
         simState.pointA = prevDest;
         simState.pointB = null;
         if (simState.markerB) { map.removeLayer(simState.markerB); simState.markerB = null; }
@@ -1441,7 +1446,7 @@ function simAskNext(prevDest) {
 }
 
 async function simFetchRoute(from, to) {
-  document.getElementById('simStatus').textContent = '⏳ Načítám trasu...';
+  simSetStatus('⏳ Načítám trasu...');
   const profile = document.getElementById('simMode').value;
   let coords = [];
   try {
@@ -1464,7 +1469,7 @@ async function simFetchRoute(from, to) {
   simState.active = true;
   if (!simState.simTime) simState.simTime = Date.now();
   const speed = parseInt(document.getElementById('simSpeed').value) || 5;
-  document.getElementById('simStatus').textContent = `▶ ${coords.length} bodů`;
+  simSetStatus(`▶ ${coords.length} bodů`);
   simStep();
 }
 
@@ -1521,9 +1526,9 @@ function hideSimDialog() {
 function simStop() {
   simState.active = false;
   if (simState.interval) { clearTimeout(simState.interval); simState.interval = null; }
-  document.getElementById('simStopBtn').style.display = 'none';
+  simSetDisplay('simStopBtn', 'none');
   document.getElementById('simStartBtn').style.display = simState.coords.length ? '' : 'none';
-  document.getElementById('simStatus').textContent = '⏸ Pozastaveno';
+  simSetStatus('⏸ Pozastaveno');
 }
 
 // ─── Init ──────────────────────────────────────────────────────────────
