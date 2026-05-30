@@ -896,7 +896,15 @@ app.post('/simulate/stay', async (req, res) => {
   };
 
   console.log(`[SIM] Stání pro ${member}: ${minutes} min na ${lat.toFixed(5)},${lon.toFixed(5)}`);
-  runSimStay(member, lat, lon, minutes, () => {
+  runSimStay(member, lat, lon, minutes, async () => {
+    // Po dokončení stání — okamžitě vyhodnoť cluster bez čekání na automotive bod
+    const tracker = getTracker(member);
+    if (tracker.cluster && tracker.cluster.points.length >= MIN_STOP_POINTS) {
+      console.log(`[SIM] Vyhodnocuji cluster po stání: ${tracker.cluster.points.length} bodů, dur=${Math.round((tracker.cluster.points[tracker.cluster.points.length-1].ts - tracker.cluster.startTs)/60000)}min`);
+      await evaluateCluster(member, tracker.cluster);
+      tracker.cluster = null;
+      await saveTracker(member);
+    }
     broadcast({ type: 'sim_arrived', member, lat, lon, afterStay: true });
     delete activeSimulations[member];
   });
