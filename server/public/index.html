@@ -1360,16 +1360,21 @@ function simArrived() {
         simSetStatus('✓ Simulace dokončena');
         return;
       }
-      if (choice > 0) {
+      const minutes = parseInt(choice);
+      if (minutes > 0) {
         const member = document.getElementById('simMember').value;
         const speed = parseInt(document.getElementById('simSpeed').value) || 5;
+        const lat = parseFloat(dest.lat);
+        const lon = parseFloat(dest.lng || dest.lon);
+        console.log('[SIM] Stay request:', member, lat, lon, minutes, speed);
         simState.active = true;
         simSetDisplay('simStopBtn', '');
-        simSetStatus(`⏱ Server simuluje stání ${choice} min...`);
-        await fetch('/simulate/stay', {
+        simSetStatus(`⏱ Server simuluje stání ${minutes} min...`);
+        const r = await fetch('/simulate/stay', {
           method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ member, lat: dest.lat, lon: dest.lng || dest.lon, minutes: choice, speed })
+          body: JSON.stringify({ member, lat, lon, minutes, speed })
         });
+        console.log('[SIM] Stay response:', await r.json());
         // sim_arrived přijde přes WebSocket po doběhnutí stání
         return;
       }
