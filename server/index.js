@@ -189,9 +189,18 @@ async function askClaude(member, lat, lon, context) {
 
   const { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source } = context;
 
-  const placesStr = placesNearby.length > 0
-    ? placesNearby.map(p => `  - ${p.name} (${p.primaryType || 'neznámý typ'}, ${p.dist}m${p.rating ? ', ★' + p.rating : ''})`).join('\n')
-    : '  Žádná místa nenalezena';
+  // Zvýrazni nejbližší místo — pokud je výrazně blíž než ostatní, je to pravděpodobný cíl
+  let placesStr = '  Žádná místa nenalezena';
+  if (placesNearby.length > 0) {
+    const nearest = placesNearby[0];
+    const second = placesNearby[1];
+    const nearestIsClose = nearest.dist < 50;
+    const nearestIsMuchCloser = second && nearest.dist < second.dist * 0.4;
+    placesStr = placesNearby.map((p, i) => {
+      const highlight = i === 0 && (nearestIsClose || nearestIsMuchCloser) ? ' ← NEJBLIŽŠÍ, pravděpodobný cíl' : '';
+      return `  - ${p.name} (${p.primaryType || 'neznámý typ'}, ${p.dist}m${p.rating ? ', ★' + p.rating : ''})${highlight}`;
+    }).join('\n');
+  }
 
   const nearbyStr = nearbyMembers.length > 0
     ? '\nDalší členové rodiny na tomto místě:\n' + nearbyMembers.map(m => `  - ${m.member} byl zde před ${m.minutesAgo} min`).join('\n')
@@ -209,6 +218,7 @@ Nejbližší místa z Google Places:
 ${placesStr}
 
 Rodina v ČR. Chceme ukládat: práce, obchod, lékař, restaurace, sport, škola, návštěvy. Nechceme: průjezdy, čekání v autě, GPS artefakty.
+Při pojmenování upřednostni NEJBLIŽŠÍ místo — vzdálenost je klíčový signál. Pokud je nejbližší místo < 50m, téměř jistě to je cíl.
 
 Odpověz POUZE jako JSON:
 {"should_save": true/false, "name": "název česky nebo null", "confidence": 0.0-1.0, "reason": "zdůvodnění česky"}`;
