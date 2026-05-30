@@ -553,8 +553,16 @@ async function detectSilentStop(member, prevPoint, newLat, newLon, newTs) {
   if (timeDiff > SILENCE_MAX_GAP) return;
   if (spaceDiff < SILENCE_MIN_DIST) return;
 
+  // Filtruj rychlou jízdu — pokud vzdálenost odpovídá jízdě autem (>30km/h), ignoruj
+  // (timeDiff v ms, spaceDiff v m → rychlost v km/h)
+  const speedKmh = (spaceDiff / (timeDiff / 1000)) * 3.6;
+  if (speedKmh > 30) {
+    // Příliš rychlý pohyb — není to silence stop ale jízda se simulovaným časem
+    return;
+  }
+
   const gapMinutes = Math.round(timeDiff / 60000);
-  console.log(`[SILENCE] [${member}] mezera ${gapMinutes}min, vzdálenost ${Math.round(spaceDiff)}m`);
+  console.log(`[SILENCE] [${member}] mezera ${gapMinutes}min, vzdálenost ${Math.round(spaceDiff)}m, ${Math.round(speedKmh)}km/h`);
 
   await processStopCandidate(member, prevPoint.lat, prevPoint.lon, gapMinutes, 'silence');
 }
