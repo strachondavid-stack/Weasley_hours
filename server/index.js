@@ -820,6 +820,7 @@ async function runSimStay(member, lat, lon, minutes, onDone) {
     const dLat = (Math.random() - 0.5) * 0.00025;
     const dLon = (Math.random() - 0.5) * 0.00025;
     sim.simTime += 30000;
+    if (sim.stayStep === 0) console.log(`[SIM] Stay start simTime=${sim.simTime}`);
     await simSendGPSServer(member, lat + dLat, lon + dLon, 0, ['stationary'], sim.simTime);
     sim.stayStep++;
     broadcast({ type: 'sim_staying', member, step: sim.stayStep, total: totalPoints, minutes });
