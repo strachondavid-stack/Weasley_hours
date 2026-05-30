@@ -943,6 +943,16 @@ app.post('/simulate/stay', async (req, res) => {
 });
 
 // Simulace — stop
+app.post('/simulate/speed', (req, res) => {
+  const { member, speed } = req.body;
+  if (!member || !speed) return res.status(400).json({ error: 'member a speed required' });
+  if (activeSimulations[member]) {
+    activeSimulations[member].speed = parseInt(speed);
+    console.log(`[SIM] Rychlost ${member} → ${speed}x`);
+  }
+  res.json({ ok: true });
+});
+
 app.post('/simulate/stop', (req, res) => {
   const { member } = req.body;
   if (activeSimulations[member]) {

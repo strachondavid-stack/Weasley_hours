@@ -2094,7 +2094,14 @@ function scUpdateLabels() {
   document.querySelectorAll('#sc-run-speed-label').forEach(el => el.textContent = (document.getElementById('sc-speed')?.value || '?') + '×');
 }
 document.getElementById('sc-member')?.addEventListener('change', scUpdateLabels);
-document.getElementById('sc-speed')?.addEventListener('change', scUpdateLabels);
+document.getElementById('sc-speed')?.addEventListener('change', () => {
+  scUpdateLabels();
+  if (scRunning) {
+    const member = document.getElementById('sc-member')?.value;
+    const speed  = document.getElementById('sc-speed')?.value;
+    fetch('/simulate/speed', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ member, speed }) });
+  }
+});
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
