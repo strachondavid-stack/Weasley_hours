@@ -675,15 +675,20 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   }
 
   // Motion přepisuje status pouze pokud jsme na cestě (ne uvnitř geofence)
-  // GPS drift — bod těsně mimo fence radius, ale stále u místa
   if (motion) {
     if (status === 'cesta') {
-      const nearFence = dynamicFences.find(f =>
-        (!f.only || f.only.includes(member)) &&
-        distance(lat, lon, f.lat, f.lon) < f.radius * 1.5
-      );
-      if (nearFence) status = nearFence.name;
-      else status = motion;
+      // GPS drift — bod těsně mimo fence radius ale stojíme (ne automotive/cycling)
+      const isMovingMotion = motionActivities.includes('automotive') || motionActivities.includes('cycling');
+      if (!isMovingMotion) {
+        const nearFence = dynamicFences.find(f =>
+          (!f.only || f.only.includes(member)) &&
+          distance(lat, lon, f.lat, f.lon) < f.radius * 1.5
+        );
+        if (nearFence) status = nearFence.name;
+        else status = motion;
+      } else {
+        status = motion;
+      }
     }
     // Pokud jsme doma a pohybujeme se — necháme doma
   }
