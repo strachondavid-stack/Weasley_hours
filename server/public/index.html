@@ -242,6 +242,7 @@
     </select>
     <span id="simStatus" style="font-size:12px;color:#aaa">Klikni na mapu pro START bod</span>
     <button id="simStartBtn" onclick="simStart()" style="display:none;font-size:12px;padding:4px 12px;border-radius:4px;border:none;background:#22c55e;color:#fff;cursor:pointer;font-weight:600">▶ Spustit</button>
+    <button id="simWaitBtn" onclick="simWaitHere()" style="font-size:12px;padding:4px 12px;border-radius:4px;border:none;background:#f59e0b;color:#fff;cursor:pointer;font-weight:600">⏱ Stát zde</button>
     <button id="simStopBtn" onclick="simStop()" style="display:none;font-size:12px;padding:4px 12px;border-radius:4px;border:none;background:#dc2626;color:#fff;cursor:pointer;font-weight:600">■ Zastavit</button>
     <button onclick="simReset()" style="font-size:12px;padding:4px 10px;border-radius:4px;border:1px solid #555;background:none;color:#aaa;cursor:pointer">↺ Reset</button>
   </div>
@@ -1159,6 +1160,39 @@ function simReset() {
   map.off('click', simMapClick);
   map.on('click', simMapClick);
   map.getContainer().classList.add('sim-picking');
+}
+
+async function simWaitHere() {
+  if (simState.active) return;
+  document.getElementById('simStatus').textContent = 'Klikni na mapu kde chceš stát';
+  map.getContainer().classList.add('sim-picking');
+  map.once('click', async (e) => {
+    map.getContainer().classList.remove('sim-picking');
+    if (simState.markerA) map.removeLayer(simState.markerA);
+    simState.markerA = simPin(e.latlng, '⏱ STÁNÍ', '#f59e0b').addTo(map);
+    if (!simState.simTime) simState.simTime = Date.now();
+    showSimDialog(
+      '⏱ Stát na místě',
+      'Jak dlouho se tu čeká?',
+      [
+        { label: '5 min', value: 5 },
+        { label: '10 min', value: 10 },
+        { label: '20 min', value: 20 },
+        { label: '30 min', value: 30 },
+        { label: '⏹ Zrušit', value: 0 },
+      ],
+      async (minutes) => {
+        if (!minutes) { document.getElementById('simStatus').textContent = 'Klikni na mapu pro START bod'; return; }
+        simState.active = true;
+        document.getElementById('simStopBtn').style.display = '';
+        await simStay(e.latlng.lat, e.latlng.lng, minutes);
+        simState.active = false;
+        // Po stání — dialog kam dál
+        simState.pointB = e.latlng;
+        simAskNext(e.latlng);
+      }
+    );
+  });
 }
 
 function simPin(latlng, label, color) {
