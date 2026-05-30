@@ -343,14 +343,14 @@ async function saveTracker(member) {
   try {
     const t = trackers[member];
     if (!t) return;
-    await redis.set('tracker:' + member, JSON.stringify({ cluster: t.cluster, lastPoint: t.lastPoint }));
+    await redisLive.set('tracker:' + member, JSON.stringify({ cluster: t.cluster, lastPoint: t.lastPoint }));
   } catch(e) {}
 }
 
 async function loadTrackers() {
   for (const m of MEMBERS) {
     try {
-      const raw = await redis.get('tracker:' + m);
+      const raw = await redisLive.get('tracker:' + m);
       if (raw) {
         trackers[m] = JSON.parse(raw);
         const t = trackers[m];
@@ -613,8 +613,10 @@ Odpověz POUZE názvem souboru nebo prázdným stringem, bez jakéhokoliv dalš�
   }
 }
 
-async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simTs = null) {
+async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simTs = null, forceLive = false) {
   const ts = simTs || Date.now();
+  // MQTT a live zdroje vždy zapisují do live Redis bez ohledu na mód
+  const activeRedis = (forceLive || currentMode === 'live') ? redisLive : redis;
   let status = resolveStatus(member, lat, lon);
   // Pohyb má přednost před geofence — kromě doma
   let motion = resolveMotion(motionActivities, vel);
@@ -649,9 +651,9 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   }
   const img = await suggestImageForStatus(status);
   const data = { status, lat, lon, ts, img };
-  await redis.set('member:' + member, JSON.stringify(data));
-  await redis.lPush('history:' + member, JSON.stringify({ lat, lon, ts, status }));
-  await redis.lTrim('history:' + member, 0, 999);
+  await activeRedis.set('member:' + member, JSON.stringify(data));
+  await activeRedis.lPush('history:' + member, JSON.stringify({ lat, lon, ts, status }));
+  await activeRedis.lTrim('history:' + member, 0, 999);
   broadcast({ type: 'update', member, ...data });
   await logEvent('gps_received', { member, lat, lon, status });
   console.log(`[GPS] [${member}] ${status} (${lat.toFixed(5)}, ${lon.toFixed(5)}) vel=${vel} motion=${(motionActivities||[]).join(",")}`);
@@ -948,7 +950,7 @@ async function startMqtt() {
       const lat = parseFloat(msg.lat);
       const lon = parseFloat(msg.lon);
       if (isNaN(lat) || isNaN(lon)) return;
-      await processGPS(member, lat, lon, msg.motionactivities || [], msg.vel || 0);
+      await processGPS(member, lat, lon, msg.motionactivities || [], msg.vel || 0, null, true);
     } catch(e) { console.error('MQTT error:', e.message); }
   });
   client.on('error', e => console.error('MQTT error:', e));
