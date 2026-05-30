@@ -1135,7 +1135,7 @@ async function addGeofence(){
 }
 
 // ─── Simulace trasy ──────────────────────────────────────────────────────────
-let simState = { active: false, pointA: null, pointB: null, markerA: null, markerB: null, interval: null, step: 0, coords: [], simTime: 0 };
+let simState = { active: false, pointA: null, pointB: null, markerA: null, markerB: null, interval: null, step: 0, coords: [], simTime: 0, dialogOpen: false };
 
 function simSetPanel(visible) {
   const p = document.getElementById('sim-panel');
@@ -1152,7 +1152,7 @@ function simReset() {
   simStop();
   if (simState.markerA) { map.removeLayer(simState.markerA); }
   if (simState.markerB) { map.removeLayer(simState.markerB); }
-  simState = { active: false, pointA: null, pointB: null, markerA: null, markerB: null, interval: null, step: 0, coords: [], simTime: Date.now() };
+  simState = { active: false, pointA: null, pointB: null, markerA: null, markerB: null, interval: null, step: 0, coords: [], simTime: Date.now(), dialogOpen: false };
   if (map) map.getContainer().classList.remove('sim-picking');
   simSetDisplay('simStartBtn', 'none');
   simSetDisplay('simStopBtn', 'none');
@@ -1340,6 +1340,8 @@ async function simStep() {
 }
 
 function simArrived() {
+  if (simState.dialogOpen) return; // dialog už je otevřený
+  simState.dialogOpen = true;
   const dest = simState.pointB;
   const member = document.getElementById('simMember').value;
   simSetStatus('📍 Dorazili jsme do cíle');
@@ -1356,6 +1358,7 @@ function simArrived() {
       { label: '⏹ Konec simulace', value: 'stop' },
     ],
     async (choice) => {
+      simState.dialogOpen = false;
       if (choice === 'stop') {
         simSetStatus('✓ Simulace dokončena');
         return;
@@ -1408,6 +1411,8 @@ async function simStay(lat, lon, minutes) {
 }
 
 function simAskNext(prevDest) {
+  if (simState.dialogOpen) return;
+  simState.dialogOpen = true;
   showSimDialog(
     '🚗 Kam dál?',
     'Vyber další zastávku:',
@@ -1417,6 +1422,7 @@ function simAskNext(prevDest) {
       { label: '⏹ Konec simulace', value: 'stop' },
     ],
     async (choice) => {
+      simState.dialogOpen = false;
       hideSimDialog();
       if (choice === 'stop') {
         simSetStatus('✓ Simulace dokončena');
