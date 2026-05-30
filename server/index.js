@@ -40,14 +40,15 @@ function distance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function resolveStatus(member, lat, lon, vel = 0) {
+function resolveStatus(member, lat, lon, vel = 0, motionActivities = []) {
   const HOME_KEYWORDS = ['doma', 'náš domeček', 'home'];
+  // Pohyb = nechceme matchovat geofence (kromě domova)
+  const isMoving = vel > 2 && !motionActivities.includes('stationary');
   for (const fence of dynamicFences) {
     if (fence.only && !fence.only.includes(member)) continue;
     if (distance(lat, lon, fence.lat, fence.lon) <= fence.radius) {
-      // Při průjezdu autem (>15 km/h) ignoruj geofence kromě domova
       const isHome = HOME_KEYWORDS.some(k => fence.name.toLowerCase().includes(k));
-      if (vel > 15 && !isHome) continue;
+      if (isMoving && !isHome) continue;
       return fence.name;
     }
   }
@@ -623,7 +624,7 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   const ts = simTs || Date.now();
   // MQTT a live zdroje vždy zapisují do live Redis bez ohledu na mód
   const activeRedis = (forceLive || currentMode === 'live') ? redisLive : redis;
-  let status = resolveStatus(member, lat, lon, vel);
+  let status = resolveStatus(member, lat, lon, vel, motionActivities);
   // Pohyb má přednost před geofence — kromě doma
   let motion = resolveMotion(motionActivities, vel);
 
