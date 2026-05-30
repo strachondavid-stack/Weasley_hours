@@ -703,7 +703,7 @@ function showPage(p){
   if(p==='clock')     { renderClock(); }
   if(p==='admin')     { loadMode(); }
   if(p==='log')       { logInitListeners(); loadLog(); }
-  if(p==='map')       { setTimeout(()=>map.invalidateSize(),50); fetch('/mode').then(r=>r.json()).then(d=>{ if(d.mode==='test') simReset(); }); }
+  if(p==='map')       { setTimeout(()=>map.invalidateSize(),50); fetch('/mode').then(r=>r.json()).then(d=>{ if(d.mode==='test' && !simState.active) simSetupListeners(); }); }
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────
@@ -1215,6 +1215,14 @@ function simPin(latlng, label, color) {
       popupAnchor: [0, -28]
     })
   });
+}
+
+function simSetupListeners() {
+  if (!simState.active && !simState.pointA) {
+    map.off('click', simMapClick);
+    map.on('click', simMapClick);
+    map.getContainer().classList.add('sim-picking');
+  }
 }
 
 function simMapClick(e) {
