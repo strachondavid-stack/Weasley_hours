@@ -15,6 +15,12 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || null;
 
 const MEMBERS = ['mamka', 'tatka', 'misak', 'kubik'];
 
+// ─── Fence dwell tracking ────────────────────────────────────────────────────
+// Pro každého člena sledujeme kdy vstoupil do které geofence
+// Geofence se aplikuje až po FENCE_DWELL_MS milisekundách uvnitř
+const FENCE_DWELL_MS = 60 * 1000; // 60 sekund = není průjezd
+const memberFenceState = {}; // { member: { fenceId, enteredAt, name } }
+
 // ─── Geofences ────────────────────────────────────────────────────────────────
 let dynamicFences = [];
 
@@ -40,18 +46,49 @@ function distance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function resolveStatus(member, lat, lon, vel = 0, motionActivities = []) {
+function resolveStatus(member, lat, lon, vel = 0, motionActivities = [], ts = Date.now()) {
   const HOME_KEYWORDS = ['doma', 'náš domeček', 'home'];
-  // Pohyb = nechceme matchovat geofence (kromě domova)
-  const isMoving = vel > 2 && !motionActivities.includes('stationary');
+
+  // Najdi geofence ve které se člen nachází
+  let currentFence = null;
   for (const fence of dynamicFences) {
     if (fence.only && !fence.only.includes(member)) continue;
     if (distance(lat, lon, fence.lat, fence.lon) <= fence.radius) {
-      const isHome = HOME_KEYWORDS.some(k => fence.name.toLowerCase().includes(k));
-      if (isMoving && !isHome) continue;
-      return fence.name;
+      currentFence = fence;
+      break;
     }
   }
+
+  if (!currentFence) {
+    // Mimo všechny geofences — reset dwell
+    memberFenceState[member] = null;
+    return 'cesta';
+  }
+
+  const isHome = HOME_KEYWORDS.some(k => currentFence.name.toLowerCase().includes(k));
+
+  // Domov — aplikuj okamžitě
+  if (isHome) {
+    memberFenceState[member] = null;
+    return currentFence.name;
+  }
+
+  // Dwell tracking — sleduj jak dlouho je člen uvnitř
+  const state = memberFenceState[member];
+  if (!state || state.fenceId !== currentFence.id) {
+    // Nová geofence — zaznamenej vstup
+    memberFenceState[member] = { fenceId: currentFence.id, enteredAt: ts, name: currentFence.name };
+    // Zatím vrať cesta — ještě nevíme jestli stojí
+    return 'cesta';
+  }
+
+  // Jsme v téže geofence — zkontroluj dwell time
+  const dwellMs = ts - state.enteredAt;
+  if (dwellMs >= FENCE_DWELL_MS) {
+    return currentFence.name; // Dost dlouho — aplikuj geofence
+  }
+
+  // Ještě jsme tam krátce — vrať cesta
   return 'cesta';
 }
 
@@ -624,7 +661,7 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   const ts = simTs || Date.now();
   // MQTT a live zdroje vždy zapisují do live Redis bez ohledu na mód
   const activeRedis = (forceLive || currentMode === 'live') ? redisLive : redis;
-  let status = resolveStatus(member, lat, lon, vel, motionActivities);
+  let status = resolveStatus(member, lat, lon, vel, motionActivities, ts);
   // Pohyb má přednost před geofence — kromě doma
   let motion = resolveMotion(motionActivities, vel);
 
