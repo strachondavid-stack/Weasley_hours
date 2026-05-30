@@ -1361,9 +1361,19 @@ function simArrived() {
         return;
       }
       if (choice > 0) {
-        await simStay(dest.lat, dest.lng, choice);
+        const member = document.getElementById('simMember').value;
+        const speed = parseInt(document.getElementById('simSpeed').value) || 5;
+        simState.active = true;
+        simSetDisplay('simStopBtn', '');
+        simSetStatus(`⏱ Server simuluje stání ${choice} min...`);
+        await fetch('/simulate/stay', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ member, lat: dest.lat, lon: dest.lng || dest.lon, minutes: choice, speed })
+        });
+        // sim_arrived přijde přes WebSocket po doběhnutí stání
+        return;
       }
-      // Po stání — dialog kam dál
+      // Odjet hned — dialog kam dál
       simAskNext(dest);
     }
   );
@@ -1545,8 +1555,13 @@ ws.onmessage=(e)=>{
     if(msg.type==='sim_arrived'){
       simState.active = false;
       simSetDisplay('simStopBtn', 'none');
-      simState.pointB = {lat: msg.lat, lng: msg.lon};
-      simArrived();
+      const dest = {lat: msg.lat, lng: msg.lon, lon: msg.lon};
+      simState.pointB = dest;
+      if (msg.afterStay) {
+        simAskNext(dest);
+      } else {
+        simArrived();
+      }
     }
     if(msg.type==='sim_progress'){
       simSetStatus(`▶ krok ${msg.step}/${msg.total} · ${msg.vel} km/h`);
