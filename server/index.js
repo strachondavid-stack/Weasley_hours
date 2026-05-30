@@ -42,7 +42,11 @@ function distance(lat1, lon1, lat2, lon2) {
 
 function resolveStatus(member, lat, lon, vel = 0, motionActivities = []) {
   const HOME_KEYWORDS = ['doma', 'náš domeček', 'home'];
-  const isMoving = vel > 3 && !motionActivities.includes('stationary');
+  // Pohybuje se pokud: automotive/cycling/walking s vel>1, nebo vel>3
+  // automotive = vždy pohyb bez ohledu na vel (GPS drift způsobuje nízké vel)
+  const isMoving = motionActivities.includes('automotive') ||
+                   motionActivities.includes('cycling') ||
+                   (vel > 3 && !motionActivities.includes('stationary'));
 
   for (const fence of dynamicFences) {
     if (fence.only && !fence.only.includes(member)) continue;
