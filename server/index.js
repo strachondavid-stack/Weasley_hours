@@ -904,14 +904,22 @@ app.post('/simulate/stay', async (req, res) => {
   };
 
   console.log(`[SIM] Stání pro ${member}: ${minutes} min na ${lat.toFixed(5)},${lon.toFixed(5)}`);
+  // Reset tracker před stáním — aby cluster obsahoval jen stationary body
+  const stayStartTs = activeSimulations[member].simTime;
+  const tracker = getTracker(member);
+  tracker.cluster = { points: [], startTs: stayStartTs };
+  await saveTracker(member);
+
   runSimStay(member, lat, lon, minutes, async () => {
-    // Po dokončení stání — okamžitě vyhodnoť cluster bez čekání na automotive bod
-    const tracker = getTracker(member);
-    if (tracker.cluster && tracker.cluster.points.length >= MIN_STOP_POINTS) {
-      console.log(`[SIM] Vyhodnocuji cluster po stání: ${tracker.cluster.points.length} bodů, dur=${Math.round((tracker.cluster.points[tracker.cluster.points.length-1].ts - tracker.cluster.startTs)/60000)}min`);
-      await evaluateCluster(member, tracker.cluster);
-      tracker.cluster = null;
+    const tracker2 = getTracker(member);
+    if (tracker2.cluster && tracker2.cluster.points.length >= MIN_STOP_POINTS) {
+      const dur = Math.round((tracker2.cluster.points[tracker2.cluster.points.length-1].ts - tracker2.cluster.startTs) / 60000);
+      console.log(`[SIM] Vyhodnocuji cluster po stání: ${tracker2.cluster.points.length} bodů, dur=${dur}min`);
+      await evaluateCluster(member, tracker2.cluster);
+      tracker2.cluster = null;
       await saveTracker(member);
+    } else {
+      console.log(`[SIM] Cluster po stání: ${tracker2.cluster?.points.length || 0} bodů — málo pro vyhodnocení`);
     }
     broadcast({ type: 'sim_arrived', member, lat, lon, afterStay: true });
     delete activeSimulations[member];
