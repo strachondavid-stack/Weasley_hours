@@ -1164,15 +1164,12 @@ function simReset() {
 
 async function simWaitHere() {
   if (simState.active) return;
-  // Nejdřív klik na mapu, pak dialog
-  simSetStatus('Klikni na mapu kde chceš stát');
+  document.getElementById('simStatus') && (document.getElementById('simStatus').textContent = 'Klikni na mapu kde chceš stát');
   map.getContainer().classList.add('sim-picking');
   map.once('click', async (e) => {
     map.getContainer().classList.remove('sim-picking');
     if (simState.markerA) map.removeLayer(simState.markerA);
     simState.markerA = simPin(e.latlng, '⏱ STÁNÍ', '#f59e0b').addTo(map);
-    if (!simState.simTime) simState.simTime = Date.now();
-    // Krátká pauza aby se mapa settled
     await new Promise(r => setTimeout(r, 100));
     showSimDialog(
       '⏱ Stát na místě',
@@ -1186,12 +1183,16 @@ async function simWaitHere() {
       ],
       async (minutes) => {
         if (!minutes) { simSetStatus('Klikni na mapu pro START bod'); return; }
+        const member = document.getElementById('simMember').value;
+        const speed = parseInt(document.getElementById('simSpeed').value) || 5;
         simState.active = true;
         simSetDisplay('simStopBtn', '');
-        await simStay(e.latlng.lat, e.latlng.lng, minutes);
-        simState.active = false;
-        simState.pointB = e.latlng;
-        simAskNext(e.latlng);
+        simSetStatus(`⏱ Server simuluje stání ${minutes} min...`);
+        await fetch('/simulate/stay', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ member, lat: e.latlng.lat, lon: e.latlng.lng, minutes, speed })
+        });
+        // sim_arrived přijde přes WebSocket
       }
     );
   });
@@ -1246,46 +1247,33 @@ async function simStart() {
   const a = simState.pointA;
   const b = simState.pointB;
   const profile = document.getElementById('simMode').value;
+  const speed = parseInt(document.getElementById('simSpeed').value) || 5;
+  const member = document.getElementById('simMember').value;
 
   simSetStatus('⏳ Načítám trasu...');
   simSetDisplay('simStartBtn', 'none');
 
   try {
-    // OSRM pro auto, jinak přímá trasa interpolovaná
     let coords = [];
-    if (profile === 'driving-car') {
-      const url = `https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data.routes && data.routes[0]) {
-        coords = data.routes[0].geometry.coordinates.map(c => ({ lat: c[1], lon: c[0] }));
-      }
-    } else if (profile === 'cycling-regular') {
-      const url = `https://router.project-osrm.org/route/v1/bike/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data.routes && data.routes[0]) {
-        coords = data.routes[0].geometry.coordinates.map(c => ({ lat: c[1], lon: c[0] }));
-      }
+    const osrmProfile = profile === 'cycling-regular' ? 'bike' : profile === 'foot-walking' ? 'foot' : 'driving';
+    try {
+      const r = await fetch(`https://router.project-osrm.org/route/v1/${osrmProfile}/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`);
+      const d = await r.json();
+      if (d.routes && d.routes[0]) coords = d.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+    } catch(e) {}
+    if (!coords.length) {
+      for (let i = 0; i <= 30; i++) coords.push([a.lat + (b.lat-a.lat)*i/30, a.lng + (b.lng-a.lng)*i/30]);
     }
-    // Fallback — přímá trasa s interpolací
-    if (coords.length === 0) {
-      const steps = 30;
-      for (let i = 0; i <= steps; i++) {
-        coords.push({
-          lat: a.lat + (b.lat - a.lat) * i / steps,
-          lon: a.lng + (b.lng - a.lng) * i / steps,
-        });
-      }
-    }
-    simState.coords = coords;
-    simState.step = 0;
+    const res = await fetch('/simulate/route', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ member, coords, profile, speed })
+    });
+    const data = await res.json();
     simState.active = true;
     simSetDisplay('simStopBtn', '');
-    simSetStatus(`▶ ${coords.length} bodů · krok 0/${coords.length}`);
-    simStep();
+    simSetStatus(`▶ Server přehrává ${data.points} bodů...`);
   } catch(e) {
-    simSetStatus('⚠ Chyba načtení trasy: ' + e.message);
+    simSetStatus('⚠ Chyba: ' + e.message);
     simSetDisplay('simStartBtn', '');
   }
 }
@@ -1456,29 +1444,26 @@ function simAskNext(prevDest) {
 async function simFetchRoute(from, to) {
   simSetStatus('⏳ Načítám trasu...');
   const profile = document.getElementById('simMode').value;
+  const speed = parseInt(document.getElementById('simSpeed').value) || 5;
+  const member = document.getElementById('simMember').value;
   let coords = [];
   try {
     const osrmProfile = profile === 'cycling-regular' ? 'bike' : profile === 'foot-walking' ? 'foot' : 'driving';
-    const url = `https://router.project-osrm.org/route/v1/${osrmProfile}/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`;
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data.routes && data.routes[0]) {
-      coords = data.routes[0].geometry.coordinates.map(c => ({ lat: c[1], lon: c[0] }));
-    }
+    const r = await fetch(`https://router.project-osrm.org/route/v1/${osrmProfile}/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`);
+    const d = await r.json();
+    if (d.routes && d.routes[0]) coords = d.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
   } catch(e) {}
-  if (coords.length === 0) {
-    const steps = 30;
-    for (let i = 0; i <= steps; i++) {
-      coords.push({ lat: from.lat + (to.lat - from.lat) * i / steps, lon: from.lng + (to.lng - from.lng) * i / steps });
-    }
+  if (!coords.length) {
+    for (let i = 0; i <= 30; i++) coords.push([from.lat + (to.lat-from.lat)*i/30, from.lng + (to.lng-from.lng)*i/30]);
   }
-  simState.coords = coords;
-  simState.step = 0;
+  const res = await fetch('/simulate/route', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ member, coords, profile, speed })
+  });
+  const data = await res.json();
   simState.active = true;
-  if (!simState.simTime) simState.simTime = Date.now();
-  const speed = parseInt(document.getElementById('simSpeed').value) || 5;
-  simSetStatus(`▶ ${coords.length} bodů`);
-  simStep();
+  simSetDisplay('simStopBtn', '');
+  simSetStatus(`▶ Server přehrává ${data.points} bodů...`);
 }
 
 // ── Dialog helper ─────────────────────────────────────────────────────────────
@@ -1535,8 +1520,9 @@ function simStop() {
   simState.active = false;
   if (simState.interval) { clearTimeout(simState.interval); simState.interval = null; }
   simSetDisplay('simStopBtn', 'none');
-  document.getElementById('simStartBtn').style.display = simState.coords.length ? '' : 'none';
-  simSetStatus('⏸ Pozastaveno');
+  simSetStatus('⏸ Zastaveno');
+  const member = document.getElementById('simMember').value;
+  fetch('/simulate/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({member}) });
 }
 
 // ─── Init ──────────────────────────────────────────────────────────────
@@ -1556,6 +1542,23 @@ ws.onmessage=(e)=>{
   try{
     const msg=JSON.parse(e.data);
     if(msg.type==='update'){updateMember(msg.member,msg);renderChips();}
+    if(msg.type==='sim_arrived'){
+      simState.active = false;
+      simSetDisplay('simStopBtn', 'none');
+      simState.pointB = {lat: msg.lat, lng: msg.lon};
+      simArrived();
+    }
+    if(msg.type==='sim_progress'){
+      simSetStatus(`▶ krok ${msg.step}/${msg.total} · ${msg.vel} km/h`);
+    }
+    if(msg.type==='sim_staying'){
+      const mins = Math.round(msg.step/msg.total * msg.minutes);
+      simSetStatus(`⏱ Stojím ${mins}/${msg.minutes} min`);
+    }
+    if(msg.type==='sim_stopped'){
+      simState.active = false;
+      simSetDisplay('simStopBtn', 'none');
+    }
     if(msg.type==='stop_detected'||msg.type==='fence_added'){
       reloadPlacesOnMap();
       if(currentPage==='places') loadPlaces().then(renderPlaces);
