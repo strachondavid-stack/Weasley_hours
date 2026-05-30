@@ -212,6 +212,7 @@
   <button class="nav-tab"        id="tab-clock"     onclick="showPage('clock')">🕰 Hodiny</button>
   <button class="nav-tab"        id="tab-places"    onclick="showPage('places')">📍 Místa <span class="nav-badge" id="badgeCount" style="display:none">0</span></button>
   <button class="nav-tab"        id="tab-geofences" onclick="showPage('geofences')">⬤ Geofences</button>
+  <button class="nav-tab"        id="tab-scenarios" onclick="showPage('scenarios')">🧪 Scénáře</button>
   <button class="nav-tab"        id="tab-admin"     onclick="showPage('admin')">🛠 Admin</button>
   <button class="nav-tab"        id="tab-log"       onclick="showPage('log')">📋 Log</button>
 </div>
@@ -698,10 +699,12 @@ function showPage(p){
   document.getElementById('page-geofences').style.display = p==='geofences' ? 'flex':'none';
   document.getElementById('page-admin').style.display     = p==='admin'     ? 'flex':'none';
   document.getElementById('page-log').style.display       = p==='log'       ? 'flex':'none';
-  ['map','clock','places','geofences','admin','log'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===p));
+  document.getElementById('page-scenarios').style.display = p==='scenarios' ? 'flex':'none';
+  ['map','clock','places','geofences','scenarios','admin','log'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===p));
   if(p==='places')    { loadPlaces().then(renderPlaces); }
   if(p==='geofences') { loadGeofences(); }
   if(p==='clock')     { renderClock(); }
+  if(p==='scenarios') { renderScenarios(); }
   if(p==='admin')     { loadMode(); }
   if(p==='log')       { logInitListeners(); loadLog(); }
   if(p==='map')       { setTimeout(()=>map.invalidateSize(),50); fetch('/mode').then(r=>r.json()).then(d=>{ if(d.mode==='test' && !simState.active) simSetupListeners(); }); }
@@ -1606,6 +1609,489 @@ setInterval(()=>{
 },2*60*1000);
 </script>
 <!-- LOG PAGE -->
+<!-- ═══ SCENARIOS PAGE ═══════════════════════════════════════════════════════ -->
+<div id="page-scenarios" style="display:none;flex-direction:column;flex:1;overflow:hidden;background:#f7f7f8">
+<style>
+#page-scenarios { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px }
+
+/* toolbar */
+.sc-toolbar { display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fff;border-bottom:1px solid #eee;flex-shrink:0;flex-wrap:wrap }
+.sc-toolbar select { font-size:13px;padding:4px 8px;border:1px solid #ddd;border-radius:5px;background:#fff;color:#222 }
+.sc-toolbar select:focus { outline:none;border-color:#666 }
+.sc-speed-lbl { font-size:12px;color:#888;flex-shrink:0 }
+.sc-btn { font-size:13px;padding:5px 14px;border-radius:5px;border:1px solid #ccc;background:#fff;cursor:pointer;color:#333;transition:background 0.1s;white-space:nowrap }
+.sc-btn:hover { background:#f5f5f5 }
+.sc-btn.primary { background:#222;color:#fff;border-color:#222 }
+.sc-btn.primary:hover { background:#444 }
+.sc-btn.danger  { border-color:#d33;color:#d33 }
+.sc-btn.danger:hover  { background:#fff5f5 }
+.sc-btn:disabled { opacity:0.4;cursor:not-allowed }
+
+/* progress bar */
+.sc-progress-wrap { display:none;padding:8px 12px;background:#fff;border-bottom:1px solid #eee;flex-shrink:0 }
+.sc-progress-wrap.visible { display:block }
+.sc-progress-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:5px }
+.sc-progress-title { font-size:13px;font-weight:600;color:#222 }
+.sc-progress-status { font-size:12px;color:#888 }
+.sc-progress-bar-bg { height:5px;background:#eee;border-radius:3px;overflow:hidden }
+.sc-progress-bar { height:5px;background:#4a7c4a;border-radius:3px;transition:width 0.4s }
+.sc-steps-list { display:flex;gap:4px;margin-top:6px;flex-wrap:wrap }
+.sc-step-chip { font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid #e0e0e0;color:#bbb;background:#fafafa;white-space:nowrap;transition:all 0.2s }
+.sc-step-chip.done { background:#dcfce7;color:#166534;border-color:#bbf7d0 }
+.sc-step-chip.active { background:#222;color:#fff;border-color:#222 }
+
+/* list */
+.sc-list { flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px }
+.sc-card { background:#fff;border:1px solid #e5e5e5;border-radius:10px;overflow:hidden;transition:border-color 0.12s }
+.sc-card:hover { border-color:#bbb }
+.sc-card-header { display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;user-select:none }
+.sc-card-icon { font-size:20px;flex-shrink:0 }
+.sc-card-info { flex:1;min-width:0 }
+.sc-card-title { font-size:14px;font-weight:600;color:#222 }
+.sc-card-sub { font-size:12px;color:#888;margin-top:2px }
+.sc-card-meta { display:flex;gap:8px;flex-shrink:0;align-items:center }
+.sc-tag { font-size:10px;padding:2px 7px;border-radius:10px;background:#f0f0f0;color:#666;white-space:nowrap }
+.sc-tag.school  { background:#dbeafe;color:#1e40af }
+.sc-tag.weekend { background:#fef3c7;color:#92400e }
+.sc-tag.leisure { background:#dcfce7;color:#166534 }
+.sc-tag.errand  { background:#fce7f3;color:#9d174d }
+.sc-card-body { border-top:1px solid #f0f0f0;padding:0 14px 14px;display:none }
+.sc-card-body.open { display:block }
+.sc-card-chevron { font-size:16px;color:#ccc;transition:transform 0.18s;flex-shrink:0 }
+.sc-card-chevron.open { transform:rotate(90deg) }
+.sc-stops { display:flex;flex-direction:column;gap:0;margin:10px 0 12px }
+.sc-stop-row { display:flex;align-items:flex-start;gap:10px }
+.sc-stop-line { display:flex;flex-direction:column;align-items:center;gap:0;flex-shrink:0;width:16px }
+.sc-stop-dot { width:10px;height:10px;border-radius:50%;border:2px solid #888;background:#fff;flex-shrink:0;margin-top:4px }
+.sc-stop-dot.first { border-color:#22c55e;background:#22c55e }
+.sc-stop-dot.last  { border-color:#dc2626;background:#dc2626 }
+.sc-stop-connector { width:2px;flex:1;background:#e0e0e0;min-height:14px }
+.sc-stop-text { padding-bottom:10px;min-width:0 }
+.sc-stop-name { font-size:13px;font-weight:600;color:#222 }
+.sc-stop-detail { font-size:11px;color:#999;margin-top:1px }
+.sc-run-row { display:flex;gap:6px;align-items:center;flex-wrap:wrap }
+</style>
+
+<!-- toolbar -->
+<div class="sc-toolbar">
+  <span style="font-size:13px;font-weight:600;color:#555">Člen:</span>
+  <select id="sc-member">
+    <option value="mamka">mamka</option>
+    <option value="tatka">tatka</option>
+    <option value="misak" selected>mišák</option>
+    <option value="kubik">kubík</option>
+  </select>
+  <span class="sc-speed-lbl">Rychlost:</span>
+  <select id="sc-speed">
+    <option value="5">5×</option>
+    <option value="10">10×</option>
+    <option value="30" selected>30×</option>
+    <option value="60">60×</option>
+    <option value="120">120×</option>
+  </select>
+  <button class="sc-btn danger" id="sc-stop-btn" onclick="scStopAll()" style="display:none">■ Zastavit</button>
+  <span id="sc-global-status" style="font-size:12px;color:#aaa;margin-left:4px"></span>
+</div>
+
+<!-- progress -->
+<div class="sc-progress-wrap" id="sc-progress">
+  <div class="sc-progress-header">
+    <span class="sc-progress-title" id="sc-prog-title">–</span>
+    <span class="sc-progress-status" id="sc-prog-status"></span>
+  </div>
+  <div class="sc-progress-bar-bg"><div class="sc-progress-bar" id="sc-prog-bar" style="width:0%"></div></div>
+  <div class="sc-steps-list" id="sc-steps-list"></div>
+</div>
+
+<!-- scenario cards -->
+<div class="sc-list" id="sc-list"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🧪 SCENARIOS — předpřipravené testovací příběhy
+// Každý scénář = pole "zastávek" (steps). Každá zastávka má:
+//   name, lat, lon — místo
+//   stayMin        — jak dlouho tu člen stojí (minuty)
+//   mode           — 'driving-car' | 'cycling-regular' | 'foot-walking'
+//   tag            — volitelně pro kategorii
+//
+// Sekvence se spouští přes existující /simulate/route + /simulate/stay endpointy.
+// Trasy se stahují z OSRM (stejně jako manuální sim panel).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const SC_SCENARIOS = [
+
+  // ── 1. Školní den ───────────────────────────────────────────────────────────
+  {
+    id: 'skolni-den',
+    title: 'Školní den',
+    icon: '🎒',
+    tags: ['school'],
+    desc: 'Ráno do školy, odpoledne kroužek, pak Lidl domů.',
+    steps: [
+      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,   mode: 'foot-walking',   icon: '🏠' },
+      { name: 'ZŠ',                  lat: 49.7808, lon: 18.4425, stayMin: 330, mode: 'foot-walking',   icon: '🏫', note: '5.5 h škola' },
+      { name: 'TJ Sokol – karate',   lat: 49.7683, lon: 18.4198, stayMin: 90,  mode: 'driving-car',    icon: '🥋', note: '1.5 h trénink' },
+      { name: 'Lidl Havířov',        lat: 49.7762, lon: 18.4502, stayMin: 20,  mode: 'driving-car',    icon: '🛒', note: 'nákup po karate' },
+      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,   mode: 'driving-car',    icon: '🏠' },
+    ],
+  },
+
+  // ── 2. Nákupní sobota ───────────────────────────────────────────────────────
+  {
+    id: 'nakupni-sobota',
+    title: 'Nákupní sobota',
+    icon: '🛒',
+    tags: ['weekend', 'errand'],
+    desc: 'Velký nákup — Kaufland, Lidl, lékárna, domů.',
+    steps: [
+      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
+      { name: 'Kaufland Havířov',    lat: 49.7640, lon: 18.4380, stayMin: 45, mode: 'driving-car', icon: '🏪', note: 'hlavní nákup' },
+      { name: 'Lékárna Dr.Max',      lat: 49.7721, lon: 18.4388, stayMin: 10, mode: 'driving-car', icon: '💊', note: 'léky' },
+      { name: 'Lidl Havířov',        lat: 49.7762, lon: 18.4502, stayMin: 20, mode: 'driving-car', icon: '🛒', note: 'doplnit zeleninu' },
+      { name: 'Benzínka Shell',      lat: 49.7700, lon: 18.4450, stayMin: 8,  mode: 'driving-car', icon: '⛽', note: 'tankovat' },
+      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
+    ],
+  },
+
+  // ── 3. Výlet do Ostravy ─────────────────────────────────────────────────────
+  {
+    id: 'ostrava-vylet',
+    title: 'Výlet do Ostravy',
+    icon: '🏙',
+    tags: ['weekend', 'leisure'],
+    desc: 'Víkendový výlet — ZOO, McDonald\'s, Forum Nová Karolina.',
+    steps: [
+      { name: 'Doma',                      lat: 49.7745, lon: 18.4310, stayMin: 0,   mode: 'driving-car', icon: '🏠' },
+      { name: 'ZOO Ostrava',               lat: 49.8561, lon: 18.2286, stayMin: 150, mode: 'driving-car', icon: '🦁', note: '2.5 h prohlídka' },
+      { name: 'McDonald\'s Ostrava Karolina', lat: 49.8342, lon: 18.2906, stayMin: 35, mode: 'driving-car', icon: '🍔', note: 'oběd' },
+      { name: 'Forum Nová Karolina',       lat: 49.8346, lon: 18.2888, stayMin: 60,  mode: 'foot-walking', icon: '🛍', note: 'nákupy' },
+      { name: 'Doma',                      lat: 49.7745, lon: 18.4310, stayMin: 0,   mode: 'driving-car', icon: '🏠' },
+    ],
+  },
+
+  // ── 4. Večer u babičky ──────────────────────────────────────────────────────
+  {
+    id: 'babicka',
+    title: 'U babičky',
+    icon: '👵',
+    tags: ['weekend'],
+    desc: 'Odpolední návštěva u babičky, cestou zpět pizza.',
+    steps: [
+      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,   mode: 'foot-walking', icon: '🏠' },
+      { name: 'Babička – Šumbark',   lat: 49.7901, lon: 18.4055, stayMin: 120, mode: 'foot-walking', icon: '👵', note: '2 h návštěva' },
+      { name: 'Pizzeria Da Lucio',   lat: 49.7780, lon: 18.4210, stayMin: 40,  mode: 'driving-car',  icon: '🍕', note: 'večeře' },
+      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,   mode: 'driving-car',  icon: '🏠' },
+    ],
+  },
+
+  // ── 5. Nemocnice + lékař ────────────────────────────────────────────────────
+  {
+    id: 'lekar',
+    title: 'Lékař',
+    icon: '🏥',
+    tags: ['errand'],
+    desc: 'Preventivní prohlídka u dětského lékaře, pak lékárna.',
+    steps: [
+      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
+      { name: 'Dětský lékař',        lat: 49.7830, lon: 18.4480, stayMin: 45, mode: 'driving-car', icon: '👨‍⚕️', note: 'čekání + prohlídka' },
+      { name: 'Lékárna Dr.Max',      lat: 49.7721, lon: 18.4388, stayMin: 10, mode: 'driving-car', icon: '💊', note: 'vyzvednutí léků' },
+      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
+    ],
+  },
+
+  // ── 6. Sport – kolo v parku ──────────────────────────────────────────────────
+  {
+    id: 'kolo-park',
+    title: 'Kolo – park + zmrzlina',
+    icon: '🚲',
+    tags: ['leisure'],
+    desc: 'Odpolední vyjížďka na kole, zmrzlina v parku, aquapark.',
+    steps: [
+      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,  mode: 'cycling-regular', icon: '🏠' },
+      { name: 'Park Stromovka',      lat: 49.7720, lon: 18.4270, stayMin: 30, mode: 'cycling-regular', icon: '🌳', note: 'jízda parkem' },
+      { name: 'Zmrzlina – centrum',  lat: 49.7752, lon: 18.4330, stayMin: 15, mode: 'cycling-regular', icon: '🍦' },
+      { name: 'Aquapark Havířov',    lat: 49.7495, lon: 18.4180, stayMin: 90, mode: 'cycling-regular', icon: '🏊', note: '1.5 h bazén' },
+      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,  mode: 'cycling-regular', icon: '🏠' },
+    ],
+  },
+
+  // ── 7. Rychlý test (minimum bodů) ───────────────────────────────────────────
+  {
+    id: 'rychly-test',
+    title: '⚡ Rychlý test',
+    icon: '⚡',
+    tags: [],
+    desc: 'Doma → škola → Lidl → doma. Minimum zastávek pro rychlé ověření detekce.',
+    steps: [
+      { name: 'Doma',          lat: 49.7745, lon: 18.4310, stayMin: 6,  mode: 'foot-walking', icon: '🏠' },
+      { name: 'ZŠ',            lat: 49.7808, lon: 18.4425, stayMin: 8,  mode: 'foot-walking', icon: '🏫' },
+      { name: 'Lidl Havířov',  lat: 49.7762, lon: 18.4502, stayMin: 7,  mode: 'driving-car',  icon: '🛒' },
+      { name: 'Doma',          lat: 49.7745, lon: 18.4310, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
+    ],
+  },
+];
+
+// ── stav ──────────────────────────────────────────────────────────────────────
+let scRunning = false;
+let scAbort = false;
+let scExpanded = null;
+
+// ── render ────────────────────────────────────────────────────────────────────
+function renderScenarios() {
+  const list = document.getElementById('sc-list');
+  if (!list) return;
+  list.innerHTML = SC_SCENARIOS.map(s => renderScCard(s)).join('');
+}
+
+function renderScCard(s) {
+  const isExp = scExpanded === s.id;
+  const tagHtml = s.tags.map(t => `<span class="sc-tag ${t}">${SC_TAG_LABELS[t]||t}</span>`).join('');
+
+  // Stops timeline
+  const stopsHtml = s.steps.map((st, i) => {
+    const isFirst = i === 0;
+    const isLast = i === s.steps.length - 1;
+    const hasNext = i < s.steps.length - 1;
+    const dotCls = isFirst ? 'first' : isLast ? 'last' : '';
+    const noteStr = st.note ? ` <span style="color:#bbb">(${st.note})</span>` : '';
+    const stayStr = st.stayMin > 0 ? `${st.icon || ''} ${st.stayMin >= 60 ? Math.round(st.stayMin/60*10)/10+'h' : st.stayMin+' min'} pobyt` : (isLast ? 'konec' : 'přestup');
+    const modeIcon = { 'driving-car':'🚗', 'cycling-regular':'🚲', 'foot-walking':'🚶' }[st.mode] || '';
+    const nextNote = hasNext ? `<div style="font-size:10px;color:#ccc;margin:1px 0 0 0">${modeIcon} → ${s.steps[i+1].name}</div>` : '';
+    return `<div class="sc-stop-row">
+      <div class="sc-stop-line">
+        <div class="sc-stop-dot ${dotCls}"></div>
+        ${hasNext ? '<div class="sc-stop-connector"></div>' : ''}
+      </div>
+      <div class="sc-stop-text">
+        <div class="sc-stop-name">${st.icon||'📍'} ${st.name}</div>
+        <div class="sc-stop-detail">${stayStr}${noteStr}</div>
+        ${nextNote}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div class="sc-card" id="scard_${s.id}">
+    <div class="sc-card-header" onclick="scToggle('${s.id}')">
+      <div class="sc-card-icon">${s.icon}</div>
+      <div class="sc-card-info">
+        <div class="sc-card-title">${s.title}</div>
+        <div class="sc-card-sub">${s.desc}</div>
+      </div>
+      <div class="sc-card-meta">
+        ${tagHtml}
+        <span style="font-size:11px;color:#bbb">${s.steps.length} zastávek</span>
+      </div>
+      <div class="sc-card-chevron${isExp?' open':''}">›</div>
+    </div>
+    <div class="sc-card-body${isExp?' open':''}">
+      <div class="sc-stops">${stopsHtml}</div>
+      <div class="sc-run-row">
+        <button class="sc-btn primary" onclick="scRun('${s.id}')" ${scRunning?'disabled':''}>▶ Spustit</button>
+        <span style="font-size:12px;color:#aaa">člena: <b id="sc-run-member-label">${document.getElementById('sc-member')?.value||'?'}</b> · rychlost: <b id="sc-run-speed-label">${document.getElementById('sc-speed')?.value||'?'}×</b></span>
+      </div>
+    </div>
+  </div>`;
+}
+
+const SC_TAG_LABELS = { school:'škola', weekend:'víkend', leisure:'volný čas', errand:'pochůzka' };
+
+function scToggle(id) {
+  scExpanded = scExpanded === id ? null : id;
+  renderScenarios();
+}
+
+// ── OSRM fetch ────────────────────────────────────────────────────────────────
+async function scFetchRoute(from, to, mode) {
+  const profile = mode === 'cycling-regular' ? 'bike' : mode === 'foot-walking' ? 'foot' : 'driving';
+  try {
+    const r = await fetch(`https://router.project-osrm.org/route/v1/${profile}/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson`);
+    const d = await r.json();
+    if (d.routes && d.routes[0]) return d.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+  } catch(e) {}
+  // fallback: přímá čára
+  const pts = [];
+  for (let i = 0; i <= 20; i++) pts.push([from.lat + (to.lat-from.lat)*i/20, from.lon + (to.lon-from.lon)*i/20]);
+  return pts;
+}
+
+// ── run engine ────────────────────────────────────────────────────────────────
+async function scRun(scenarioId) {
+  if (scRunning) return;
+  const sc = SC_SCENARIOS.find(s => s.id === scenarioId);
+  if (!sc) return;
+
+  const member = document.getElementById('sc-member').value;
+  const speed  = parseInt(document.getElementById('sc-speed').value) || 30;
+
+  scRunning = true;
+  scAbort = false;
+  renderScenarios();
+
+  // Zobraz progress
+  const progWrap = document.getElementById('sc-progress');
+  const progTitle = document.getElementById('sc-prog-title');
+  const progStatus = document.getElementById('sc-prog-status');
+  const progBar = document.getElementById('sc-prog-bar');
+  const stepsList = document.getElementById('sc-steps-list');
+  const stopBtn = document.getElementById('sc-stop-btn');
+  const globalStatus = document.getElementById('sc-global-status');
+
+  progWrap.classList.add('visible');
+  stopBtn.style.display = '';
+  progTitle.textContent = sc.icon + ' ' + sc.title + ' — ' + member;
+
+  // Renderuj step chips
+  stepsList.innerHTML = sc.steps.map((st, i) =>
+    `<span class="sc-step-chip" id="sc-chip-${i}">${st.icon||'📍'} ${st.name}</span>`
+  ).join('');
+
+  const totalSteps = sc.steps.length;
+
+  for (let i = 0; i < sc.steps.length; i++) {
+    if (scAbort) break;
+    const step = sc.steps[i];
+    const next  = sc.steps[i + 1];
+
+    // Aktivuj chip
+    document.getElementById(`sc-chip-${i}`)?.classList.add('active');
+    progBar.style.width = Math.round(i / totalSteps * 100) + '%';
+
+    // 1. Stání na aktuálním místě
+    if (step.stayMin > 0) {
+      progStatus.textContent = `⏱ Stání: ${step.name} (${step.stayMin} min)`;
+      globalStatus.textContent = `⏱ ${step.name}`;
+      await scDoStay(member, step.lat, step.lon, step.stayMin, speed, (cur, total) => {
+        progStatus.textContent = `⏱ ${step.name} — ${cur}/${total} min`;
+      });
+      if (scAbort) break;
+    }
+
+    // 2. Přesun na další zastávku
+    if (next) {
+      progStatus.textContent = `🚗 Jízda → ${next.name}`;
+      globalStatus.textContent = `→ ${next.name}`;
+      const coords = await scFetchRoute(step, next, step.mode);
+      await scDoRoute(member, coords, step.mode, speed, (s, t, v) => {
+        progStatus.textContent = `🚗 → ${next.name} (${s}/${t} · ${v} km/h)`;
+      });
+      if (scAbort) break;
+    }
+
+    // Dokončen chip
+    document.getElementById(`sc-chip-${i}`)?.classList.remove('active');
+    document.getElementById(`sc-chip-${i}`)?.classList.add('done');
+  }
+
+  // Hotovo nebo přerušeno
+  progBar.style.width = scAbort ? progBar.style.width : '100%';
+  progStatus.textContent = scAbort ? '⏸ Přerušeno' : '✅ Hotovo';
+  globalStatus.textContent = scAbort ? '' : '✅ Dokončeno';
+  stopBtn.style.display = 'none';
+  scRunning = false;
+  renderScenarios();
+}
+
+// Stání přes /simulate/stay + čekání na sim_arrived
+function scDoStay(member, lat, lon, minutes, speed, onProgress) {
+  return new Promise(async (resolve) => {
+    if (scAbort) return resolve();
+
+    let done = false;
+    const handler = (msg) => {
+      try {
+        const d = JSON.parse(msg.data);
+        if ((d.type === 'sim_arrived' || d.type === 'sim_stopped') && d.member === member) {
+          ws.removeEventListener('message', handler);
+          done = true;
+          resolve();
+        }
+        if (d.type === 'sim_staying' && d.member === member) {
+          const cur = Math.round(d.step / d.total * d.minutes);
+          onProgress(cur, d.minutes);
+        }
+      } catch(e) {}
+    };
+    ws.addEventListener('message', handler);
+
+    try {
+      await fetch('/simulate/stay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ member, lat, lon, minutes, speed }),
+      });
+    } catch(e) {
+      ws.removeEventListener('message', handler);
+      resolve();
+    }
+
+    // Safety timeout: 2× simulovaný čas + 10s
+    const safetyMs = (minutes * 60 * 1000) / speed * 2 + 10000;
+    setTimeout(() => {
+      if (!done) { ws.removeEventListener('message', handler); resolve(); }
+    }, safetyMs);
+  });
+}
+
+// Jízda přes /simulate/route + čekání na sim_arrived
+function scDoRoute(member, coords, mode, speed, onProgress) {
+  return new Promise(async (resolve) => {
+    if (scAbort) return resolve();
+
+    let done = false;
+    const handler = (msg) => {
+      try {
+        const d = JSON.parse(msg.data);
+        if ((d.type === 'sim_arrived' || d.type === 'sim_stopped') && d.member === member) {
+          ws.removeEventListener('message', handler);
+          done = true;
+          resolve();
+        }
+        if (d.type === 'sim_progress' && d.member === member) {
+          onProgress(d.step, d.total, d.vel);
+        }
+      } catch(e) {}
+    };
+    ws.addEventListener('message', handler);
+
+    try {
+      await fetch('/simulate/route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ member, coords, profile: mode, speed }),
+      });
+    } catch(e) {
+      ws.removeEventListener('message', handler);
+      resolve();
+    }
+
+    // Safety timeout: délka trasy odhadnuta jako max 2h / speed + 15s
+    const safetyMs = (2 * 3600 * 1000) / speed + 15000;
+    setTimeout(() => {
+      if (!done) { ws.removeEventListener('message', handler); resolve(); }
+    }, safetyMs);
+  });
+}
+
+function scStopAll() {
+  scAbort = true;
+  const member = document.getElementById('sc-member')?.value || 'misak';
+  fetch('/simulate/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({member}) });
+  document.getElementById('sc-global-status').textContent = '⏸ Zastavuji...';
+}
+
+// Aktualizuj labely v kartách když se změní member/speed
+function scUpdateLabels() {
+  document.querySelectorAll('#sc-run-member-label').forEach(el => el.textContent = document.getElementById('sc-member')?.value || '?');
+  document.querySelectorAll('#sc-run-speed-label').forEach(el => el.textContent = (document.getElementById('sc-speed')?.value || '?') + '×');
+}
+document.getElementById('sc-member')?.addEventListener('change', scUpdateLabels);
+document.getElementById('sc-speed')?.addEventListener('change', scUpdateLabels);
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+
 <div id="page-log" style="display:none;flex-direction:column;flex:1;overflow:hidden;background:#0f0f14">
 
 <style>
