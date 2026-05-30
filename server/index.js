@@ -42,17 +42,15 @@ function distance(lat1, lon1, lat2, lon2) {
 
 function resolveStatus(member, lat, lon, vel = 0, motionActivities = []) {
   const HOME_KEYWORDS = ['doma', 'náš domeček', 'home'];
-  // Pohybuje se pokud: automotive/cycling/walking s vel>1, nebo vel>3
-  // automotive = vždy pohyb bez ohledu na vel (GPS drift způsobuje nízké vel)
-  const isMoving = motionActivities.includes('automotive') ||
-                   motionActivities.includes('cycling') ||
-                   (vel > 3 && !motionActivities.includes('stationary'));
+  // Pohybuje se = automotive/cycling S rychlostí > 5 km/h
+  // Pod 5 km/h = parkování/zastavení = geofence se aplikuje
+  const isMovingFast = (motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel > 5;
 
   for (const fence of dynamicFences) {
     if (fence.only && !fence.only.includes(member)) continue;
     if (distance(lat, lon, fence.lat, fence.lon) <= fence.radius) {
       const isHome = HOME_KEYWORDS.some(k => fence.name.toLowerCase().includes(k));
-      if (isMoving && !isHome) continue;
+      if (isMovingFast && !isHome) continue;
       return fence.name;
     }
   }
@@ -678,8 +676,8 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   if (motion) {
     if (status === 'cesta') {
       // GPS drift — bod těsně mimo fence radius ale stojíme (ne automotive/cycling)
-      const isMovingMotion = motionActivities.includes('automotive') || motionActivities.includes('cycling');
-      if (!isMovingMotion) {
+      const isMovingFast = (motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel > 5;
+      if (!isMovingFast) {
         const nearFence = dynamicFences.find(f =>
           (!f.only || f.only.includes(member)) &&
           distance(lat, lon, f.lat, f.lon) < f.radius * 1.5
