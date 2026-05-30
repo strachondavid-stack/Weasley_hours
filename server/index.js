@@ -334,6 +334,33 @@ function resolveMotion(motionActivities, vel) {
   return 'auto';
 }
 
+// ─── Motion hystereze ────────────────────────────────────────────────────────
+// Ukládá posledních N motion stavů pro každého člena
+// Přechod na nový stav jen pokud je konzistentní N bodů za sebou
+const MOTION_HISTORY_SIZE = 3; // počet bodů pro potvrzení změny
+const memberMotionHistory = {}; // { member: ['auto','auto','pesky'] }
+
+function resolveMotionWithHysteresis(member, motionActivities, vel) {
+  const newMotion = resolveMotion(motionActivities, vel);
+
+  if (!memberMotionHistory[member]) memberMotionHistory[member] = [];
+  const history = memberMotionHistory[member];
+
+  // Přidej nový stav do historie
+  history.push(newMotion);
+  if (history.length > MOTION_HISTORY_SIZE) history.shift();
+
+  // Vrať nový stav jen pokud jsou poslední N bodů stejné
+  if (history.length < MOTION_HISTORY_SIZE) return history[0]; // málo dat — vrať první
+  const allSame = history.every(m => m === newMotion);
+  if (allSame) return newMotion;
+
+  // Nekonzistentní — vrať nejčastější stav z historie
+  const counts = {};
+  for (const m of history) counts[m] = (counts[m] || 0) + 1;
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+}
+
 // ─── Tracker ──────────────────────────────────────────────────────────────────
 const trackers = {};
 const recentlyDetected = {};
