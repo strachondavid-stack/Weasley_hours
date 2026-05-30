@@ -589,17 +589,20 @@ async function updateTracker(member, lat, lon, ts, motionActivities = []) {
   const center = clusterCenter(tracker.cluster.points);
   const dist = distance(lat, lon, center.lat, center.lon);
 
-  // Automotive = okamžitě uzavřít cluster bez čekání na LEAVE_RADIUS
+  // Automotive uzavře cluster jen pokud cluster obsahuje stationary body (bylo stání)
   const isAutomotive = motionActivities.includes('automotive') || motionActivities.includes('cycling');
+  const clusterHasStationary = tracker.cluster.points.some(p => p.stationary);
+  const forceClose = isAutomotive && clusterHasStationary;
 
-  if (dist <= CLUSTER_RADIUS && !isAutomotive) {
-    tracker.cluster.points.push({ lat, lon, ts });
+  if (dist <= CLUSTER_RADIUS && !forceClose) {
+    // Ulož info o pohybu do bodu
+    tracker.cluster.points.push({ lat, lon, ts, stationary: !isAutomotive });
     console.log(`[TRACK] [${member}] V clusteru dist=${Math.round(dist)}m dur=${Math.round((ts - tracker.cluster.startTs)/60000)}min pts=${tracker.cluster.points.length}`);
-  } else if (dist > LEAVE_RADIUS || isAutomotive) {
-    if (isAutomotive) console.log(`[TRACK] [${member}] automotive odchod dist=${Math.round(dist)}m`);
+  } else if (dist > LEAVE_RADIUS || forceClose) {
+    if (forceClose) console.log(`[TRACK] [${member}] automotive uzavrel stani dist=${Math.round(dist)}m`);
     else console.log(`[TRACK] [${member}] odchod dist=${Math.round(dist)}m`);
     await evaluateCluster(member, tracker.cluster);
-    tracker.cluster = { points: [{ lat, lon, ts }], startTs: ts };
+    tracker.cluster = { points: [{ lat, lon, ts, stationary: !isAutomotive }], startTs: ts };
   } else {
     console.log(`[TRACK] [${member}] přechodná zóna dist=${Math.round(dist)}m`);
   }
