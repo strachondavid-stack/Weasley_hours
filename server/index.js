@@ -775,15 +775,27 @@ async function runSimStep(member) {
   const { coords, step, speed } = sim;
 
   if (step >= coords.length) {
-    // Dorazili jsme — spustí callback
     sim.active = false;
     broadcast({ type: 'sim_arrived', member, lat: coords[coords.length-1][0], lon: coords[coords.length-1][1] });
     return;
   }
 
   const [lat, lon] = coords[step];
-  const intervalMs = 3000 / speed;
-  sim.simTime += 3000;
+  const intervalMs = 3000 / speed;   // reálná pauza mezi body
+
+  // simTime: posuň o skutečnou dobu jízdy mezi body (ne fixních 3s)
+  // Vypočítej vzdálenost od předchozího bodu a čas při dané rychlosti profilu
+  if (step > 0) {
+    const [prevLat, prevLon] = coords[step - 1];
+    const distM = distance(prevLat, prevLon, lat, lon);
+    // Průměrná rychlost profilu v m/s
+    const profileSpeed = sim.profile === 'foot-walking' ? 1.4 :
+                         sim.profile === 'cycling-regular' ? 4.2 : 11.1; // ~5, ~15, ~40 km/h
+    const travelMs = (distM / profileSpeed) * 1000;
+    sim.simTime += Math.round(travelMs);
+  } else {
+    sim.simTime += 3000; // první bod
+  }
 
   // Vypočítej rychlost z posledních 10 bodů
   const lookback = Math.min(10, step);
@@ -819,8 +831,10 @@ async function runSimStay(member, lat, lon, minutes, onDone) {
     if (!sim.stayActive || !activeSimulations[member]) return;
     const dLat = (Math.random() - 0.5) * 0.00025;
     const dLon = (Math.random() - 0.5) * 0.00025;
-    sim.simTime += 30000;
-    if (sim.stayStep === 0) console.log(`[SIM] Stay start simTime=${sim.simTime}`);
+    // Posuň simTime o odpovídající podíl celkové doby stání
+    const stepMs = Math.round((minutes * 60 * 1000) / totalPoints);
+    sim.simTime += stepMs;
+    if (sim.stayStep === 0) console.log(`[SIM] Stay start simTime=${sim.simTime}, stepMs=${stepMs}`);
     await simSendGPSServer(member, lat + dLat, lon + dLon, 0, ['stationary'], sim.simTime);
     sim.stayStep++;
     broadcast({ type: 'sim_staying', member, step: sim.stayStep, total: totalPoints, minutes });
