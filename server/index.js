@@ -42,18 +42,23 @@ function distance(lat1, lon1, lat2, lon2) {
 
 function resolveStatus(member, lat, lon, vel = 0, motionActivities = []) {
   const HOME_KEYWORDS = ['doma', 'náš domeček', 'home'];
-  // Pohybuje se = automotive/cycling S rychlostí > 5 km/h
-  // Pod 5 km/h = parkování/zastavení = geofence se aplikuje
   const isMovingFast = (motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel > 5;
 
   for (const fence of dynamicFences) {
     if (fence.only && !fence.only.includes(member)) continue;
     if (distance(lat, lon, fence.lat, fence.lon) <= fence.radius) {
       const isHome = HOME_KEYWORDS.some(k => fence.name.toLowerCase().includes(k));
-      if (isMovingFast && !isHome) continue;
-      return fence.name;
+      // Domov — okamžitě
+      if (isHome) { memberFenceHyst[member] = null; return fence.name; }
+      // Ostatní — potvrď N po sobě jdoucích bodů
+      if (confirmFence(member, fence.name, fence.id, isMovingFast)) {
+        return fence.name;
+      }
+      return 'cesta';
     }
   }
+  // Mimo geofence — reset hystereze
+  memberFenceHyst[member] = null;
   return 'cesta';
 }
 
@@ -334,6 +339,25 @@ function resolveMotion(motionActivities, vel) {
 
   // ── Auto: nad 30 km/h ─────────────────────────────────────────────────────
   return 'auto';
+}
+
+// ─── Geofence hystereze ──────────────────────────────────────────────────────
+// Geofence se aplikuje až po N po sobě jdoucích bodech uvnitř s nízkou rychlostí
+const FENCE_CONFIRM_POINTS = 2;
+const memberFenceHyst = {}; // { member: { fenceId, count } }
+
+function confirmFence(member, fenceName, fenceId, isMovingFast) {
+  if (isMovingFast) {
+    memberFenceHyst[member] = null;
+    return false;
+  }
+  const h = memberFenceHyst[member];
+  if (!h || h.fenceId !== fenceId) {
+    memberFenceHyst[member] = { fenceId, count: 1 };
+    return false;
+  }
+  h.count++;
+  return h.count >= FENCE_CONFIRM_POINTS;
 }
 
 // ─── Motion hystereze ────────────────────────────────────────────────────────
