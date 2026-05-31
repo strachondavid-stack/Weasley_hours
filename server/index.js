@@ -51,7 +51,7 @@ function resolveStatus(member, lat, lon, vel = 0, motionActivities = []) {
       // Domov — okamžitě
       if (isHome) { memberFenceHyst[member] = null; return fence.name; }
       // Ostatní — potvrď N po sobě jdoucích bodů
-      if (confirmFence(member, fence.name, fence.id, isMovingFast)) {
+      if (confirmFence(member, fence.name, fence.id, isMovingFast, vel)) {
         return fence.name;
       }
       return 'cesta';
@@ -358,21 +358,28 @@ function resolveMotion(motionActivities, vel) {
 
 // ─── Geofence hystereze ──────────────────────────────────────────────────────
 // Geofence se aplikuje až po N po sobě jdoucích bodech uvnitř s nízkou rychlostí
-const FENCE_CONFIRM_POINTS = 2;
-const memberFenceHyst = {}; // { member: { fenceId, count } }
+const FENCE_CONFIRM_POINTS_STATIONARY = 3;  // stojíme — 3 body
+const FENCE_CONFIRM_POINTS_MOVING     = 6;  // pohybujeme se — 6 bodů (projíždíme kolem)
+const memberFenceHyst = {}; // { member: { fenceId, count, maxVel } }
 
-function confirmFence(member, fenceName, fenceId, isMovingFast) {
+function confirmFence(member, fenceName, fenceId, isMovingFast, vel = 0) {
+  // Jedeme rychle (automotive + vel > 5) → okamžitě resetuj, nikdy nepotvrzuj
   if (isMovingFast) {
     memberFenceHyst[member] = null;
     return false;
   }
   const h = memberFenceHyst[member];
   if (!h || h.fenceId !== fenceId) {
-    memberFenceHyst[member] = { fenceId, count: 1 };
+    memberFenceHyst[member] = { fenceId, count: 1, maxVel: vel };
     return false;
   }
   h.count++;
-  return h.count >= FENCE_CONFIRM_POINTS;
+  h.maxVel = Math.max(h.maxVel, vel);
+
+  // Pokud jsme v průběhu akumulace viděli pohyb > 3 km/h = projíždíme kolem
+  const needed = h.maxVel > 3 ? FENCE_CONFIRM_POINTS_MOVING : FENCE_CONFIRM_POINTS_STATIONARY;
+  console.log(`[FENCE] ${member} @ ${fenceName}: ${h.count}/${needed} bodů, maxVel=${h.maxVel.toFixed(1)}km/h`);
+  return h.count >= needed;
 }
 
 // ─── Motion hystereze ────────────────────────────────────────────────────────
