@@ -763,25 +763,17 @@ async function runSimStep(member) {
   const [lat, lon] = coords[step];
   const intervalMs = 3000 / speed;   // reálná pauza mezi body
 
-  // simTime: posuň o skutečnou dobu jízdy mezi body (ne fixních 3s)
-  // Vypočítej vzdálenost od předchozího bodu a čas při dané rychlosti profilu
-  if (step > 0) {
-    const [prevLat, prevLon] = coords[step - 1];
-    const distM = distance(prevLat, prevLon, lat, lon);
-    // Průměrná rychlost profilu v m/s
-    const profileSpeed = sim.profile === 'foot-walking' ? 1.4 :
-                         sim.profile === 'cycling-regular' ? 4.2 : 11.1; // ~5, ~15, ~40 km/h
-    const travelMs = (distM / profileSpeed) * 1000;
-    sim.simTime += Math.round(travelMs);
-  } else {
-    sim.simTime += 3000; // první bod
-  }
+  // simTime += 3000ms za každý krok — stejně jako manuální simulace (simState.simTime += 3000)
+  sim.simTime += 3000;
 
-  // Rychlost přímo z profilu — simCalcVel by počítala z reálného času (3000ms),
-  // ale při speed>1 jsou reálné intervaly kratší → vel by vycházela příliš nízko
-  // a isMovingFast by bylo false → fence by se aplikovala při projíždění kolem
-  const vel = sim.profile === 'foot-walking' ? 5 :
-              sim.profile === 'cycling-regular' ? 15 : 40;
+  // vel z lookback * 3000ms — stejná logika jako manuální simCalcVel
+  let vel = 0;
+  if (step > 0) {
+    const lookback = Math.min(10, step);
+    const [fromLat, fromLon] = coords[step - lookback];
+    const distM = distance(fromLat, fromLon, lat, lon);
+    vel = (distM / ((lookback * 3000) / 1000)) * 3.6;
+  }
 
   const motionactivities = sim.profile === 'foot-walking' ? ['walking'] :
                            sim.profile === 'cycling-regular' ? ['cycling'] : ['automotive'];
