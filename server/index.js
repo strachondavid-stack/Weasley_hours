@@ -703,7 +703,7 @@ Odpověz POUZE názvem souboru nebo prázdným stringem, bez jakéhokoliv dalš�
   }
 }
 
-async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simTs = null, forceLive = false) {
+async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simTs = null, forceLive = false, source = 'unknown') {
   const ts = simTs || Date.now();
   // MQTT a live zdroje vždy zapisují do live Redis bez ohledu na mód
   const activeRedis = (forceLive || currentMode === 'live') ? redisLive : redis;
@@ -750,7 +750,7 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   await activeRedis.lPush('history:' + member, JSON.stringify({ lat, lon, ts, status }));
   await activeRedis.lTrim('history:' + member, 0, 999);
   broadcast({ type: 'update', member, ...data });
-  await logEvent('gps_received', { member, lat, lon, status, vel, motionActivities });
+  await logEvent('gps_received', { member, lat, lon, status, vel, motionActivities, source });
   console.log(`[GPS] [${member}] ${status} (${lat.toFixed(5)}, ${lon.toFixed(5)}) vel=${vel} motion=${(motionActivities||[]).join(",")}`);
   await updateTracker(member, lat, lon, ts, motionActivities);
   return status;
@@ -765,7 +765,7 @@ function simCalcVel(lat1, lon1, lat2, lon2, intervalMs) {
 }
 
 async function simSendGPSServer(member, lat, lon, vel, motionactivities, simTs) {
-  await processGPS(member, lat, lon, motionactivities, vel, simTs);
+  await processGPS(member, lat, lon, motionactivities, vel, simTs, false, 'sim');
 }
 
 async function runSimStep(member) {
@@ -983,7 +983,7 @@ app.post('/gps/:member', async (req, res) => {
   const motionactivities = req.body.motionactivities || [];
   const vel = parseFloat(req.body.vel) || 0;
   const simTs = req.body.ts ? parseInt(req.body.ts) : null;
-  const status = await processGPS(member, lat, lon, motionactivities, vel, simTs);
+  const status = await processGPS(member, lat, lon, motionactivities, vel, simTs, false, 'http');
   res.json({ ok: true, member, status });
 });
 
@@ -1230,7 +1230,7 @@ async function startMqtt() {
         console.log(`[MQTT] Ignoruji reálný bod pro ${member} — probíhá simulace`);
         return;
       }
-      await processGPS(member, lat, lon, msg.motionactivities || [], msg.vel || 0, null, true);
+      await processGPS(member, lat, lon, msg.motionactivities || [], msg.vel || 0, null, true, 'mqtt');
     } catch(e) { console.error('MQTT error:', e.message); }
   });
   client.on('error', e => console.error('MQTT error:', e));
