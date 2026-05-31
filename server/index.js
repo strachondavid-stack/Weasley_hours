@@ -882,6 +882,9 @@ app.post('/simulate/route', async (req, res) => {
     simTime: Date.now(), timer: null
   };
 
+  // Reset fence hystereze — nový úsek začíná s vel=0 a mohl by falešně potvrdit fence
+  memberFenceHyst[member] = null;
+
   console.log(`[SIM] Start trasy pro ${member}: ${coords.length} bodů, profil=${profile}, rychlost=${speed}x`);
   runSimStep(member);
   res.json({ ok: true, member, points: coords.length });
