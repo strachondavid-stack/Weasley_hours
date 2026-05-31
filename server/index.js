@@ -801,13 +801,12 @@ async function runSimStep(member) {
   const intervalMs = 3000 / speed;
   sim.simTime += 3000;
 
-  // Vypočítej rychlost z posledních 10 bodů
-  const lookback = Math.min(10, step);
-  let vel = 0;
-  if (lookback > 0) {
-    const [fromLat, fromLon] = coords[step - lookback];
-    vel = simCalcVel(fromLat, fromLon, lat, lon, lookback * 3000);
-  }
+  // Rychlost pevně podle profilu — simCalcVel dává nesmyslné hodnoty
+  // při nepravidelných OSRM bodech (body mohou být km daleko od sebe)
+  const profileVel = sim.profile === 'foot-walking' ? 5 :
+                     sim.profile === 'cycling-regular' ? 15 : 40;
+  // Na začátku úseku (step < 3) rozjíždíme, jinak konstantní rychlost profilu
+  const vel = step < 3 ? Math.round(profileVel * step / 3) : profileVel;
 
   const motionactivities = sim.profile === 'foot-walking' ? ['walking'] :
                            sim.profile === 'cycling-regular' ? ['cycling'] : ['automotive'];
