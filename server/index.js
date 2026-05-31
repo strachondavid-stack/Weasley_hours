@@ -371,17 +371,11 @@ function confirmFence(member, fenceName, fenceId, isMovingFast, ts) {
     return false;
   }
   const h = memberFenceHyst[member];
-  if (!h || h.fenceId !== fenceId) {
-    memberFenceHyst[member] = { fenceId, firstTs: ts };
-    return false;
-  }
-  if (ts < h.firstTs) {
-    console.log(`[FENCE] ${member} @ ${fenceName}: reset záporný ts=${ts} < firstTs=${h.firstTs}`);
+  if (!h || h.fenceId !== fenceId || ts < h.firstTs) {
     memberFenceHyst[member] = { fenceId, firstTs: ts };
     return false;
   }
   const elapsed = ts - h.firstTs;
-  console.log(`[FENCE] ${member} @ ${fenceName}: elapsed=${Math.round(elapsed/1000)}s / ${FENCE_CONFIRM_MS/1000}s potřeba`);
   return elapsed >= FENCE_CONFIRM_MS;
 }
 
