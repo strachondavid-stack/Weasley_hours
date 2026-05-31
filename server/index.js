@@ -42,7 +42,7 @@ function distance(lat1, lon1, lat2, lon2) {
 
 function resolveStatus(member, lat, lon, vel = 0, motionActivities = []) {
   const HOME_KEYWORDS = ['doma', 'náš domeček', 'home'];
-  const isMovingFast = (motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel > 5;
+  const isMovingFast = (motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel >= 5;
 
   for (const fence of dynamicFences) {
     if (fence.only && !fence.only.includes(member)) continue;
@@ -730,7 +730,7 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   if (motion) {
     if (status === 'cesta') {
       // GPS drift — bod těsně mimo fence radius ale stojíme (ne automotive/cycling)
-      const isMovingFast = (motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel > 5;
+      const isMovingFast = (motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel >= 5;
       if (!isMovingFast) {
         const nearFence = dynamicFences.find(f =>
           (!f.only || f.only.includes(member)) &&
@@ -1224,6 +1224,12 @@ async function startMqtt() {
       const lat = parseFloat(msg.lat);
       const lon = parseFloat(msg.lon);
       if (isNaN(lat) || isNaN(lon)) return;
+      // Pokud běží simulace pro tohoto člena, ignoruj reálné MQTT body
+      const sim = activeSimulations[member];
+      if (sim && (sim.active || sim.stayActive)) {
+        console.log(`[MQTT] Ignoruji reálný bod pro ${member} — probíhá simulace`);
+        return;
+      }
       await processGPS(member, lat, lon, msg.motionactivities || [], msg.vel || 0, null, true);
     } catch(e) { console.error('MQTT error:', e.message); }
   });
