@@ -42,18 +42,23 @@ function distance(lat1, lon1, lat2, lon2) {
 
 function resolveStatus(member, lat, lon, vel = 0, motionActivities = []) {
   const HOME_KEYWORDS = ['doma', 'náš domeček', 'home'];
-  // Jedeme autem/kolem a rychlost > 5 km/h → přeskočit všechny fence kromě domova
   const isMovingFast = (motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel > 5;
 
   for (const fence of dynamicFences) {
     if (fence.only && !fence.only.includes(member)) continue;
     if (distance(lat, lon, fence.lat, fence.lon) <= fence.radius) {
       const isHome = HOME_KEYWORDS.some(k => fence.name.toLowerCase().includes(k));
-      // Jedeme kolem a není to domov → ignoruj
-      if (isMovingFast && !isHome) continue;
-      return fence.name;
+      // Domov — okamžitě
+      if (isHome) { memberFenceHyst[member] = null; return fence.name; }
+      // Ostatní — potvrď N po sobě jdoucích bodů
+      if (confirmFence(member, fence.name, fence.id, isMovingFast)) {
+        return fence.name;
+      }
+      return 'cesta';
     }
   }
+  // Mimo geofence — reset hystereze
+  memberFenceHyst[member] = null;
   return 'cesta';
 }
 
@@ -353,7 +358,22 @@ function resolveMotion(motionActivities, vel) {
 
 // ─── Geofence hystereze ──────────────────────────────────────────────────────
 // Geofence se aplikuje až po N po sobě jdoucích bodech uvnitř s nízkou rychlostí
+const FENCE_CONFIRM_POINTS = 2;
+const memberFenceHyst = {}; // { member: { fenceId, count } }
 
+function confirmFence(member, fenceName, fenceId, isMovingFast) {
+  if (isMovingFast) {
+    memberFenceHyst[member] = null;
+    return false;
+  }
+  const h = memberFenceHyst[member];
+  if (!h || h.fenceId !== fenceId) {
+    memberFenceHyst[member] = { fenceId, count: 1 };
+    return false;
+  }
+  h.count++;
+  return h.count >= FENCE_CONFIRM_POINTS;
+}
 
 // ─── Motion hystereze ────────────────────────────────────────────────────────
 // Ukládá posledních N motion stavů pro každého člena
@@ -755,24 +775,22 @@ async function runSimStep(member) {
   const { coords, step, speed } = sim;
 
   if (step >= coords.length) {
+    // Dorazili jsme — spustí callback
     sim.active = false;
     broadcast({ type: 'sim_arrived', member, lat: coords[coords.length-1][0], lon: coords[coords.length-1][1] });
     return;
   }
 
   const [lat, lon] = coords[step];
-  const intervalMs = 3000 / speed;   // reálná pauza mezi body
-
-  // simTime += 3000ms za každý krok — stejně jako manuální simulace (simState.simTime += 3000)
+  const intervalMs = 3000 / speed;
   sim.simTime += 3000;
 
-  // vel z lookback * 3000ms — stejná logika jako manuální simCalcVel
+  // Vypočítej rychlost z posledních 10 bodů
+  const lookback = Math.min(10, step);
   let vel = 0;
-  if (step > 0) {
-    const lookback = Math.min(10, step);
+  if (lookback > 0) {
     const [fromLat, fromLon] = coords[step - lookback];
-    const distM = distance(fromLat, fromLon, lat, lon);
-    vel = (distM / ((lookback * 3000) / 1000)) * 3.6;
+    vel = simCalcVel(fromLat, fromLon, lat, lon, lookback * 3000);
   }
 
   const motionactivities = sim.profile === 'foot-walking' ? ['walking'] :
@@ -801,10 +819,8 @@ async function runSimStay(member, lat, lon, minutes, onDone) {
     if (!sim.stayActive || !activeSimulations[member]) return;
     const dLat = (Math.random() - 0.5) * 0.00025;
     const dLon = (Math.random() - 0.5) * 0.00025;
-    // Posuň simTime o odpovídající podíl celkové doby stání
-    const stepMs = Math.round((minutes * 60 * 1000) / totalPoints);
-    sim.simTime += stepMs;
-    if (sim.stayStep === 0) console.log(`[SIM] Stay start simTime=${sim.simTime}, stepMs=${stepMs}`);
+    sim.simTime += 30000;
+    if (sim.stayStep === 0) console.log(`[SIM] Stay start simTime=${sim.simTime}`);
     await simSendGPSServer(member, lat + dLat, lon + dLon, 0, ['stationary'], sim.simTime);
     sim.stayStep++;
     broadcast({ type: 'sim_staying', member, step: sim.stayStep, total: totalPoints, minutes });
@@ -849,7 +865,7 @@ app.post('/mode', async (req, res) => {
 
 // Simulace — start trasy
 app.post('/simulate/route', async (req, res) => {
-  const { member, coords, profile = 'driving-car', speed = 5, startSimTime } = req.body;
+  const { member, coords, profile = 'driving-car', speed = 5 } = req.body;
   if (!member || !coords || !coords.length) return res.status(400).json({ error: 'member a coords required' });
   if (!MEMBERS.includes(member)) return res.status(404).json({ error: 'Unknown member' });
 
@@ -863,17 +879,17 @@ app.post('/simulate/route', async (req, res) => {
   activeSimulations[member] = {
     active: true, stayActive: false,
     coords, step: 0, profile, speed,
-    simTime: startSimTime || Date.now(), timer: null
+    simTime: Date.now(), timer: null
   };
 
-  console.log(`[SIM] Start trasy pro ${member}: ${coords.length} bodů, profil=${profile}, rychlost=${speed}x, simTime=${new Date(activeSimulations[member].simTime).toISOString()}`);
+  console.log(`[SIM] Start trasy pro ${member}: ${coords.length} bodů, profil=${profile}, rychlost=${speed}x`);
   runSimStep(member);
-  res.json({ ok: true, member, points: coords.length, simTime: activeSimulations[member].simTime });
+  res.json({ ok: true, member, points: coords.length });
 });
 
 // Simulace — stání na místě
 app.post('/simulate/stay', async (req, res) => {
-  const { member, lat, lon, minutes = 10, speed = 5, startSimTime } = req.body;
+  const { member, lat, lon, minutes = 10, speed = 5 } = req.body;
   if (!member || !lat || !lon) return res.status(400).json({ error: 'member, lat, lon required' });
 
   if (activeSimulations[member]) {
@@ -885,7 +901,7 @@ app.post('/simulate/stay', async (req, res) => {
   activeSimulations[member] = {
     active: false, stayActive: false,
     coords: [], step: 0, speed,
-    simTime: startSimTime || Date.now(), timer: null
+    simTime: Date.now(), timer: null
   };
 
   console.log(`[SIM] Stání pro ${member}: ${minutes} min na ${lat.toFixed(5)},${lon.toFixed(5)}`);
@@ -909,7 +925,7 @@ app.post('/simulate/stay', async (req, res) => {
     broadcast({ type: 'sim_arrived', member, lat, lon, afterStay: true });
     delete activeSimulations[member];
   });
-  res.json({ ok: true, member, minutes, simTime: activeSimulations[member]?.simTime });
+  res.json({ ok: true, member, minutes });
 });
 
 // Simulace — stop
