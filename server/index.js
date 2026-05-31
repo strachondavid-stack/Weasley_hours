@@ -715,6 +715,14 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   // Pohyb má přednost před geofence — kromě doma
   let motion = resolveMotion(motionActivities, vel);
 
+  // Pokud motionActivities explicitně říká automotive → vždy auto bez ohledu na vel
+  // (simulace posílá automotive po celý úsek, vel=0 na začátku nesmí přepsat)
+  if (motionActivities.includes('automotive')) {
+    motion = 'auto';
+  } else if (motionActivities.includes('cycling')) {
+    motion = motion || 'kolo';
+  }
+
   // Pokud je pohyb nejasný (kolo při nízkých rychlostech), zkus použít poslední známý pohyb
   // — aby rozjezd autem neskočil na kolo
   const MOTION_MEMORY_MS = 5 * 60 * 1000; // 5 minut
