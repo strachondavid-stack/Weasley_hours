@@ -740,8 +740,12 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
           (!f.only || f.only.includes(member)) &&
           distance(lat, lon, f.lat, f.lon) < f.radius * 1.5
         );
-        if (nearFence) status = nearFence.name;
-        else status = motion;
+        // Použij nearFence jen pokud confirmFence souhlasí — jinak motion
+        if (nearFence && confirmFence(member, nearFence.name, nearFence.id, false, simTs || Date.now())) {
+          status = nearFence.name;
+        } else {
+          status = motion;
+        }
       } else {
         status = motion;
       }
