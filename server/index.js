@@ -337,7 +337,7 @@ function resolveMotion(motionActivities, vel) {
   if (speed <= 15) {
     if (acts.includes('running'))  return 'běh';
     if (acts.includes('cycling'))  return 'kolo';
-    if (acts.includes('walking'))  return 'pěšky';
+    if (acts.includes('walking') && speed <= 10)  return 'pěšky';
     if (acts.includes('automotive')) return 'auto';
     // Bez motion: 6-10 spíš běh, 10-15 spíš kolo
     return speed <= 10 ? 'běh' : 'kolo';
