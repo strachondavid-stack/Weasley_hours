@@ -1729,13 +1729,13 @@ const SC_SCENARIOS = [
     title: 'Školní den',
     icon: '🎒',
     tags: ['school'],
-    desc: 'Ráno do školy, odpoledne kroužek, pak Lidl domů.',
+    desc: 'Ráno pěšky do školy, odpoledne kroužek, pak Lidl domů.',
     steps: [
-      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,   mode: 'foot-walking',   icon: '🏠' },
-      { name: 'ZŠ',                  lat: 49.7808, lon: 18.4425, stayMin: 330, mode: 'foot-walking',   icon: '🏫', note: '5.5 h škola' },
-      { name: 'TJ Sokol – karate',   lat: 49.7683, lon: 18.4198, stayMin: 90,  mode: 'driving-car',    icon: '🥋', note: '1.5 h trénink' },
-      { name: 'Lidl Havířov',        lat: 49.7762, lon: 18.4502, stayMin: 20,  mode: 'driving-car',    icon: '🛒', note: 'nákup po karate' },
-      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,   mode: 'driving-car',    icon: '🏠' },
+      { name: 'Doma',                       lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'foot-walking', icon: '🏠' },
+      { name: 'ZŠ Liberec – Husova',        lat: 50.7701, lon: 15.0612, stayMin: 30, mode: 'foot-walking', icon: '🏫', note: 'část dopolední výuky' },
+      { name: 'TJ Lokomotiva – sportoviště',lat: 50.7558, lon: 15.0502, stayMin: 25, mode: 'driving-car',  icon: '⚽', note: 'fotbalový kroužek' },
+      { name: 'Lidl Liberec – Hodkovice',   lat: 50.7489, lon: 15.0631, stayMin: 15, mode: 'driving-car',  icon: '🛒', note: 'nákup po kroužku' },
+      { name: 'Doma',                       lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
     ],
   },
 
@@ -1745,93 +1745,94 @@ const SC_SCENARIOS = [
     title: 'Nákupní sobota',
     icon: '🛒',
     tags: ['weekend', 'errand'],
-    desc: 'Velký nákup — Kaufland, Lidl, lékárna, domů.',
+    desc: 'Velký týdenní nákup — OC Géčko, lékárna, pekárna.',
     steps: [
-      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
-      { name: 'Kaufland Havířov',    lat: 49.7640, lon: 18.4380, stayMin: 45, mode: 'driving-car', icon: '🏪', note: 'hlavní nákup' },
-      { name: 'Lékárna Dr.Max',      lat: 49.7721, lon: 18.4388, stayMin: 10, mode: 'driving-car', icon: '💊', note: 'léky' },
-      { name: 'Lidl Havířov',        lat: 49.7762, lon: 18.4502, stayMin: 20, mode: 'driving-car', icon: '🛒', note: 'doplnit zeleninu' },
-      { name: 'Benzínka Shell',      lat: 49.7700, lon: 18.4450, stayMin: 8,  mode: 'driving-car', icon: '⛽', note: 'tankovat' },
-      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
+      { name: 'Doma',                       lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
+      { name: 'OC Géčko Liberec',           lat: 50.7593, lon: 15.0456, stayMin: 30, mode: 'driving-car',  icon: '🏪', note: 'hlavní nákup' },
+      { name: 'Lékárna Dr.Max – náměstí',   lat: 50.7699, lon: 15.0573, stayMin: 10, mode: 'driving-car',  icon: '💊' },
+      { name: 'Pekárna Liberecký rohlík',   lat: 50.7712, lon: 15.0601, stayMin: 8,  mode: 'foot-walking', icon: '🥐', note: 'čerstvé pečivo' },
+      { name: 'Benzínka MOL – Liberec',     lat: 50.7541, lon: 15.0488, stayMin: 8,  mode: 'driving-car',  icon: '⛽' },
+      { name: 'Doma',                       lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
     ],
   },
 
-  // ── 3. Výlet do Ostravy ─────────────────────────────────────────────────────
+  // ── 3. Výlet na Ještěd ──────────────────────────────────────────────────────
   {
-    id: 'ostrava-vylet',
-    title: 'Výlet do Ostravy',
-    icon: '🏙',
+    id: 'jested-vylet',
+    title: 'Výlet na Ještěd',
+    icon: '🏔',
     tags: ['weekend', 'leisure'],
-    desc: 'Víkendový výlet — ZOO, McDonald\'s, Forum Nová Karolina.',
+    desc: 'Lanovkou na Ještěd, výhled, oběd, zpět přes centrum.',
     steps: [
-      { name: 'Doma',                      lat: 49.7745, lon: 18.4310, stayMin: 0,   mode: 'driving-car', icon: '🏠' },
-      { name: 'ZOO Ostrava',               lat: 49.8561, lon: 18.2286, stayMin: 150, mode: 'driving-car', icon: '🦁', note: '2.5 h prohlídka' },
-      { name: 'McDonald\'s Ostrava Karolina', lat: 49.8342, lon: 18.2906, stayMin: 35, mode: 'driving-car', icon: '🍔', note: 'oběd' },
-      { name: 'Forum Nová Karolina',       lat: 49.8346, lon: 18.2888, stayMin: 60,  mode: 'foot-walking', icon: '🛍', note: 'nákupy' },
-      { name: 'Doma',                      lat: 49.7745, lon: 18.4310, stayMin: 0,   mode: 'driving-car', icon: '🏠' },
+      { name: 'Doma',                    lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
+      { name: 'Dolní stanice lanovky',   lat: 50.7554, lon: 15.0371, stayMin: 10, mode: 'driving-car',  icon: '🚡', note: 'nástup na lanovku' },
+      { name: 'Ještěd – vrchol',         lat: 50.7268, lon: 15.0096, stayMin: 30, mode: 'foot-walking', icon: '📡', note: 'výhled + restaurace' },
+      { name: 'Náměstí Dr. E. Beneše',   lat: 50.7699, lon: 15.0573, stayMin: 20, mode: 'driving-car',  icon: '🏛', note: 'káva v centru' },
+      { name: 'Doma',                    lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'foot-walking', icon: '🏠' },
     ],
   },
 
-  // ── 4. Večer u babičky ──────────────────────────────────────────────────────
+  // ── 4. U prarodičů v Chrastavě ─────────────────────────────────────────────
   {
-    id: 'babicka',
-    title: 'U babičky',
-    icon: '👵',
+    id: 'prarodice',
+    title: 'U prarodičů',
+    icon: '👴',
     tags: ['weekend'],
-    desc: 'Odpolední návštěva u babičky, cestou zpět pizza.',
+    desc: 'Návštěva prarodičů v Chrastavě, cestou zpět kebab.',
     steps: [
-      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,   mode: 'foot-walking', icon: '🏠' },
-      { name: 'Babička – Šumbark',   lat: 49.7901, lon: 18.4055, stayMin: 120, mode: 'foot-walking', icon: '👵', note: '2 h návštěva' },
-      { name: 'Pizzeria Da Lucio',   lat: 49.7780, lon: 18.4210, stayMin: 40,  mode: 'driving-car',  icon: '🍕', note: 'večeře' },
-      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,   mode: 'driving-car',  icon: '🏠' },
+      { name: 'Doma',                    lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
+      { name: 'Prarodiče – Chrastava',   lat: 50.8172, lon: 14.9694, stayMin: 30, mode: 'driving-car', icon: '👴', note: 'odpolední návštěva' },
+      { name: 'Kebab Šišman Liberec',    lat: 50.7688, lon: 15.0558, stayMin: 20, mode: 'driving-car', icon: '🌯', note: 'večeře cestou' },
+      { name: 'Doma',                    lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
     ],
   },
 
-  // ── 5. Nemocnice + lékař ────────────────────────────────────────────────────
+  // ── 5. Lékař + lékárna ─────────────────────────────────────────────────────
   {
     id: 'lekar',
     title: 'Lékař',
     icon: '🏥',
     tags: ['errand'],
-    desc: 'Preventivní prohlídka u dětského lékaře, pak lékárna.',
+    desc: 'Preventivní prohlídka, pak lékárna a domů.',
     steps: [
-      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
-      { name: 'Dětský lékař',        lat: 49.7830, lon: 18.4480, stayMin: 45, mode: 'driving-car', icon: '👨‍⚕️', note: 'čekání + prohlídka' },
-      { name: 'Lékárna Dr.Max',      lat: 49.7721, lon: 18.4388, stayMin: 10, mode: 'driving-car', icon: '💊', note: 'vyzvednutí léků' },
-      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
+      { name: 'Doma',                    lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
+      { name: 'Dětský lékař – Liberec',  lat: 50.7734, lon: 15.0634, stayMin: 30, mode: 'driving-car',  icon: '👨‍⚕️', note: 'prohlídka + čekárna' },
+      { name: 'Lékárna Dr.Max – náměstí',lat: 50.7699, lon: 15.0573, stayMin: 10, mode: 'foot-walking', icon: '💊' },
+      { name: 'Doma',                    lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
     ],
   },
 
-  // ── 6. Sport – kolo v parku ──────────────────────────────────────────────────
+  // ── 6. Kolo – Jizerské stezky ───────────────────────────────────────────────
   {
-    id: 'kolo-park',
-    title: 'Kolo – park + zmrzlina',
+    id: 'kolo-jizery',
+    title: 'Kolo – Jizerské stezky',
     icon: '🚲',
     tags: ['leisure'],
-    desc: 'Odpolední vyjížďka na kole, zmrzlina v parku, aquapark.',
+    desc: 'Vyjížďka na kole podél Nisy, zmrzlina, zpět parkem.',
     steps: [
-      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,  mode: 'cycling-regular', icon: '🏠' },
-      { name: 'Park Stromovka',      lat: 49.7720, lon: 18.4270, stayMin: 30, mode: 'cycling-regular', icon: '🌳', note: 'jízda parkem' },
-      { name: 'Zmrzlina – centrum',  lat: 49.7752, lon: 18.4330, stayMin: 15, mode: 'cycling-regular', icon: '🍦' },
-      { name: 'Aquapark Havířov',    lat: 49.7495, lon: 18.4180, stayMin: 90, mode: 'cycling-regular', icon: '🏊', note: '1.5 h bazén' },
-      { name: 'Doma',                lat: 49.7745, lon: 18.4310, stayMin: 0,  mode: 'cycling-regular', icon: '🏠' },
+      { name: 'Doma',                      lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'cycling-regular', icon: '🏠' },
+      { name: 'Stezka podél Nisy – sever', lat: 50.7842, lon: 15.0498, stayMin: 10, mode: 'cycling-regular', icon: '🌊', note: 'odpočinek u řeky' },
+      { name: 'Zmrzlinárna Liberec',       lat: 50.7705, lon: 15.0581, stayMin: 15, mode: 'cycling-regular', icon: '🍦' },
+      { name: 'Park Lidové sady',          lat: 50.7601, lon: 15.0433, stayMin: 20, mode: 'cycling-regular', icon: '🌳', note: 'odpočinek v parku' },
+      { name: 'Doma',                      lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'cycling-regular', icon: '🏠' },
     ],
   },
 
-  // ── 7. Rychlý test (minimum bodů) ───────────────────────────────────────────
+  // ── 7. Rychlý test ──────────────────────────────────────────────────────────
   {
     id: 'rychly-test',
     title: '⚡ Rychlý test',
     icon: '⚡',
     tags: [],
-    desc: 'Doma → škola → Lidl → doma. Minimum zastávek pro rychlé ověření detekce.',
+    desc: 'Doma → škola → Lidl → doma. Minimum zastávek, rychlé ověření detekce.',
     steps: [
-      { name: 'Doma',          lat: 49.7745, lon: 18.4310, stayMin: 6,  mode: 'foot-walking', icon: '🏠' },
-      { name: 'ZŠ',            lat: 49.7808, lon: 18.4425, stayMin: 8,  mode: 'foot-walking', icon: '🏫' },
-      { name: 'Lidl Havířov',  lat: 49.7762, lon: 18.4502, stayMin: 7,  mode: 'driving-car',  icon: '🛒' },
-      { name: 'Doma',          lat: 49.7745, lon: 18.4310, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
+      { name: 'Doma',                    lat: 50.7663, lon: 15.0543, stayMin: 8,  mode: 'foot-walking', icon: '🏠' },
+      { name: 'ZŠ Liberec – Husova',     lat: 50.7701, lon: 15.0612, stayMin: 10, mode: 'foot-walking', icon: '🏫' },
+      { name: 'Lidl Liberec – Hodkovice',lat: 50.7489, lon: 15.0631, stayMin: 8,  mode: 'driving-car',  icon: '🛒' },
+      { name: 'Doma',                    lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
     ],
   },
+
 ];
 
 // ── stav ──────────────────────────────────────────────────────────────────────
