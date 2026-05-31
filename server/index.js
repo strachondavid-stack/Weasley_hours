@@ -42,7 +42,7 @@ function distance(lat1, lon1, lat2, lon2) {
 
 function resolveStatus(member, lat, lon, vel = 0, motionActivities = [], ts = Date.now()) {
   const HOME_KEYWORDS = ['doma', 'náš domeček', 'home'];
-  const isMovingFast = (motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel > 5;
+  const isMovingFast = ((motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel > 5) || vel > 15;
 
   for (const fence of dynamicFences) {
     if (fence.only && !fence.only.includes(member)) continue;
@@ -734,7 +734,7 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   if (motion) {
     if (status === 'cesta') {
       // GPS drift — bod těsně mimo fence radius ale stojíme (ne automotive/cycling)
-      const isMovingFast = (motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel > 5;
+      const isMovingFast = ((motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel > 5) || vel > 15;
       if (!isMovingFast) {
         const nearFence = dynamicFences.find(f =>
           (!f.only || f.only.includes(member)) &&
