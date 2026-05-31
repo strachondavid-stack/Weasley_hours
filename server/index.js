@@ -40,7 +40,7 @@ function distance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function resolveStatus(member, lat, lon, vel = 0, motionActivities = []) {
+function resolveStatus(member, lat, lon, vel = 0, motionActivities = [], ts = Date.now()) {
   const HOME_KEYWORDS = ['doma', 'náš domeček', 'home'];
   const isMovingFast = (motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel > 5;
 
@@ -51,7 +51,7 @@ function resolveStatus(member, lat, lon, vel = 0, motionActivities = []) {
       // Domov — okamžitě
       if (isHome) { memberFenceHyst[member] = null; return fence.name; }
       // Ostatní — potvrď N po sobě jdoucích bodů
-      if (confirmFence(member, fence.name, fence.id, isMovingFast)) {
+      if (confirmFence(member, fence.name, fence.id, isMovingFast, ts)) {
         return fence.name;
       }
       return 'cesta';
@@ -358,21 +358,25 @@ function resolveMotion(motionActivities, vel) {
 
 // ─── Geofence hystereze ──────────────────────────────────────────────────────
 // Geofence se aplikuje až po N po sobě jdoucích bodech uvnitř s nízkou rychlostí
-const FENCE_CONFIRM_POINTS = 5;
-const memberFenceHyst = {}; // { member: { fenceId, count } }
+// Minimální čas uvnitř fence pro potvrzení (ms simulovaného času)
+// Projíždění: pár sekund → zamítnout
+// Stání: minuty → potvrdit
+const FENCE_CONFIRM_MS = 2 * 60 * 1000; // 2 minuty
 
-function confirmFence(member, fenceName, fenceId, isMovingFast) {
+const memberFenceHyst = {}; // { member: { fenceId, firstTs } }
+
+function confirmFence(member, fenceName, fenceId, isMovingFast, ts) {
   if (isMovingFast) {
     memberFenceHyst[member] = null;
     return false;
   }
   const h = memberFenceHyst[member];
   if (!h || h.fenceId !== fenceId) {
-    memberFenceHyst[member] = { fenceId, count: 1 };
+    memberFenceHyst[member] = { fenceId, firstTs: ts };
     return false;
   }
-  h.count++;
-  return h.count >= FENCE_CONFIRM_POINTS;
+  const elapsed = ts - h.firstTs;
+  return elapsed >= FENCE_CONFIRM_MS;
 }
 
 // ─── Motion hystereze ────────────────────────────────────────────────────────
@@ -707,7 +711,7 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   const ts = simTs || Date.now();
   // MQTT a live zdroje vždy zapisují do live Redis bez ohledu na mód
   const activeRedis = (forceLive || currentMode === 'live') ? redisLive : redis;
-  let status = resolveStatus(member, lat, lon, vel, motionActivities);
+  let status = resolveStatus(member, lat, lon, vel, motionActivities, simTs || Date.now());
   // Pohyb má přednost před geofence — kromě doma
   let motion = resolveMotion(motionActivities, vel);
 
