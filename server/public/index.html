@@ -1723,108 +1723,99 @@ setInterval(()=>{
 
 const SC_SCENARIOS = [
 
+  // Souřadnice převzaty přímo z geofences (curl /geofences na produkčním serveru)
+  // Doma = "Náš domeček": 50.7793, 15.0581
+
   // ── 1. Školní den ───────────────────────────────────────────────────────────
-  // Doma: placeholder centrum Liberce
-  // ZŠ Husova 142/44: ověřeno liberec-reichenberg.net (50°46'17"N 15°4'12"E)
-  // TJ Lokomotiva Jablonecká 21: ověřeno ČBF (50.76867N 15.06432E)
-  // Lidl Vratislavická 1098/22: ověřeno kurzy.cz (50.747777 15.070778)
   {
     id: 'skolni-den',
     title: 'Školní den',
     icon: '🎒',
     tags: ['school'],
-    desc: 'Ráno pěšky do školy, odpoledne kroužek v TJ Lokomotiva, pak Lidl domů.',
+    desc: 'Pěšky do ZŠ Lesní, odpoledne karate, pak Albert domů.',
     steps: [
-      { name: 'Doma',                       lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'foot-walking', icon: '🏠' },
-      { name: 'ZŠ Husova (Husova 142/44)',   lat: 50.7714, lon: 15.0701, stayMin: 30, mode: 'foot-walking', icon: '🏫', note: 'část dopolední výuky' },
-      { name: 'TJ Lokomotiva (Jablonecká 21)', lat: 50.7687, lon: 15.0643, stayMin: 25, mode: 'driving-car', icon: '⚽', note: 'sportovní kroužek' },
-      { name: 'Lidl (Vratislavická 1098/22)',lat: 50.7478, lon: 15.0708, stayMin: 15, mode: 'driving-car',  icon: '🛒', note: 'nákup po kroužku' },
-      { name: 'Doma',                       lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
+      { name: 'Náš domeček',               lat: 50.7793, lon: 15.0581, stayMin: 0,  mode: 'foot-walking', icon: '🏠' },
+      { name: 'ZŠ Lesní',                  lat: 50.7787, lon: 15.0734, stayMin: 30, mode: 'foot-walking', icon: '🏫', note: 'část dopolední výuky' },
+      { name: 'SK Karate Shotokan Liberec',lat: 50.7865, lon: 15.0542, stayMin: 25, mode: 'driving-car',  icon: '🥋', note: 'karate trénink' },
+      { name: 'Albert',                    lat: 50.7752, lon: 15.0625, stayMin: 15, mode: 'driving-car',  icon: '🛒', note: 'nákup po karate' },
+      { name: 'Náš domeček',               lat: 50.7793, lon: 15.0581, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
     ],
   },
 
   // ── 2. Nákupní sobota ───────────────────────────────────────────────────────
-  // OC Géčko Sousedská 599, Liberec XI-Růžodol I: ověřeno geckoliberec.cz
   {
     id: 'nakupni-sobota',
     title: 'Nákupní sobota',
     icon: '🛒',
     tags: ['weekend', 'errand'],
-    desc: 'Velký týdenní nákup — OC Géčko (Růžodol), Lidl, benzínka.',
+    desc: 'Tesco Ruprechtice, BAUHAUS, Albert, domů.',
     steps: [
-      { name: 'Doma',                              lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
-      { name: 'OC Géčko (Sousedská 599)',          lat: 50.7889, lon: 15.0295, stayMin: 30, mode: 'driving-car', icon: '🏪', note: 'hlavní nákup' },
-      { name: 'Lidl (Vratislavická 1098/22)',       lat: 50.7478, lon: 15.0708, stayMin: 15, mode: 'driving-car', icon: '🛒', note: 'zelenina a ovoce' },
-      { name: 'Lékárna Dr.Max (Soukenné nám. 613)',lat: 50.7699, lon: 15.0548, stayMin: 10, mode: 'driving-car', icon: '💊' },
-      { name: 'Benzínka MOL (Dr. M. Horákové)',    lat: 50.7720, lon: 15.0420, stayMin: 8,  mode: 'driving-car', icon: '⛽' },
-      { name: 'Doma',                              lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
+      { name: 'Náš domeček',                    lat: 50.7793, lon: 15.0581, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
+      { name: 'Tesco Liberec Ruprechtice',       lat: 50.7843, lon: 15.0605, stayMin: 25, mode: 'driving-car', icon: '🏪', note: 'hlavní nákup' },
+      { name: 'BAUHAUS Liberec',                lat: 50.7766, lon: 15.0245, stayMin: 20, mode: 'driving-car', icon: '🔨', note: 'nářadí / zahrada' },
+      { name: 'Albert',                         lat: 50.7752, lon: 15.0625, stayMin: 15, mode: 'driving-car', icon: '🛒', note: 'doplnit zeleninu' },
+      { name: 'Náš domeček',                    lat: 50.7793, lon: 15.0581, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
     ],
   },
 
   // ── 3. Výlet na Ještěd ──────────────────────────────────────────────────────
-  // Ještěd vrchol: ověřeno Wikipedia (50.73222°N 14.98528°E)
-  // Dolní stanice lanovky: dle mapy pod vrcholem (~50.7548, 15.0311)
   {
     id: 'jested-vylet',
     title: 'Výlet na Ještěd',
     icon: '🏔',
     tags: ['weekend', 'leisure'],
-    desc: 'Lanovkou na Ještěd (1012 m), výhled, oběd v restauraci, zpět přes centrum.',
+    desc: 'Lanovkou na Ještěd (1012 m), výhled, oběd, zpět přes centrum.',
     steps: [
-      { name: 'Doma',                         lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
+      { name: 'Náš domeček',                  lat: 50.7793, lon: 15.0581, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
       { name: 'Dolní stanice lanovky Ještěd', lat: 50.7548, lon: 15.0311, stayMin: 10, mode: 'driving-car',  icon: '🚡', note: 'parkování + nástup' },
       { name: 'Ještěd – vrchol (1012 m)',      lat: 50.7322, lon: 14.9853, stayMin: 30, mode: 'foot-walking', icon: '📡', note: 'výhled + restaurace' },
-      { name: 'Nám. Dr. E. Beneše – centrum', lat: 50.7699, lon: 15.0548, stayMin: 20, mode: 'driving-car',  icon: '🏛', note: 'káva v centru' },
-      { name: 'Doma',                         lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'foot-walking', icon: '🏠' },
+      { name: 'SIX cafe',                     lat: 50.7780, lon: 15.0735, stayMin: 20, mode: 'driving-car',  icon: '☕', note: 'káva po výletu' },
+      { name: 'Náš domeček',                  lat: 50.7793, lon: 15.0581, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
     ],
   },
 
-  // ── 4. U prarodičů v Chrastavě ─────────────────────────────────────────────
-  // Chrastava: ~12 km SZ od Liberce, ověřeno dle mapy (50.8168, 14.9698)
+  // ── 4. Lezení ───────────────────────────────────────────────────────────────
   {
-    id: 'prarodice',
-    title: 'U prarodičů',
-    icon: '👴',
-    tags: ['weekend'],
-    desc: 'Návštěva prarodičů v Chrastavě (12 km od Liberce), cestou zpět kebab.',
+    id: 'lezeni',
+    title: 'Lezení',
+    icon: '🧗',
+    tags: ['leisure'],
+    desc: 'Boulder Point nebo Makak lezení v Jablonci, pak domů.',
     steps: [
-      { name: 'Doma',                 lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
-      { name: 'Prarodiče – Chrastava',lat: 50.8168, lon: 14.9698, stayMin: 30, mode: 'driving-car', icon: '👴', note: 'odpolední návštěva' },
-      { name: 'Kebab – centrum Liberec', lat: 50.7688, lon: 15.0558, stayMin: 20, mode: 'driving-car', icon: '🌯', note: 'večeře cestou' },
-      { name: 'Doma',                 lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
+      { name: 'Náš domeček',              lat: 50.7793, lon: 15.0581, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
+      { name: 'Boulder Point',            lat: 50.7834, lon: 15.0645, stayMin: 30, mode: 'driving-car', icon: '🧗', note: 'lezecká stěna' },
+      { name: 'SIX cafe',                 lat: 50.7780, lon: 15.0735, stayMin: 15, mode: 'foot-walking', icon: '☕', note: 'odpočinek po lezení' },
+      { name: 'Náš domeček',              lat: 50.7793, lon: 15.0581, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
     ],
   },
 
-  // ── 5. Lékař + lékárna ─────────────────────────────────────────────────────
+  // ── 5. Lékař ────────────────────────────────────────────────────────────────
   {
     id: 'lekar',
     title: 'Lékař',
     icon: '🏥',
     tags: ['errand'],
-    desc: 'Preventivní prohlídka, pak lékárna a domů.',
+    desc: 'Poliklinika u Muzea nebo Lékař Benko, pak lékárna.',
     steps: [
-      { name: 'Doma',                              lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
-      { name: 'Dětský lékař – Liberec centrum',    lat: 50.7734, lon: 15.0634, stayMin: 30, mode: 'driving-car',  icon: '👨‍⚕️', note: 'prohlídka + čekárna' },
-      { name: 'Lékárna Dr.Max (Soukenné nám. 613)',lat: 50.7699, lon: 15.0548, stayMin: 10, mode: 'foot-walking', icon: '💊' },
-      { name: 'Doma',                              lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
+      { name: 'Náš domeček',           lat: 50.7793, lon: 15.0581, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
+      { name: 'Poliklinika u Muzea',   lat: 50.7747, lon: 15.0674, stayMin: 30, mode: 'driving-car',  icon: '🏥', note: 'prohlídka + čekárna' },
+      { name: 'Klinika Movela',        lat: 50.7716, lon: 15.0563, stayMin: 15, mode: 'foot-walking', icon: '👨‍⚕️', note: 'druhý lékař / vyzvednutí' },
+      { name: 'Náš domeček',           lat: 50.7793, lon: 15.0581, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
     ],
   },
 
-  // ── 6. Kolo – Jizerské stezky ───────────────────────────────────────────────
-  // Stezka podél Nisy: dle OSM cyklostezka podél Lužické Nisy, sever Liberce
-  // Park Lidové sady: jihozápad od centra, ověřeno dle mapy
+  // ── 6. Výlet Makak + Jablonec ───────────────────────────────────────────────
   {
-    id: 'kolo-jizery',
-    title: 'Kolo – Jizerské stezky',
-    icon: '🚲',
-    tags: ['leisure'],
-    desc: 'Vyjížďka na kole podél Nisy, zmrzlina v centru, zpět přes Lidové sady.',
+    id: 'jablonec-makak',
+    title: 'Jablonec – Makak lezení',
+    icon: '🚗',
+    tags: ['weekend', 'leisure'],
+    desc: 'Výlet do Jablonce — Makak lezení, nádraží, zpět.',
     steps: [
-      { name: 'Doma',                      lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'cycling-regular', icon: '🏠' },
-      { name: 'Cyklostezka podél Nisy',    lat: 50.7850, lon: 15.0500, stayMin: 10, mode: 'cycling-regular', icon: '🌊', note: 'odpočinek u řeky' },
-      { name: 'Zmrzlina – centrum',        lat: 50.7699, lon: 15.0548, stayMin: 15, mode: 'cycling-regular', icon: '🍦' },
-      { name: 'Park Lidové sady',          lat: 50.7608, lon: 15.0408, stayMin: 20, mode: 'cycling-regular', icon: '🌳', note: 'odpočinek v parku' },
-      { name: 'Doma',                      lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'cycling-regular', icon: '🏠' },
+      { name: 'Náš domeček',                      lat: 50.7793, lon: 15.0581, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
+      { name: 'Makak lezení (Jablonec)',           lat: 50.7271, lon: 15.1498, stayMin: 30, mode: 'driving-car', icon: '🧗', note: 'lezecká stěna Jablonec' },
+      { name: 'Jablonec – dolní nádraží',          lat: 50.7265, lon: 15.1486, stayMin: 15, mode: 'foot-walking', icon: '🚂', note: 'procházka po nádraží' },
+      { name: 'Náš domeček',                      lat: 50.7793, lon: 15.0581, stayMin: 0,  mode: 'driving-car', icon: '🏠' },
     ],
   },
 
@@ -1834,12 +1825,12 @@ const SC_SCENARIOS = [
     title: '⚡ Rychlý test',
     icon: '⚡',
     tags: [],
-    desc: 'Doma → ZŠ Husova → Lidl Vratislavická → doma. Ověření detekce zastávek.',
+    desc: 'Doma → ZŠ Lesní → Albert → doma. Rychlé ověření detekce zastávek.',
     steps: [
-      { name: 'Doma',                          lat: 50.7663, lon: 15.0543, stayMin: 8,  mode: 'foot-walking', icon: '🏠' },
-      { name: 'ZŠ Husova (Husova 142/44)',      lat: 50.7714, lon: 15.0701, stayMin: 10, mode: 'foot-walking', icon: '🏫' },
-      { name: 'Lidl (Vratislavická 1098/22)',   lat: 50.7478, lon: 15.0708, stayMin: 8,  mode: 'driving-car',  icon: '🛒' },
-      { name: 'Doma',                          lat: 50.7663, lon: 15.0543, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
+      { name: 'Náš domeček',  lat: 50.7793, lon: 15.0581, stayMin: 8,  mode: 'foot-walking', icon: '🏠' },
+      { name: 'ZŠ Lesní',     lat: 50.7787, lon: 15.0734, stayMin: 10, mode: 'foot-walking', icon: '🏫' },
+      { name: 'Albert',       lat: 50.7752, lon: 15.0625, stayMin: 8,  mode: 'driving-car',  icon: '🛒' },
+      { name: 'Náš domeček',  lat: 50.7793, lon: 15.0581, stayMin: 0,  mode: 'driving-car',  icon: '🏠' },
     ],
   },
 
