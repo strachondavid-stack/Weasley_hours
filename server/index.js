@@ -361,7 +361,7 @@ function resolveMotion(motionActivities, vel) {
 // Minimální čas uvnitř fence pro potvrzení (ms simulovaného času)
 // Projíždění: pár sekund → zamítnout
 // Stání: minuty → potvrdit
-const FENCE_CONFIRM_MS = 2 * 60 * 1000; // 2 minuty
+const FENCE_CONFIRM_MS = 2 * 60 * 1000; // 2 minuty simTime
 
 const memberFenceHyst = {}; // { member: { fenceId, firstTs } }
 
@@ -373,9 +373,11 @@ function confirmFence(member, fenceName, fenceId, isMovingFast, ts) {
   const h = memberFenceHyst[member];
   if (!h || h.fenceId !== fenceId) {
     memberFenceHyst[member] = { fenceId, firstTs: ts };
+    console.log(`[FENCE] ${member} @ ${fenceName}: první bod ts=${ts}`);
     return false;
   }
   const elapsed = ts - h.firstTs;
+  console.log(`[FENCE] ${member} @ ${fenceName}: elapsed=${Math.round(elapsed/1000)}s / ${FENCE_CONFIRM_MS/1000}s potřeba`);
   return elapsed >= FENCE_CONFIRM_MS;
 }
 
