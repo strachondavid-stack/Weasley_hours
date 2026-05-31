@@ -777,13 +777,11 @@ async function runSimStep(member) {
     sim.simTime += 3000; // první bod
   }
 
-  // Vypočítej rychlost z posledních 10 bodů
-  const lookback = Math.min(10, step);
-  let vel = 0;
-  if (lookback > 0) {
-    const [fromLat, fromLon] = coords[step - lookback];
-    vel = simCalcVel(fromLat, fromLon, lat, lon, lookback * 3000);
-  }
+  // Rychlost přímo z profilu — simCalcVel by počítala z reálného času (3000ms),
+  // ale při speed>1 jsou reálné intervaly kratší → vel by vycházela příliš nízko
+  // a isMovingFast by bylo false → fence by se aplikovala při projíždění kolem
+  const vel = sim.profile === 'foot-walking' ? 5 :
+              sim.profile === 'cycling-regular' ? 15 : 40;
 
   const motionactivities = sim.profile === 'foot-walking' ? ['walking'] :
                            sim.profile === 'cycling-regular' ? ['cycling'] : ['automotive'];
