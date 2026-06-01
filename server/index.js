@@ -237,7 +237,7 @@ Odpověz POUZE jako JSON:
       },
       JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 200,
+        max_tokens: 500,
         system: 'Odpovídáš POUZE validním JSON objektem bez markdown formátování, backtick bloků nebo jakéhokoliv dalšího textu.',
         messages: [{ role: 'user', content: prompt }]
       })
