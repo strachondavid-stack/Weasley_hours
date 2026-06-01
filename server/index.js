@@ -202,7 +202,7 @@ Odpověz POUZE jako JSON:
       },
       JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 500,
+        max_tokens: 1000,
         messages: [{ role: 'user', content: prompt }]
       })
     );
@@ -217,10 +217,14 @@ Odpověz POUZE jako JSON:
       if (!jsonMatch) throw new Error('JSON objekt nenalezen');
       let jsonStr = jsonMatch[0];
       // Pokud je JSON neúplný (oříznutý max_tokens), zkus opravit
-      if (jsonStr.split('{').length !== jsonStr.split('}').length) {
-        // Uzavři otevřené uvozovky a objekt
-        jsonStr = jsonStr.replace(/,\s*$/, '').replace(/"[^"]*$/, '"...') + '}';
-      }
+      try {
+        // Uzavři otevřený string, odstraň trailing čárku, uzavři objekt
+        jsonStr = jsonStr
+          .replace(/"[^"]*$/, '"...')   // uzavři neuzavřený string
+          .replace(/,\s*$/, '')          // odstraň trailing čárku
+          .replace(/\s*$/, '');          // trim
+        if (!jsonStr.endsWith('}')) jsonStr += '}';
+      } catch(fixErr) {}
       result = JSON.parse(jsonStr);
       // Normalizace — ujisti se že má povinná pole
       if (typeof result.should_save !== 'boolean') result.should_save = false;
