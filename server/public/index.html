@@ -1759,7 +1759,7 @@ function renderScCard(s) {
         ${hasNext ? '<div class="sc-stop-connector"></div>' : ''}
       </div>
       <div class="sc-stop-text">
-        <div class="sc-stop-name">${st.icon||'📍'} ${st.name}</div>
+        <div class="sc-stop-name" onclick="showPage('map');setTimeout(()=>map.setView([${st.lat},${st.lon}],15),80)" style="cursor:pointer" title="Zobrazit na mapě">${st.icon||'📍'} ${st.name} <span style="font-size:10px;color:#bbb">🗺</span></div>
         <div class="sc-stop-detail">${stayStr}${noteStr}</div>
         ${nextNote}
       </div>
