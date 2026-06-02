@@ -9,6 +9,7 @@ const fs = require('fs');
 const PORT = process.env.PORT || 3000;
 const MQTT_HOST = process.env.MQTT_HOST || 'localhost';
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
+const REDIS_TEST_HOST = process.env.REDIS_TEST_HOST || 'localhost';
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || null;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || null;
 
@@ -39,11 +40,25 @@ function distance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function resolveStatus(member, lat, lon) {
+function resolveStatus(member, lat, lon, vel = 0, motionActivities = [], ts = Date.now()) {
+  const HOME_KEYWORDS = ['doma', 'náš domeček', 'home'];
+  const isMovingFast = ((motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel > 5) || vel > 15;
+
   for (const fence of dynamicFences) {
     if (fence.only && !fence.only.includes(member)) continue;
-    if (distance(lat, lon, fence.lat, fence.lon) <= fence.radius) return fence.name;
+    if (distance(lat, lon, fence.lat, fence.lon) <= fence.radius) {
+      const isHome = HOME_KEYWORDS.some(k => fence.name.toLowerCase().includes(k));
+      // Domov — okamžitě
+      if (isHome) { memberFenceHyst[member] = null; return fence.name; }
+      // Ostatní — potvrď N po sobě jdoucích bodů
+      if (confirmFence(member, fence.name, fence.id, isMovingFast, ts)) {
+        return fence.name;
+      }
+      return 'cesta';
+    }
   }
+  // Mimo geofence — reset hystereze
+  memberFenceHyst[member] = null;
   return 'cesta';
 }
 
@@ -89,27 +104,21 @@ const SKIP_PLACE_TYPES = [
 async function getNearbyPlaces(lat, lon, radius = 300) {
   if (!GOOGLE_API_KEY) return [];
   try {
-    const data = await httpPost(
-      'places.googleapis.com',
-      '/v1/places:searchNearby',
-      {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': GOOGLE_API_KEY,
-        'X-Goog-FieldMask': 'places.displayName,places.types,places.location,places.primaryType,places.rating'
-      },
-      JSON.stringify({
-        locationRestriction: { circle: { center: { latitude: lat, longitude: lon }, radius } },
-        maxResultCount: 20,
-        languageCode: 'cs'
-      })
-    );
-    if (!data.places) return [];
-    return data.places
+    const url = `/maps/api/place/nearbysearch/json?location=${lat},${lon}&radius=${radius}&language=cs&key=${GOOGLE_API_KEY}`;
+    const data = await new Promise((resolve, reject) => {
+      https.get({ hostname: 'maps.googleapis.com', path: url }, (res) => {
+        let d = '';
+        res.on('data', chunk => d += chunk);
+        res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
+      }).on('error', reject);
+    });
+    if (!data.results) return [];
+    return data.results
       .map(p => ({
-        name: p.displayName?.text || '',
-        primaryType: p.primaryType || '',
+        name: p.name || '',
+        primaryType: p.types?.[0] || '',
         types: (p.types || []).slice(0, 5),
-        dist: Math.round(distance(lat, lon, p.location.latitude, p.location.longitude)),
+        dist: Math.round(distance(lat, lon, p.geometry.location.lat, p.geometry.location.lng)),
         rating: p.rating || null,
       }))
       .filter(p => !SKIP_PLACE_TYPES.includes(p.primaryType) && p.name)
@@ -125,12 +134,28 @@ async function getNearbyPlaces(lat, lon, radius = 300) {
 async function countNearbyHistory(member, lat, lon, radiusM = 100) {
   try {
     const raw = await redis.lRange('history:' + member, 0, 999);
-    let count = 0;
-    for (const r of raw) {
-      const p = JSON.parse(r);
-      if (distance(lat, lon, p.lat, p.lon) <= radiusM) count++;
+    // Skupinuj body do návštěv — mezera > 30 minut = nová návštěva
+    const VISIT_GAP = 30 * 60 * 1000;
+    let visits = 0;
+    let inVisit = false;
+    let lastTs = null;
+    // History je seřazena od nejnovějšího — obratime
+    const points = raw.map(r => JSON.parse(r)).reverse();
+    for (const p of points) {
+      const nearby = distance(lat, lon, p.lat, p.lon) <= radiusM;
+      if (nearby) {
+        if (!inVisit || (lastTs && p.ts - lastTs > VISIT_GAP)) {
+          visits++;
+          inVisit = true;
+        }
+        lastTs = p.ts;
+      } else {
+        if (inVisit && lastTs && p.ts - lastTs > VISIT_GAP) {
+          inVisit = false;
+        }
+      }
     }
-    return count;
+    return visits;
   } catch(e) { return 0; }
 }
 
@@ -164,9 +189,18 @@ async function askClaude(member, lat, lon, context) {
 
   const { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source } = context;
 
-  const placesStr = placesNearby.length > 0
-    ? placesNearby.map(p => `  - ${p.name} (${p.primaryType || 'neznámý typ'}, ${p.dist}m${p.rating ? ', ★' + p.rating : ''})`).join('\n')
-    : '  Žádná místa nenalezena';
+  // Zvýrazni nejbližší místo — pokud je výrazně blíž než ostatní, je to pravděpodobný cíl
+  let placesStr = '  Žádná místa nenalezena';
+  if (placesNearby.length > 0) {
+    const nearest = placesNearby[0];
+    const second = placesNearby[1];
+    const nearestIsClose = nearest.dist < 50;
+    const nearestIsMuchCloser = second && nearest.dist < second.dist * 0.4;
+    placesStr = placesNearby.map((p, i) => {
+      const highlight = i === 0 && (nearestIsClose || nearestIsMuchCloser) ? ' ← NEJBLIŽŠÍ, pravděpodobný cíl' : '';
+      return `  - ${p.name} (${p.primaryType || 'neznámý typ'}, ${p.dist}m${p.rating ? ', ★' + p.rating : ''})${highlight}`;
+    }).join('\n');
+  }
 
   const nearbyStr = nearbyMembers.length > 0
     ? '\nDalší členové rodiny na tomto místě:\n' + nearbyMembers.map(m => `  - ${m.member} byl zde před ${m.minutesAgo} min`).join('\n')
@@ -184,6 +218,7 @@ Nejbližší místa z Google Places:
 ${placesStr}
 
 Rodina v ČR. Chceme ukládat: práce, obchod, lékař, restaurace, sport, škola, návštěvy. Nechceme: průjezdy, čekání v autě, GPS artefakty.
+Při pojmenování upřednostni NEJBLIŽŠÍ místo — vzdálenost je klíčový signál. Pokud je nejbližší místo < 50m, téměř jistě to je cíl.
 
 Odpověz POUZE jako JSON:
 {"should_save": true/false, "name": "název česky nebo null", "confidence": 0.0-1.0, "reason": "zdůvodnění česky"}`;
@@ -203,6 +238,7 @@ Odpověz POUZE jako JSON:
       JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 1000,
+        system: 'Odpovídáš POUZE validním JSON objektem bez markdown formátování, backtick bloků nebo jakéhokoliv dalšího textu.',
         messages: [{ role: 'user', content: prompt }]
       })
     );
@@ -212,23 +248,12 @@ Odpověz POUZE jako JSON:
 
     let result;
     try {
-      // Extrahuj JSON objekt mezi { a } — robustní i při oříznutém textu před/za
-      const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('JSON objekt nenalezen');
-      let jsonStr = jsonMatch[0];
-      // Pokud je JSON neúplný (oříznutý max_tokens), zkus opravit
-      try {
-        // Uzavři otevřený string, odstraň trailing čárku, uzavři objekt
-        jsonStr = jsonStr
-          .replace(/"[^"]*$/, '"...')   // uzavři neuzavřený string
-          .replace(/,\s*$/, '')          // odstraň trailing čárku
-          .replace(/\s*$/, '');          // trim
-        if (!jsonStr.endsWith('}')) jsonStr += '}';
-      } catch(fixErr) {}
-      result = JSON.parse(jsonStr);
-      // Normalizace — ujisti se že má povinná pole
-      if (typeof result.should_save !== 'boolean') result.should_save = false;
-      if (typeof result.confidence !== 'number') result.confidence = 0;
+      // Odstraň markdown backticky, komentáře a vše před { a za }
+      const cleaned = raw.replace(/```json|```/g, '').trim();
+      const jsonStart = cleaned.indexOf('{');
+      const jsonEnd = cleaned.lastIndexOf('}');
+      if (jsonStart === -1 || jsonEnd === -1) throw new Error('No JSON object found');
+      result = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
     } catch(e) {
       await logEvent('ai_error', { member, lat, lon, error: 'Nelze parsovat JSON: ' + raw, durationMs });
       return null;
@@ -248,8 +273,19 @@ Odpověz POUZE jako JSON:
 }
 
 // ─── Redis ────────────────────────────────────────────────────────────────────
-const redis = createClient({ socket: { host: REDIS_HOST, port: 6379 } });
-redis.on('error', e => console.error('Redis error:', e));
+const redisLive = createClient({ socket: { host: REDIS_HOST, port: 6379 } });
+const redisTest = createClient({ socket: { host: REDIS_TEST_HOST, port: 6379 } });
+redisLive.on('error', e => console.error('Redis LIVE error:', e));
+redisTest.on('error', e => console.error('Redis TEST error:', e));
+
+let currentMode = 'live';
+let redis = redisLive;
+
+function setMode(mode) {
+  currentMode = mode;
+  redis = mode === 'live' ? redisLive : redisTest;
+  console.log(`[MODE] Přepnuto na: ${mode.toUpperCase()}`);
+}
 
 const app = express();
 app.use(express.json());
@@ -283,12 +319,17 @@ function resolveMotion(motionActivities, vel) {
   // Stojí — nepřepisuj geofence status
   if (acts.includes('stationary') && speed < 3) return null;
 
+  // Automotive nebo cycling vždy vrátí auto/kolo bez ohledu na vel
+  // (GPS drift způsobuje nízké vel i při jízdě)
+  if (acts.includes('automotive')) return 'auto';
+  if (acts.includes('cycling') && speed > 1) return 'kolo';
+
   // Velmi pomalý pohyb nebo stojí
   if (speed < 1) return null;
 
   // ── Pěšky: 1–5 km/h ──────────────────────────────────────────────────────
   if (speed <= 5) {
-    if (acts.includes('running')) return 'běh';  // kratší krok, ale rychlý
+    if (acts.includes('running')) return 'běh';
     return 'pěšky';
   }
 
@@ -296,7 +337,7 @@ function resolveMotion(motionActivities, vel) {
   if (speed <= 15) {
     if (acts.includes('running'))  return 'běh';
     if (acts.includes('cycling'))  return 'kolo';
-    if (acts.includes('walking'))  return 'pěšky';
+    if (acts.includes('walking') && speed <= 10)  return 'pěšky';
     if (acts.includes('automotive')) return 'auto';
     // Bez motion: 6-10 spíš běh, 10-15 spíš kolo
     return speed <= 10 ? 'běh' : 'kolo';
@@ -315,9 +356,58 @@ function resolveMotion(motionActivities, vel) {
   return 'auto';
 }
 
+// ─── Geofence hystereze ──────────────────────────────────────────────────────
+// Geofence se aplikuje až po N po sobě jdoucích bodech uvnitř s nízkou rychlostí
+const FENCE_CONFIRM_MS = 2 * 60 * 1000; // 2 minuty simTime
+const memberFenceHyst = {}; // { member: { fenceId, firstTs } }
+
+function confirmFence(member, fenceName, fenceId, isMovingFast, ts) {
+  if (isMovingFast) {
+    memberFenceHyst[member] = null;
+    return false;
+  }
+  const h = memberFenceHyst[member];
+  if (!h || h.fenceId !== fenceId || ts < h.firstTs) {
+    memberFenceHyst[member] = { fenceId, firstTs: ts };
+    return false;
+  }
+  const elapsed = ts - h.firstTs;
+  return elapsed >= FENCE_CONFIRM_MS;
+}
+
+// ─── Motion hystereze ────────────────────────────────────────────────────────
+// Ukládá posledních N motion stavů pro každého člena
+// Přechod na nový stav jen pokud je konzistentní N bodů za sebou
+const MOTION_HISTORY_SIZE = 3; // počet bodů pro potvrzení změny
+const memberMotionHistory = {}; // { member: ['auto','auto','pesky'] }
+
+function resolveMotionWithHysteresis(member, motionActivities, vel) {
+  const newMotion = resolveMotion(motionActivities, vel);
+
+  if (!memberMotionHistory[member]) memberMotionHistory[member] = [];
+  const history = memberMotionHistory[member];
+
+  // Přidej nový stav do historie
+  history.push(newMotion);
+  if (history.length > MOTION_HISTORY_SIZE) history.shift();
+
+  // Vrať nový stav jen pokud jsou poslední N bodů stejné
+  if (history.length < MOTION_HISTORY_SIZE) return history[0]; // málo dat — vrať první
+  const allSame = history.every(m => m === newMotion);
+  if (allSame) return newMotion;
+
+  // Nekonzistentní — vrať nejčastější stav z historie
+  const counts = {};
+  for (const m of history) counts[m] = (counts[m] || 0) + 1;
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+}
+
 // ─── Tracker ──────────────────────────────────────────────────────────────────
 const trackers = {};
 const recentlyDetected = {};
+
+// Paměť posledního způsobu pohybu — aby rozjezd autem neskočil na kolo
+const lastMotion = {};  // member → { motion, ts }
 
 function getTracker(member) {
   if (!trackers[member]) trackers[member] = { cluster: null, lastPoint: null };
@@ -328,14 +418,14 @@ async function saveTracker(member) {
   try {
     const t = trackers[member];
     if (!t) return;
-    await redis.set('tracker:' + member, JSON.stringify({ cluster: t.cluster, lastPoint: t.lastPoint }));
+    await redisLive.set('tracker:' + member, JSON.stringify({ cluster: t.cluster, lastPoint: t.lastPoint }));
   } catch(e) {}
 }
 
 async function loadTrackers() {
   for (const m of MEMBERS) {
     try {
-      const raw = await redis.get('tracker:' + m);
+      const raw = await redisLive.get('tracker:' + m);
       if (raw) {
         trackers[m] = JSON.parse(raw);
         const t = trackers[m];
@@ -363,7 +453,7 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source) {
   }
 
   // Známé místo — nepřidávat znovu
-  const alreadyKnown = dynamicFences.some(f => distance(lat, lon, f.lat, f.lon) < CLUSTER_RADIUS);
+  const alreadyKnown = dynamicFences.some(f => distance(lat, lon, f.lat, f.lon) < Math.max(f.radius, CLUSTER_RADIUS));
   if (alreadyKnown) {
     console.log(`[STOP] Známé místo @ ${lat.toFixed(5)},${lon.toFixed(5)}, přeskakuji`);
     return;
@@ -463,8 +553,16 @@ async function detectSilentStop(member, prevPoint, newLat, newLon, newTs) {
   if (timeDiff > SILENCE_MAX_GAP) return;
   if (spaceDiff < SILENCE_MIN_DIST) return;
 
+  // Filtruj rychlou jízdu — pokud vzdálenost odpovídá jízdě autem (>30km/h), ignoruj
+  // (timeDiff v ms, spaceDiff v m → rychlost v km/h)
+  const speedKmh = (spaceDiff / (timeDiff / 1000)) * 3.6;
+  if (speedKmh > 30) {
+    // Příliš rychlý pohyb — není to silence stop ale jízda se simulovaným časem
+    return;
+  }
+
   const gapMinutes = Math.round(timeDiff / 60000);
-  console.log(`[SILENCE] [${member}] mezera ${gapMinutes}min, vzdálenost ${Math.round(spaceDiff)}m`);
+  console.log(`[SILENCE] [${member}] mezera ${gapMinutes}min, vzdálenost ${Math.round(spaceDiff)}m, ${Math.round(speedKmh)}km/h`);
 
   await processStopCandidate(member, prevPoint.lat, prevPoint.lon, gapMinutes, 'silence');
 }
@@ -473,14 +571,16 @@ async function detectSilentStop(member, prevPoint, newLat, newLon, newTs) {
 // Move mode: husté body v malém okruhu = reálná zastávka.
 async function evaluateCluster(member, cluster) {
   if (!cluster || cluster.points.length < MIN_STOP_POINTS) return;
-  const duration = Date.now() - cluster.startTs;
+  // Pouzij ts posledniho bodu misto Date.now() — funguje i se simulovanym casem
+  const lastTs = cluster.points[cluster.points.length - 1].ts;
+  const duration = lastTs - cluster.startTs;
   if (duration < MIN_STOP_DURATION) return;
   const center = clusterCenter(cluster.points);
   await processStopCandidate(member, center.lat, center.lon, Math.round(duration / 60000), 'cluster');
 }
 
 // ─── Hlavní tracker ───────────────────────────────────────────────────────────
-async function updateTracker(member, lat, lon, ts) {
+async function updateTracker(member, lat, lon, ts, motionActivities = []) {
   const tracker = getTracker(member);
 
   if (tracker.lastPoint) {
@@ -497,13 +597,20 @@ async function updateTracker(member, lat, lon, ts) {
   const center = clusterCenter(tracker.cluster.points);
   const dist = distance(lat, lon, center.lat, center.lon);
 
-  if (dist <= CLUSTER_RADIUS) {
-    tracker.cluster.points.push({ lat, lon, ts });
+  // Automotive uzavře cluster jen pokud cluster obsahuje stationary body (bylo stání)
+  const isAutomotive = motionActivities.includes('automotive') || motionActivities.includes('cycling');
+  const clusterHasStationary = tracker.cluster.points.some(p => p.stationary);
+  const forceClose = isAutomotive && clusterHasStationary;
+
+  if (dist <= CLUSTER_RADIUS && !forceClose) {
+    // Ulož info o pohybu do bodu
+    tracker.cluster.points.push({ lat, lon, ts, stationary: !isAutomotive });
     console.log(`[TRACK] [${member}] V clusteru dist=${Math.round(dist)}m dur=${Math.round((ts - tracker.cluster.startTs)/60000)}min pts=${tracker.cluster.points.length}`);
-  } else if (dist > LEAVE_RADIUS) {
-    console.log(`[TRACK] [${member}] odchod dist=${Math.round(dist)}m`);
+  } else if (dist > LEAVE_RADIUS || forceClose) {
+    if (forceClose) console.log(`[TRACK] [${member}] automotive uzavrel stani dist=${Math.round(dist)}m`);
+    else console.log(`[TRACK] [${member}] odchod dist=${Math.round(dist)}m`);
     await evaluateCluster(member, tracker.cluster);
-    tracker.cluster = { points: [{ lat, lon, ts }], startTs: ts };
+    tracker.cluster = { points: [{ lat, lon, ts, stationary: !isAutomotive }], startTs: ts };
   } else {
     console.log(`[TRACK] [${member}] přechodná zóna dist=${Math.round(dist)}m`);
   }
@@ -534,6 +641,7 @@ function getAvailableImages(dir) {
 async function suggestImageForStatus(status) {
   if (!status || status === 'cesta' || status === 'neznamo') return null;
 
+  console.log(`[IMG] suggestImageForStatus called: "${status}"`);
   const cacheKey = 'imgcache:' + status.toLowerCase();
   try {
     const cached = await redis.get(cacheKey);
@@ -541,7 +649,7 @@ async function suggestImageForStatus(status) {
       console.log(`[IMG] Cache hit: "${status}" → "${cached || 'žádný'}"`);
       return cached || null;
     }
-  } catch(e) {}
+  } catch(e) { console.log(`[IMG] Cache error: ${e.message}`); }
 
   // Vyber správnou složku podle typu statusu
   const dir = isMotionStatus(status) ? IMG_DIR_MOTION : IMG_DIR_PLACES;
@@ -595,25 +703,271 @@ Odpověz POUZE názvem souboru nebo prázdným stringem, bez jakéhokoliv dalš�
   }
 }
 
-async function processGPS(member, lat, lon, motionActivities = [], vel = 0) {
-  const ts = Date.now();
-  let status = resolveStatus(member, lat, lon);
-  // Pokud je na cestě, upřesni pohyb
-  const motion = resolveMotion(motionActivities, vel);
-  if (status === 'cesta' && motion) status = motion;
+async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simTs = null, forceLive = false, source = 'unknown') {
+  const ts = simTs || Date.now();
+  // MQTT a live zdroje vždy zapisují do live Redis bez ohledu na mód
+  const activeRedis = (forceLive || currentMode === 'live') ? redisLive : redis;
+  let status = resolveStatus(member, lat, lon, vel, motionActivities, simTs || Date.now());
+  // Pohyb má přednost před geofence — kromě doma
+  let motion = resolveMotion(motionActivities, vel);
+
+  // Pokud motionActivities explicitně říká automotive → vždy auto bez ohledu na vel
+  if (motionActivities.includes('automotive')) {
+    motion = 'auto';
+  } else if (motionActivities.includes('cycling')) {
+    motion = motion || 'kolo';
+  }
+
+  // Pokud je pohyb nejasný (kolo při nízkých rychlostech), zkus použít poslední známý pohyb
+  // — aby rozjezd autem neskočil na kolo
+  const MOTION_MEMORY_MS = 5 * 60 * 1000; // 5 minut
+  if (motion && motion !== 'auto' && motion !== 'pěšky' && motion !== 'běh') {
+    const last = lastMotion[member];
+    if (last && last.motion === 'auto' && (ts - last.ts) < MOTION_MEMORY_MS) {
+      motion = 'auto';
+    }
+  }
+
+  // Ulož poslední pohyb do paměti (jen smysluplné hodnoty)
+  if (motion) {
+    lastMotion[member] = { motion, ts };
+  }
+
+  // Motion přepisuje status pouze pokud jsme na cestě (ne uvnitř geofence)
+  if (motion) {
+    if (status === 'cesta') {
+      // GPS drift — bod těsně mimo fence radius ale stojíme (ne automotive/cycling)
+      const isMovingFast = ((motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel > 5) || vel > 15;
+      if (!isMovingFast) {
+        const nearFence = dynamicFences.find(f =>
+          (!f.only || f.only.includes(member)) &&
+          distance(lat, lon, f.lat, f.lon) < f.radius * 1.5
+        );
+        if (nearFence && confirmFence(member, nearFence.name, nearFence.id, false, simTs || Date.now())) {
+          status = nearFence.name;
+        } else {
+          status = motion;
+        }
+      } else {
+        status = motion;
+      }
+    }
+    // Pokud jsme doma a pohybujeme se — necháme doma
+  }
   const img = await suggestImageForStatus(status);
   const data = { status, lat, lon, ts, img };
-  await redis.set('member:' + member, JSON.stringify(data));
-  await redis.lPush('history:' + member, JSON.stringify({ lat, lon, ts, status }));
-  await redis.lTrim('history:' + member, 0, 999);
+  await activeRedis.set('member:' + member, JSON.stringify(data));
+  await activeRedis.lPush('history:' + member, JSON.stringify({ lat, lon, ts, status }));
+  await activeRedis.lTrim('history:' + member, 0, 999);
   broadcast({ type: 'update', member, ...data });
-  await logEvent('gps_received', { member, lat, lon, status });
+  await logEvent('gps_received', { member, lat, lon, status, vel, motionActivities, source });
   console.log(`[GPS] [${member}] ${status} (${lat.toFixed(5)}, ${lon.toFixed(5)}) vel=${vel} motion=${(motionActivities||[]).join(",")}`);
-  await updateTracker(member, lat, lon, ts);
+  await updateTracker(member, lat, lon, ts, motionActivities);
   return status;
 }
 
+// ─── Server-side simulace ────────────────────────────────────────────────────
+const activeSimulations = {}; // { member: { timer, step, coords, simTime, stayTimer } }
+
+function simCalcVel(lat1, lon1, lat2, lon2, intervalMs) {
+  const d = distance(lat1, lon1, lat2, lon2);
+  return (d / (intervalMs / 1000)) * 3.6;
+}
+
+async function simSendGPSServer(member, lat, lon, vel, motionactivities, simTs) {
+  await processGPS(member, lat, lon, motionactivities, vel, simTs, false, 'sim');
+}
+
+async function runSimStep(member) {
+  const sim = activeSimulations[member];
+  if (!sim || !sim.active) return;
+
+  const { coords, step, speed } = sim;
+
+  if (step >= coords.length) {
+    // Dorazili jsme — spustí callback
+    sim.active = false;
+    broadcast({ type: 'sim_arrived', member, lat: coords[coords.length-1][0], lon: coords[coords.length-1][1] });
+    return;
+  }
+
+  const [lat, lon] = coords[step];
+  const intervalMs = 3000 / speed;
+  sim.simTime += 3000;
+
+  // Rychlost pevně podle profilu
+  const profileVel = sim.profile === 'foot-walking' ? 5 :
+                     sim.profile === 'cycling-regular' ? 15 : 40;
+  const vel = step < 3 ? Math.round(profileVel * step / 3) : profileVel;
+
+  const motionactivities = sim.profile === 'foot-walking' ? ['walking'] :
+                           sim.profile === 'cycling-regular' ? ['cycling'] : ['automotive'];
+
+  await simSendGPSServer(member, lat, lon, Math.round(vel), motionactivities, sim.simTime);
+  sim.step++;
+
+  broadcast({ type: 'sim_progress', member, step: sim.step, total: coords.length, vel: Math.round(vel) });
+
+  sim.timer = setTimeout(() => runSimStep(member), intervalMs);
+}
+
+async function runSimStay(member, lat, lon, minutes, onDone) {
+  const sim = activeSimulations[member];
+  if (!sim) return;
+
+  const speed = sim.speed;
+  const totalPoints = Math.max(minutes * 2, 5);
+  const interval = (minutes * 60 * 1000) / speed / totalPoints;
+  sim.stayActive = true;
+  sim.stayStep = 0;
+  sim.stayTotal = totalPoints;
+
+  const doStep = async () => {
+    if (!sim.stayActive || !activeSimulations[member]) return;
+    const dLat = (Math.random() - 0.5) * 0.00025;
+    const dLon = (Math.random() - 0.5) * 0.00025;
+    sim.simTime += 30000;
+    if (sim.stayStep === 0) console.log(`[SIM] Stay start simTime=${sim.simTime}`);
+    await simSendGPSServer(member, lat + dLat, lon + dLon, 0, ['stationary'], sim.simTime);
+    sim.stayStep++;
+    broadcast({ type: 'sim_staying', member, step: sim.stayStep, total: totalPoints, minutes });
+
+    if (sim.stayStep >= totalPoints) {
+      sim.stayActive = false;
+      if (onDone) onDone();
+    } else {
+      sim.timer = setTimeout(doStep, interval);
+    }
+  };
+  doStep();
+}
+
 // ─── API ──────────────────────────────────────────────────────────────────────
+
+// ─── Mode přepínání ──────────────────────────────────────────────────────────
+app.get('/mode', (req, res) => {
+  res.json({ mode: currentMode });
+});
+
+app.post('/mode', async (req, res) => {
+  const { mode } = req.body;
+  if (!['live', 'test'].includes(mode)) return res.status(400).json({ error: 'mode must be live or test' });
+  // Při přepnutí do testu zkopíruj geofences z live
+  if (mode === 'test' && currentMode === 'live') {
+    try {
+      const fencesRaw = await redisLive.get('geofences');
+      if (fencesRaw) {
+        await redisTest.set('geofences', fencesRaw);
+        console.log('[MODE] Geofences zkopírovány z LIVE do TEST');
+      }
+    } catch(e) { console.error('[MODE] Chyba kopírování geofences:', e.message); }
+  }
+  setMode(mode);
+  Object.keys(trackers).forEach(m => { trackers[m] = { cluster: null, lastPoint: null }; });
+  await loadFences();
+  await loadTrackers();
+  broadcast({ type: 'mode_changed', mode: currentMode });
+  res.json({ ok: true, mode: currentMode });
+});
+
+// Simulace — start trasy
+app.post('/simulate/route', async (req, res) => {
+  const { member, coords, profile = 'driving-car', speed = 5 } = req.body;
+  if (!member || !coords || !coords.length) return res.status(400).json({ error: 'member a coords required' });
+  if (!MEMBERS.includes(member)) return res.status(404).json({ error: 'Unknown member' });
+
+  // Zastav předchozí simulaci
+  if (activeSimulations[member]) {
+    activeSimulations[member].active = false;
+    activeSimulations[member].stayActive = false;
+    if (activeSimulations[member].timer) clearTimeout(activeSimulations[member].timer);
+  }
+
+  activeSimulations[member] = {
+    active: true, stayActive: false,
+    coords, step: 0, profile, speed,
+    simTime: Date.now(), timer: null
+  };
+
+  // Reset fence hystereze při startu nového úseku
+  memberFenceHyst[member] = null;
+  console.log(`[SIM] Start trasy pro ${member}: ${coords.length} bodů, profil=${profile}, rychlost=${speed}x`);
+  runSimStep(member);
+  res.json({ ok: true, member, points: coords.length });
+});
+
+// Simulace — stání na místě
+app.post('/simulate/stay', async (req, res) => {
+  const { member, lat, lon, minutes = 10, speed = 5 } = req.body;
+  if (!member || !lat || !lon) return res.status(400).json({ error: 'member, lat, lon required' });
+
+  if (activeSimulations[member]) {
+    activeSimulations[member].active = false;
+    activeSimulations[member].stayActive = false;
+    if (activeSimulations[member].timer) clearTimeout(activeSimulations[member].timer);
+  }
+
+  activeSimulations[member] = {
+    active: false, stayActive: false,
+    coords: [], step: 0, speed,
+    simTime: Date.now(), timer: null
+  };
+
+  console.log(`[SIM] Stání pro ${member}: ${minutes} min na ${lat.toFixed(5)},${lon.toFixed(5)}`);
+  // Reset tracker před stáním — aby cluster obsahoval jen stationary body
+  const stayStartTs = activeSimulations[member].simTime;
+  const tracker = getTracker(member);
+  tracker.cluster = null;  // reset — prvni stationary bod inicializuje novy cluster
+  await saveTracker(member);
+
+  runSimStay(member, lat, lon, minutes, async () => {
+    const tracker2 = getTracker(member);
+    if (tracker2.cluster && tracker2.cluster.points.length >= MIN_STOP_POINTS) {
+      const dur = Math.round((tracker2.cluster.points[tracker2.cluster.points.length-1].ts - tracker2.cluster.startTs) / 60000);
+      console.log(`[SIM] Vyhodnocuji cluster po stání: ${tracker2.cluster.points.length} bodů, dur=${dur}min`);
+      await evaluateCluster(member, tracker2.cluster);
+      tracker2.cluster = null;
+      await saveTracker(member);
+    } else {
+      console.log(`[SIM] Cluster po stání: ${tracker2.cluster?.points.length || 0} bodů — málo pro vyhodnocení`);
+    }
+    broadcast({ type: 'sim_arrived', member, lat, lon, afterStay: true });
+    delete activeSimulations[member];
+  });
+  res.json({ ok: true, member, minutes });
+});
+
+// Simulace — stop
+app.post('/simulate/speed', (req, res) => {
+  const { member, speed } = req.body;
+  if (!member || !speed) return res.status(400).json({ error: 'member a speed required' });
+  if (activeSimulations[member]) {
+    activeSimulations[member].speed = parseInt(speed);
+    console.log(`[SIM] Rychlost ${member} → ${speed}x`);
+  }
+  res.json({ ok: true });
+});
+
+app.post('/simulate/stop', (req, res) => {
+  const { member } = req.body;
+  if (activeSimulations[member]) {
+    activeSimulations[member].active = false;
+    activeSimulations[member].stayActive = false;
+    if (activeSimulations[member].timer) clearTimeout(activeSimulations[member].timer);
+    delete activeSimulations[member];
+    broadcast({ type: 'sim_stopped', member });
+  }
+  res.json({ ok: true });
+});
+
+// Simulace — stav
+app.get('/simulate/status', (req, res) => {
+  const out = {};
+  for (const [m, s] of Object.entries(activeSimulations)) {
+    out[m] = { active: s.active, stayActive: s.stayActive, step: s.step, total: s.coords.length, speed: s.speed };
+  }
+  res.json(out);
+});
 
 app.get('/status', async (req, res) => {
   try {
@@ -632,7 +986,10 @@ app.post('/gps/:member', async (req, res) => {
   const lat = parseFloat(req.body.lat);
   const lon = parseFloat(req.body.lon);
   if (isNaN(lat) || isNaN(lon)) return res.status(400).json({ error: 'lat and lon required' });
-  const status = await processGPS(member, lat, lon);
+  const motionactivities = req.body.motionactivities || [];
+  const vel = parseFloat(req.body.vel) || 0;
+  const simTs = req.body.ts ? parseInt(req.body.ts) : null;
+  const status = await processGPS(member, lat, lon, motionactivities, vel, simTs, false, 'http');
   res.json({ ok: true, member, status });
 });
 
@@ -640,10 +997,28 @@ app.post('/status/:member', async (req, res) => {
   const { member } = req.params;
   if (!MEMBERS.includes(member)) return res.status(404).json({ error: 'Unknown member' });
   const { status } = req.body;
-  const data = { status, lat: null, lon: null, ts: Date.now(), manual: true };
+  // Zachovej poslední GPS pozici
+  const existing = await redis.get('member:' + member);
+  const prev = existing ? JSON.parse(existing) : {};
+  // Pokud je cesta, upřesni pohyb z posledního známého stavu
+  let finalStatus = status;
+  if (status === 'cesta' && prev.lat) {
+    const history = await redis.lRange('history:' + member, 0, 2);
+    if (history.length >= 2) {
+      const p1 = JSON.parse(history[0]);
+      const p2 = JSON.parse(history[1]);
+      const timeDiff = (p1.ts - p2.ts) / 1000;
+      const distM = distance(p1.lat, p1.lon, p2.lat, p2.lon);
+      const vel = timeDiff > 0 ? (distM / timeDiff) * 3.6 : 0;
+      const motion = resolveMotion([], vel);
+      if (motion) finalStatus = motion;
+    }
+  }
+  const img = await suggestImageForStatus(finalStatus);
+  const data = { status: finalStatus, lat: prev.lat || null, lon: prev.lon || null, ts: Date.now(), manual: true, img };
   await redis.set('member:' + member, JSON.stringify(data));
   broadcast({ type: 'update', member, ...data });
-  res.json({ ok: true, member, status });
+  res.json({ ok: true, member, status: finalStatus });
 });
 
 app.get('/places', async (req, res) => {
@@ -771,19 +1146,28 @@ app.get('/logs', async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 50, 500);
     const filterType = req.query.type || null;
     const filterMember = req.query.member || null;
-    const keys = await redis.lRange('log:index', 0, limit * 5);
+    const totalKeys = await redis.lLen('log:index');
+    const BATCH = 200;
     const results = [];
-    for (const key of keys) {
-      if (results.length >= limit) break;
-      try {
-        const raw = await redis.get(key);
-        if (!raw) continue;
-        const entry = JSON.parse(raw);
-        if (filterType && entry.type !== filterType) continue;
-        if (filterMember && entry.member !== filterMember) continue;
-        results.push(entry);
-      } catch(e) { continue; }
+    let offset = 0;
+
+    while (results.length < limit && offset < totalKeys) {
+      const keys = await redis.lRange('log:index', offset, offset + BATCH - 1);
+      if (!keys.length) break;
+      for (const key of keys) {
+        if (results.length >= limit) break;
+        try {
+          const raw = await redis.get(key);
+          if (!raw) continue;
+          const entry = JSON.parse(raw);
+          if (filterType && entry.type !== filterType) continue;
+          if (filterMember && entry.member !== filterMember) continue;
+          results.push(entry);
+        } catch(e) { continue; }
+      }
+      offset += BATCH;
     }
+
     res.json({ count: results.length, logs: results });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -846,7 +1230,7 @@ async function startMqtt() {
       const lat = parseFloat(msg.lat);
       const lon = parseFloat(msg.lon);
       if (isNaN(lat) || isNaN(lon)) return;
-      await processGPS(member, lat, lon, msg.motionactivities || [], msg.vel || 0);
+      await processGPS(member, lat, lon, msg.motionactivities || [], msg.vel || 0, null, true);
     } catch(e) { console.error('MQTT error:', e.message); }
   });
   client.on('error', e => console.error('MQTT error:', e));
@@ -854,8 +1238,10 @@ async function startMqtt() {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 async function main() {
-  await redis.connect();
-  console.log('✓ Redis připojeno');
+  await redisLive.connect();
+  await redisTest.connect();
+  console.log('✓ Redis LIVE připojeno');
+  console.log('✓ Redis TEST připojeno');
   await loadFences();
   await loadTrackers();
   await startMqtt();
