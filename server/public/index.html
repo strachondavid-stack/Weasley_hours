@@ -1675,6 +1675,13 @@ setInterval(()=>{
 .sc-stop-name { font-size:13px;font-weight:600;color:#222 }
 .sc-stop-detail { font-size:11px;color:#999;margin-top:1px }
 .sc-run-row { display:flex;gap:6px;align-items:center;flex-wrap:wrap }
+.sc-queue-bar { display:none;padding:8px 12px;background:#f0f4ff;border-bottom:1px solid #dde;flex-shrink:0;align-items:center;gap:8px;flex-wrap:wrap }
+.sc-queue-bar.visible { display:flex }
+.sc-queue-count { font-size:13px;font-weight:600;color:#3b5bdb }
+.sc-queue-items { font-size:12px;color:#666;flex:1 }
+.sc-card.queued { border-color:#3b5bdb;background:#f8f9ff }
+.sc-card.queued .sc-card-header { background:#f0f4ff }
+.sc-queue-badge { font-size:10px;background:#3b5bdb;color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px }
 </style>
 
 <!-- toolbar -->
@@ -1696,6 +1703,14 @@ setInterval(()=>{
   </select>
   <button class="sc-btn danger" id="sc-stop-btn" onclick="scStopAll()" style="display:none">■ Zastavit</button>
   <span id="sc-global-status" style="font-size:12px;color:#aaa;margin-left:4px"></span>
+</div>
+
+<!-- fronta scénářů -->
+<div class="sc-queue-bar" id="sc-queue-bar">
+  <span class="sc-queue-count" id="sc-queue-count">0 ve frontě</span>
+  <span class="sc-queue-items" id="sc-queue-items"></span>
+  <button class="sc-btn primary" id="sc-queue-run-btn" onclick="scRunQueue()">▶▶ Spustit frontu</button>
+  <button class="sc-btn" onclick="scClearQueue()">✕ Vymazat</button>
 </div>
 
 <!-- progress -->
@@ -1783,6 +1798,7 @@ function renderScCard(s) {
       <div class="sc-stops">${stopsHtml}</div>
       <div class="sc-run-row">
         <button class="sc-btn primary" onclick="scRun('${s.id}')" ${scRunning?'disabled':''}>▶ Spustit</button>
+        <button class="sc-btn" onclick="scToggleQueue('${s.id}')" id="sc-qbtn-${s.id}">${scQueue.includes('${s.id}') ? '✓ Ve frontě' : '+ Fronta'}</button>
         <span style="font-size:12px;color:#aaa">člena: <b id="sc-run-member-label">${document.getElementById('sc-member')?.value||'?'}</b> · rychlost: <b id="sc-run-speed-label">${document.getElementById('sc-speed')?.value||'?'}×</b></span>
       </div>
     </div>
@@ -1980,6 +1996,48 @@ function scDoRoute(member, from, to, mode, speed, simTime, onProgress) {
 }
 
 let scPreviewMarker = null;
+let scQueue = []; // fronta scénářů
+
+function scToggleQueue(id) {
+  const idx = scQueue.indexOf(id);
+  if (idx > -1) scQueue.splice(idx, 1);
+  else scQueue.push(id);
+  scUpdateQueueUI();
+  renderScenarios();
+}
+
+function scClearQueue() {
+  scQueue = [];
+  scUpdateQueueUI();
+  renderScenarios();
+}
+
+function scUpdateQueueUI() {
+  const bar = document.getElementById('sc-queue-bar');
+  const count = document.getElementById('sc-queue-count');
+  const items = document.getElementById('sc-queue-items');
+  if (scQueue.length === 0) {
+    bar.classList.remove('visible');
+    return;
+  }
+  bar.classList.add('visible');
+  count.textContent = scQueue.length + ' ve frontě';
+  const names = scQueue.map(id => SC_SCENARIOS.find(s => s.id === id)?.title || id);
+  items.textContent = names.join(' → ');
+}
+
+async function scRunQueue() {
+  if (scRunning || scQueue.length === 0) return;
+  const queue = [...scQueue];
+  scQueue = [];
+  scUpdateQueueUI();
+  for (const id of queue) {
+    if (scAbort) break;
+    await scRun(id);
+    // Krátká pauza mezi scénáři
+    if (!scAbort) await new Promise(r => setTimeout(r, 1000));
+  }
+}
 
 function scShowOnMap(lat, lon, name) {
   showPage('map');
