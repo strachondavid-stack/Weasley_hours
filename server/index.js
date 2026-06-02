@@ -611,11 +611,23 @@ async function updateTracker(member, lat, lon, ts, motionActivities = []) {
   if (dist <= CLUSTER_RADIUS && !forceClose) {
     // Ulož info o pohybu do bodu
     tracker.cluster.points.push({ lat, lon, ts, stationary: !isAutomotive });
-    console.log(`[TRACK] [${member}] V clusteru dist=${Math.round(dist)}m dur=${Math.round((ts - tracker.cluster.startTs)/60000)}min pts=${tracker.cluster.points.length}`);
+    const durMin = Math.round((ts - tracker.cluster.startTs) / 60000);
+    console.log(`[TRACK] [${member}] V clusteru dist=${Math.round(dist)}m dur=${durMin}min pts=${tracker.cluster.points.length}`);
+    // Průběžná detekce po 10 minutách — nečekej na odchod
+    if (!tracker.cluster.earlyDetected && durMin >= 10 && tracker.cluster.points.length >= MIN_STOP_POINTS) {
+      tracker.cluster.earlyDetected = true;
+      console.log(`[TRACK] [${member}] Průběžná detekce po ${durMin} min`);
+      evaluateCluster(member, tracker.cluster); // async, neblokuj
+    }
   } else if (dist > LEAVE_RADIUS || forceClose) {
     if (forceClose) console.log(`[TRACK] [${member}] automotive uzavrel stani dist=${Math.round(dist)}m`);
     else console.log(`[TRACK] [${member}] odchod dist=${Math.round(dist)}m`);
-    await evaluateCluster(member, tracker.cluster);
+    // Pokud už proběhla průběžná detekce, nespouštěj znovu (deduplikace ochrání ale zbytečný AI call)
+    if (!tracker.cluster.earlyDetected) {
+      await evaluateCluster(member, tracker.cluster);
+    } else {
+      console.log(`[TRACK] [${member}] Přeskočeno — průběžná detekce již proběhla`);
+    }
     tracker.cluster = { points: [{ lat, lon, ts, stationary: !isAutomotive }], startTs: ts };
   } else {
     console.log(`[TRACK] [${member}] přechodná zóna dist=${Math.round(dist)}m`);
