@@ -877,7 +877,10 @@ function renderChips(){
     const chip=document.createElement('div');
     chip.className='member-chip';chip.id='chip-'+key;
     chip.innerHTML=`<div class="chip-dot" style="background:${m.color}"></div><span class="chip-name">${m.name}</span><span class="chip-status">${label}</span>`;
-    chip.onclick=()=>{if(markers[key]){map.setView(markers[key].getLatLng(),15);markers[key].openPopup();}};
+    chip.onclick=()=>{
+      if(markers[key]){map.setView(markers[key].getLatLng(),15);markers[key].openPopup();showPage('map');}
+      else if(memberState[key]?.lat){map.setView([memberState[key].lat,memberState[key].lon],15);showPage('map');}
+    };
     bar.appendChild(chip);
   });
 }
