@@ -1759,7 +1759,7 @@ function renderScCard(s) {
         ${hasNext ? '<div class="sc-stop-connector"></div>' : ''}
       </div>
       <div class="sc-stop-text">
-        <div class="sc-stop-name" onclick="showPage('map');setTimeout(()=>map.setView([${st.lat},${st.lon}],15),80)" style="cursor:pointer" title="Zobrazit na mapě">${st.icon||'📍'} ${st.name} <span style="font-size:10px;color:#bbb">🗺</span></div>
+        <div class="sc-stop-name" onclick="scShowOnMap(${st.lat},${st.lon},'${st.name.replace(/'/g,"\\'")}')" style="cursor:pointer" title="Zobrazit na mapě">${st.icon||'📍'} ${st.name} <span style="font-size:10px;color:#bbb">🗺</span></div>
         <div class="sc-stop-detail">${stayStr}${noteStr}</div>
         ${nextNote}
       </div>
@@ -1977,6 +1977,29 @@ function scDoRoute(member, from, to, mode, speed, simTime, onProgress) {
       if (!done) { ws.removeEventListener('message', handler); resolve(finalSimTime); }
     }, safetyMs);
   });
+}
+
+let scPreviewMarker = null;
+
+function scShowOnMap(lat, lon, name) {
+  showPage('map');
+  setTimeout(() => {
+    map.setView([lat, lon], 14);
+    // Odstraň předchozí preview špendlík
+    if (scPreviewMarker) { map.removeLayer(scPreviewMarker); scPreviewMarker = null; }
+    // Vytvoř nový špendlík
+    scPreviewMarker = L.marker([lat, lon], {
+      icon: L.divIcon({
+        className: '',
+        html: `<div style="width:32px;height:32px;border-radius:50%;background:#e63946;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;font-size:14px">📍</div>`,
+        iconSize: [32,32], iconAnchor: [16,16], popupAnchor: [0,-18]
+      })
+    }).addTo(map).bindPopup(`<b>${name}</b><br><span style="font-size:11px;color:#aaa">${lat.toFixed(5)}, ${lon.toFixed(5)}</span>`).openPopup();
+    // Zmizí po 10 sekundách
+    setTimeout(() => {
+      if (scPreviewMarker) { map.removeLayer(scPreviewMarker); scPreviewMarker = null; }
+    }, 10000);
+  }, 80);
 }
 
 function scStopAll() {
