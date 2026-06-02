@@ -842,6 +842,32 @@ async function runSimStay(member, lat, lon, minutes, onDone) {
   doStep();
 }
 
+// ─── OSRM fetch ───────────────────────────────────────────────────────────────
+async function fetchOSRMRoute(fromLat, fromLon, toLat, toLon, profile = 'driving-car') {
+  const osrmProfile = profile === 'cycling-regular' ? 'bike' : profile === 'foot-walking' ? 'foot' : 'driving';
+  try {
+    const url = `https://router.project-osrm.org/route/v1/${osrmProfile}/${fromLon},${fromLat};${toLon},${toLat}?overview=full&geometries=geojson`;
+    const data = await new Promise((resolve, reject) => {
+      const req = require('https').get(url, (res) => {
+        let d = '';
+        res.on('data', chunk => d += chunk);
+        res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
+      });
+      req.on('error', reject);
+      req.setTimeout(15000, () => { req.destroy(); reject(new Error('OSRM timeout')); });
+    });
+    if (data.routes && data.routes[0]) {
+      return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+    }
+  } catch(e) {
+    console.error('[OSRM] Chyba:', e.message);
+  }
+  // Fallback: přímá čára
+  const pts = [];
+  for (let i = 0; i <= 20; i++) pts.push([fromLat + (toLat-fromLat)*i/20, fromLon + (toLon-fromLon)*i/20]);
+  return pts;
+}
+
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 // ─── Mode přepínání ──────────────────────────────────────────────────────────
@@ -871,6 +897,33 @@ app.post('/mode', async (req, res) => {
 });
 
 // Simulace — start trasy
+app.post('/simulate/route-osrm', async (req, res) => {
+  const { member, fromLat, fromLon, toLat, toLon, profile = 'driving-car', speed = 5, startSimTime } = req.body;
+  if (!member || fromLat == null || fromLon == null || toLat == null || toLon == null) {
+    return res.status(400).json({ error: 'member, fromLat, fromLon, toLat, toLon required' });
+  }
+  if (!MEMBERS.includes(member)) return res.status(404).json({ error: 'Unknown member' });
+
+  const coords = await fetchOSRMRoute(parseFloat(fromLat), parseFloat(fromLon), parseFloat(toLat), parseFloat(toLon), profile);
+
+  if (activeSimulations[member]) {
+    activeSimulations[member].active = false;
+    activeSimulations[member].stayActive = false;
+    if (activeSimulations[member].timer) clearTimeout(activeSimulations[member].timer);
+  }
+
+  activeSimulations[member] = {
+    active: true, stayActive: false,
+    coords, step: 0, profile, speed,
+    simTime: startSimTime || Date.now(), timer: null
+  };
+
+  memberFenceHyst[member] = null;
+  console.log(`[SIM] Start trasy (OSRM) pro ${member}: ${coords.length} bodů, profil=${profile}, rychlost=${speed}x`);
+  runSimStep(member);
+  res.json({ ok: true, member, points: coords.length, simTime: activeSimulations[member].simTime });
+});
+
 app.post('/simulate/route', async (req, res) => {
   const { member, coords, profile = 'driving-car', speed = 5 } = req.body;
   if (!member || !coords || !coords.length) return res.status(400).json({ error: 'member a coords required' });

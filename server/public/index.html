@@ -1867,8 +1867,7 @@ async function scRun(scenarioId) {
     if (next) {
       progStatus.textContent = `🚗 Jízda → ${next.name}`;
       globalStatus.textContent = `→ ${next.name}`;
-      const coords = await scFetchRoute(step, next, step.mode);
-      simTime = await scDoRoute(member, coords, step.mode, speed, simTime, (s, t, v) => {
+      simTime = await scDoRoute(member, step, next, step.mode, speed, simTime, (s, t, v) => {
         progStatus.textContent = `🚗 → ${next.name} (${s}/${t} · ${v} km/h)`;
       });
       if (scAbort) break;
@@ -1932,8 +1931,8 @@ function scDoStay(member, lat, lon, minutes, speed, simTime, onProgress) {
   });
 }
 
-// Jízda přes /simulate/route + čekání na sim_arrived
-function scDoRoute(member, coords, mode, speed, simTime, onProgress) {
+// Jízda přes /simulate/route-osrm — server stáhne trasu sám (bez posílání tisíců souřadnic)
+function scDoRoute(member, from, to, mode, speed, simTime, onProgress) {
   return new Promise(async (resolve) => {
     if (scAbort) return resolve(simTime);
 
@@ -1955,10 +1954,16 @@ function scDoRoute(member, coords, mode, speed, simTime, onProgress) {
     ws.addEventListener('message', handler);
 
     try {
-      const resp = await fetch('/simulate/route', {
+      const resp = await fetch('/simulate/route-osrm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ member, coords, profile: mode, speed, startSimTime: simTime || undefined }),
+        body: JSON.stringify({
+          member,
+          fromLat: from.lat, fromLon: from.lon,
+          toLat: to.lat, toLon: to.lon,
+          profile: mode, speed,
+          startSimTime: simTime || undefined
+        }),
       });
       const data = await resp.json();
       if (data.simTime) finalSimTime = data.simTime;
@@ -1967,7 +1972,7 @@ function scDoRoute(member, coords, mode, speed, simTime, onProgress) {
       return resolve(simTime);
     }
 
-    const safetyMs = (2 * 3600 * 1000) / speed + 15000;
+    const safetyMs = (2 * 3600 * 1000) / speed + 60000;
     setTimeout(() => {
       if (!done) { ws.removeEventListener('message', handler); resolve(finalSimTime); }
     }, safetyMs);
