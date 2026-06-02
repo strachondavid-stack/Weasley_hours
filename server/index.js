@@ -98,7 +98,8 @@ async function logEvent(type, data) {
 // ─── Google Places ────────────────────────────────────────────────────────────
 const SKIP_PLACE_TYPES = [
   'parking_lot', 'parking', 'transit_station', 'light_rail_station',
-  'bus_station', 'transportation_service', 'route', 'street_address', 'political'
+  'bus_station', 'transportation_service', 'route', 'street_address', 'political',
+  'atm', 'bank', 'gas_station', 'car_wash', 'car_repair'
 ];
 
 async function getNearbyPlaces(lat, lon, radius = 300) {
@@ -197,7 +198,7 @@ async function askClaude(member, lat, lon, context) {
     const nearestIsClose = nearest.dist < 50;
     const nearestIsMuchCloser = second && nearest.dist < second.dist * 0.4;
     placesStr = placesNearby.map((p, i) => {
-      const highlight = i === 0 && (nearestIsClose || nearestIsMuchCloser) ? ' ← NEJBLIŽŠÍ, pravděpodobný cíl' : '';
+      const highlight = '';  // neoznačujeme nejbližší — typ místa je důležitější než vzdálenost
       return `  - ${p.name} (${p.primaryType || 'neznámý typ'}, ${p.dist}m${p.rating ? ', ★' + p.rating : ''})${highlight}`;
     }).join('\n');
   }
@@ -217,8 +218,13 @@ ${nearbyStr}
 Nejbližší místa z Google Places:
 ${placesStr}
 
-Rodina v ČR. Chceme ukládat: práce, obchod, lékař, restaurace, sport, škola, návštěvy. Nechceme: průjezdy, čekání v autě, GPS artefakty.
-Při pojmenování upřednostni NEJBLIŽŠÍ místo — vzdálenost je klíčový signál. Pokud je nejbližší místo < 50m, téměř jistě to je cíl.
+Rodina v ČR. Chceme ukládat: práce, obchod, lékař, restaurace, sport, škola, návštěvy, turistické atrakce. Nechceme: průjezdy, čekání v autě, GPS artefakty.
+
+Pravidla pro výběr názvu:
+1. Ignoruj generická místa bez turistické/praktické hodnoty: bankomaty (atm), benzínky, parkoviště, utility, průmyslové služby.
+2. Pokud je v okolí turistická atrakce, hrad, zámek, zoo, muzeum, restaurace nebo obchod — upřednostni ji před bankomaty a podobnými.
+3. Vzdálenost je důležitá ale ne absolutní — bankomat 20m je méně pravděpodobný cíl než zámek 100m v turistické lokalitě.
+4. Kontext rozhoduje: pokud jsou v okolí samé turistické podniky (penziony, restaurace, info centrum), jde o turistické místo.
 
 Odpověz POUZE jako JSON:
 {"should_save": true/false, "name": "název česky nebo null", "confidence": 0.0-1.0, "reason": "zdůvodnění česky"}`;
