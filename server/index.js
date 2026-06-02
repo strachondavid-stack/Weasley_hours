@@ -922,17 +922,20 @@ app.post('/simulate/stay', async (req, res) => {
 
   runSimStay(member, lat, lon, minutes, async () => {
     const tracker2 = getTracker(member);
+    // Pošli sim_arrived okamžitě — klient čeká na pokračování scénáře
+    broadcast({ type: 'sim_arrived', member, lat, lon, afterStay: true });
+    delete activeSimulations[member];
+    // evaluateCluster asynchronně aby neblokoval scénář (AI call trvá sekundy)
     if (tracker2.cluster && tracker2.cluster.points.length >= MIN_STOP_POINTS) {
       const dur = Math.round((tracker2.cluster.points[tracker2.cluster.points.length-1].ts - tracker2.cluster.startTs) / 60000);
       console.log(`[SIM] Vyhodnocuji cluster po stání: ${tracker2.cluster.points.length} bodů, dur=${dur}min`);
-      await evaluateCluster(member, tracker2.cluster);
-      tracker2.cluster = null;
-      await saveTracker(member);
+      evaluateCluster(member, tracker2.cluster).then(() => {
+        tracker2.cluster = null;
+        saveTracker(member);
+      });
     } else {
       console.log(`[SIM] Cluster po stání: ${tracker2.cluster?.points.length || 0} bodů — málo pro vyhodnocení`);
     }
-    broadcast({ type: 'sim_arrived', member, lat, lon, afterStay: true });
-    delete activeSimulations[member];
   });
   res.json({ ok: true, member, minutes });
 });
