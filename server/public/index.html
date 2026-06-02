@@ -2161,35 +2161,40 @@ function logTitle(l) {
 
 function logDetail(l) {
   const nl = '<br>';
+  const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>').replace(/\\n/g,'<br>');
   switch(l.type) {
     case 'ai_response': {
       const r = l.result || {};
-      return 'duvod: ' + (r.reason || '?') + nl +
+      return 'důvod: ' + esc(r.reason) + nl +
         'confidence: ' + r.confidence + nl +
-        'name: ' + (r.name || '-') + nl +
+        'name: ' + esc(r.name || '-') + nl +
         'save: ' + r.should_save + nl +
         'latence: ' + l.durationMs + 'ms';
     }
+    case 'ai_request':
+      return 'prompt:<br><div style="margin-top:4px;padding:6px;background:#111;border-radius:4px;white-space:pre-wrap;word-break:break-word">' + esc(l.prompt) + '</div>';
     case 'stop_candidate':
-      return 'zdroj: ' + l.source + nl +
-        'delka: ' + l.gapMinutes + ' min' + nl +
+      return 'zdroj: ' + esc(l.source) + nl +
+        'délka: ' + l.gapMinutes + ' min' + nl +
         'POI: ' + l.placesCount + nl +
-        'navstev: ' + l.historyVisits + 'x';
+        'návštěv: ' + l.historyVisits + 'x';
     case 'place_saved':
-      return 'jmeno: ' + (l.name || l.suggestedName || '?') + nl +
+      return 'jméno: ' + esc(l.name || l.suggestedName) + nl +
         'confidence: ' + l.aiConfidence + nl +
         'auto: ' + l.autoSave + nl +
-        'duvod: ' + (l.aiReason || '-');
+        'důvod: ' + esc(l.aiReason);
     case 'place_rejected':
-      return 'duvod: ' + (l.reason || '?') + nl +
+      return 'důvod: ' + esc(l.reason) + nl +
         'confidence: ' + (l.aiConfidence || '-') + nl +
-        'AI duvod: ' + (l.aiReason || '-');
+        'AI důvod: ' + esc(l.aiReason);
     case 'ai_error':
-      return 'chyba: ' + (l.error || '?') + nl + 'latence: ' + l.durationMs + 'ms';
+      return 'chyba: ' + esc(l.error) + nl + 'latence: ' + l.durationMs + 'ms';
     case 'gps_received':
-      return 'lat: ' + l.lat + nl + 'lon: ' + l.lon + nl + 'status: ' + l.status;
+      return 'lat: ' + l.lat + nl + 'lon: ' + l.lon + nl + 'status: ' + l.status + nl + 'vel: ' + l.vel + nl + 'source: ' + l.source;
+    case 'fence_added':
+      return 'jméno: ' + esc(l.name) + nl + 'lat: ' + l.lat + nl + 'lon: ' + l.lon + nl + 'radius: ' + l.radius + 'm';
     default:
-      return JSON.stringify(l, null, 2);
+      return '<pre style="white-space:pre-wrap;word-break:break-all">' + esc(JSON.stringify(l, null, 2)) + '</pre>';
   }
 }
 </script>
