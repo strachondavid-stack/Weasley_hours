@@ -2308,8 +2308,8 @@ function scRenderAiLogs(logs) {
       return `<div style="margin-bottom:6px">
         <div style="color:#888;font-size:10px">${ts}</div>
         <span class="${cls}">${label} — ${r.name || '?'}</span>
-        <div style="color:#666;margin-top:2px">${(r.reason||'').replace(/
-/g,'<br>')}</div>
+        <div style="color:#666;margin-top:2px">${(r.reason||'').split('
+').join('<br>')}</div>
         <div style="color:#aaa;font-size:10px">confidence: ${r.confidence} · latence: ${l.durationMs}ms</div>
       </div>`;
     }
