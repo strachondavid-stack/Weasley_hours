@@ -1557,6 +1557,11 @@ function simStop() {
 }
 
 // ─── Init ──────────────────────────────────────────────────────────────
+// Načti uložené reporty ze serveru
+fetch('/sc-reports').then(r=>r.json()).then(data=>{
+  if (Array.isArray(data)) { scReports = data; scUpdateReportsBadge(); }
+}).catch(()=>{});
+
 fetch('/status').then(r=>r.json()).then(data=>{
   Object.entries(data).forEach(([key,val])=>updateMember(key,val));
   renderChips();
@@ -2048,10 +2053,18 @@ function scStartReport(scenarioId, member) {
   };
 }
 
-function scFinishReport() {
+async function scFinishReport() {
   if (!scCurrentReport) return;
   scCurrentReport.endTs = Date.now();
-  scReports.unshift(scCurrentReport); // nejnovější první
+  // Ulož na server
+  try {
+    await fetch('/sc-reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(scCurrentReport)
+    });
+  } catch(e) { console.error('scFinishReport save:', e); }
+  scReports.unshift(scCurrentReport);
   scCurrentReport = null;
   scUpdateReportsBadge();
 }
@@ -2064,7 +2077,8 @@ function scUpdateReportsBadge() {
   badge.textContent = scReports.length > 0 ? scReports.length : '';
 }
 
-function scClearReports() {
+async function scClearReports() {
+  try { await fetch('/sc-reports', { method: 'DELETE' }); } catch(e) {}
   scReports = [];
   scUpdateReportsBadge();
   renderScReports();

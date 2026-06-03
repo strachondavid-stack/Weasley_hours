@@ -1283,6 +1283,38 @@ app.get('/tracker', (req, res) => {
   res.json(out);
 });
 
+// ─── Scenario Reports ────────────────────────────────────────────────────────
+const SC_REPORTS_KEY = 'sc_reports';
+const SC_REPORTS_MAX = 100;
+
+app.post('/sc-reports', async (req, res) => {
+  try {
+    const report = req.body;
+    if (!report || !report.scenarioId) return res.status(400).json({ error: 'report required' });
+    report.savedAt = Date.now();
+    const raw = await redis.get(SC_REPORTS_KEY);
+    const reports = raw ? JSON.parse(raw) : [];
+    reports.unshift(report);
+    if (reports.length > SC_REPORTS_MAX) reports.splice(SC_REPORTS_MAX);
+    await redis.set(SC_REPORTS_KEY, JSON.stringify(reports));
+    res.json({ ok: true, count: reports.length });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/sc-reports', async (req, res) => {
+  try {
+    const raw = await redis.get(SC_REPORTS_KEY);
+    res.json(raw ? JSON.parse(raw) : []);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/sc-reports', async (req, res) => {
+  try {
+    await redis.del(SC_REPORTS_KEY);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.use(express.static('/app/public'));
 
 // ─── MQTT ─────────────────────────────────────────────────────────────────────
