@@ -694,14 +694,14 @@ let editingFence=null;
 // ─── Page nav ──────────────────────────────────────────────────────────
 function showPage(p){
   currentPage=p;
-  document.getElementById('page-map').style.display       = p==='map'       ? 'flex':'none';
-  document.getElementById('page-clock').style.display     = p==='clock'     ? 'flex':'none';
-  document.getElementById('page-places').style.display    = p==='places'    ? 'flex':'none';
-  document.getElementById('page-geofences').style.display = p==='geofences' ? 'flex':'none';
-  document.getElementById('page-admin').style.display     = p==='admin'     ? 'flex':'none';
-  document.getElementById('page-log').style.display       = p==='log'       ? 'flex':'none';
-  document.getElementById('page-scenarios').style.display = p==='scenarios' ? 'flex':'none';
-  ['map','clock','places','geofences','scenarios','admin','log'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===p));
+  ['map','clock','places','geofences','admin','log','scenarios'].forEach(x=>{
+    const el=document.getElementById('page-'+x);
+    if(el) el.style.display = x===p ? 'flex':'none';
+  });
+  ['map','clock','places','geofences','scenarios','admin','log'].forEach(x=>{
+    const el=document.getElementById('tab-'+x);
+    if(el) el.classList.toggle('active',x===p);
+  });
   if(p==='places')    { loadPlaces().then(renderPlaces); }
   if(p==='geofences') { loadGeofences(); }
   if(p==='clock')     { renderClock(); }
