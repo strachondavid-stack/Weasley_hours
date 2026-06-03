@@ -1830,7 +1830,7 @@ function renderScCard(s) {
       <div class="sc-stops">${stopsHtml}</div>
       <div class="sc-run-row">
         <button class="sc-btn primary" onclick="scRun('${s.id}')" ${scRunning?'disabled':''}>▶ Spustit</button>
-        <button class="sc-btn" onclick="scToggleQueue('${s.id}')" id="sc-qbtn-${s.id}">${scQueue.includes('${s.id}') ? '✓ Ve frontě' : '+ Fronta'}</button>
+        <button class="sc-btn" onclick="scToggleQueue('${s.id}')" id="sc-qbtn-${s.id}">${scQueue.includes(s.id) ? '✓ Ve frontě' : '+ Fronta'}</button>
         <span style="font-size:12px;color:#aaa">člena: <b id="sc-run-member-label">${document.getElementById('sc-member')?.value||'?'}</b> · rychlost: <b id="sc-run-speed-label">${document.getElementById('sc-speed')?.value||'?'}×</b></span>
       </div>
     </div>
