@@ -2109,7 +2109,7 @@ function scRenderAiLogs(logs) {
     if (l.type === 'ai_request') {
       return `<div style="margin-bottom:6px">
         <div style="color:#888;font-size:10px">${ts} — AI dotaz</div>
-        <div class="sc-report-ai-prompt">${(l.prompt||'').replace(/</g,'&lt;')}</div>
+        <div class="sc-report-ai-prompt">${(l.prompt||'').split('<').join('&lt;')}</div>
       </div>`;
     }
     if (l.type === 'place_saved') {
