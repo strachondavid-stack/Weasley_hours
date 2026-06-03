@@ -1720,6 +1720,7 @@ setInterval(()=>{
     <option value="60">60×</option>
     <option value="120">120×</option>
   </select>
+  <button class="sc-btn" onclick="scSelectAll()">☑ Vše</button>
   <button class="sc-btn danger" id="sc-stop-btn" onclick="scStopAll()" style="display:none">■ Zastavit</button>
   <button class="sc-btn" id="sc-reports-btn" onclick="scShowReports(true)" style="display:none">📋 Zprávy <span id="sc-reports-badge" style="background:#d97706;color:#fff;font-size:10px;padding:1px 5px;border-radius:10px;margin-left:2px"></span></button>
   <span id="sc-global-status" style="font-size:12px;color:#aaa;margin-left:4px"></span>
@@ -2397,6 +2398,14 @@ async function scLoadReportLogs(report) {
 
 let scPreviewMarker = null;
 let scQueue = []; // fronta scénářů
+
+function scSelectAll() {
+  const allIds = SC_SCENARIOS.map(s => s.id);
+  const allSelected = allIds.every(id => scQueue.includes(id));
+  scQueue = allSelected ? [] : [...allIds];
+  scUpdateQueueUI();
+  renderScenarios();
+}
 
 function scToggleQueue(id) {
   const idx = scQueue.indexOf(id);
