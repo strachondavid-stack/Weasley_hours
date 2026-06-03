@@ -2032,6 +2032,7 @@ function renderScCard(s) {
         <span style="font-size:11px;color:#bbb">${s.steps.length} zastávek</span>
       </div>
       <div class="sc-card-chevron${isExp?' open':''}">›</div>
+    <button class="sc-btn" style="font-size:11px;padding:2px 8px;flex-shrink:0" onclick="event.stopPropagation();scToggleQueue('${s.id}')" id="sc-qbtn2-${s.id}">${scQueue.includes(s.id) ? '✓' : '+'}</button>
     </div>
     <div class="sc-card-body${isExp?' open':''}">
       <div class="sc-stops">${stopsHtml}</div>
@@ -2403,6 +2404,14 @@ function scToggleQueue(id) {
   else scQueue.push(id);
   scUpdateQueueUI();
   renderScenarios();
+  // Aktualizuj header tlačítka bez re-renderu
+  document.querySelectorAll(`[id^="sc-qbtn2-"]`).forEach(btn => {
+    const sid = btn.id.replace('sc-qbtn2-','');
+    btn.textContent = scQueue.includes(sid) ? '✓' : '+';
+    btn.style.background = scQueue.includes(sid) ? '#3b5bdb' : '';
+    btn.style.color = scQueue.includes(sid) ? '#fff' : '';
+    btn.style.borderColor = scQueue.includes(sid) ? '#3b5bdb' : '';
+  });
 }
 
 function scClearQueue() {
