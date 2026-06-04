@@ -274,6 +274,16 @@
       <button class="fbtn"        onclick="setFilter('named',this)">Pojmenovaná</button>
     </div>
   </div>
+  <!-- bulk toolbar -->
+  <div id="places-bulk-bar" style="display:none;align-items:center;gap:8px;padding:6px 12px;background:#fff3cd;border-bottom:1px solid #ffc107;flex-shrink:0">
+    <span id="places-bulk-count" style="font-size:13px;font-weight:600;color:#856404"></span>
+    <button class="btn-action danger" onclick="placesDeleteSelected()" style="font-size:12px;padding:3px 10px">🗑 Smazat vybrané</button>
+    <button class="btn-action" onclick="placesClearSelection()" style="font-size:12px;padding:3px 10px">✕ Zrušit výběr</button>
+  </div>
+  <div class="mgmt-toolbar" style="padding:4px 12px;border-top:none;border-bottom:1px solid #eee">
+    <button class="fbtn" id="places-select-all-btn" onclick="placesSelectAll()" style="font-size:12px">☑ Vybrat vše</button>
+    <span style="font-size:11px;color:#bbb;margin-left:4px">— nebo klikni na kartu pro výběr</span>
+  </div>
   <div class="mgmt-list" id="placesList"></div>
 </div>
 
@@ -688,6 +698,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'�
 const markers={}, placeMarkers={}, memberState={};
 let allPlaces=[], allFences=[], currentPage='map';
 let placesFilter='all', expandedPlace=null;
+let placesSelected = new Set();
 let loadingCands={}, editCands={};
 let editingFence=null;
 
@@ -987,6 +998,7 @@ function renderPlaceCard(p){
   return `<div class="place-card${isExp?' expanded':''}" id="pcard_${p.id}">
   <div class="pc-header" onclick="togglePC('${p.id}')">
     <div class="pc-dot ${isNamed?'pc-dot-named':'pc-dot-new'}"></div>
+    <input type="checkbox" id="pchk_${p.id}" ${placesSelected.has(p.id)?'checked':''} onclick="event.stopPropagation();placesToggleSelect('${p.id}')" style="width:15px;height:15px;flex-shrink:0;cursor:pointer">
     <div class="pc-info">
       <div class="pc-title">${isNamed?p.name:(p.suggestedName?'? '+p.suggestedName:'Neznámé místo')}</div>
       <div class="pc-sub">${fmtC(p.lat,p.lon)} · ${relT(p.detectedAt)} zpět · ${p.detectedBy}</div>
@@ -1070,9 +1082,73 @@ async function deletePlace(id){
   if(!confirm('Smazat toto místo?'))return;
   await fetch('/places/'+id,{method:'DELETE'});
   allPlaces=allPlaces.filter(x=>x.id!==id);
+  placesSelected.delete(id);
   delete editCands[id];delete loadingCands[id];
   if(expandedPlace===id)expandedPlace=null;
   await loadPlaces();renderPlaces();reloadPlacesOnMap();
+  placesUpdateBulkBar();
+}
+
+function placesToggleSelect(id) {
+  if (placesSelected.has(id)) placesSelected.delete(id);
+  else placesSelected.add(id);
+  placesUpdateBulkBar();
+  const chk = document.getElementById('pchk_' + id);
+  if (chk) chk.checked = placesSelected.has(id);
+}
+
+function placesSelectAll() {
+  const visible = placesGetVisible();
+  const allChecked = visible.every(p => placesSelected.has(p.id));
+  if (allChecked) {
+    visible.forEach(p => placesSelected.delete(p.id));
+  } else {
+    visible.forEach(p => placesSelected.add(p.id));
+  }
+  renderPlaces();
+  placesUpdateBulkBar();
+}
+
+function placesClearSelection() {
+  placesSelected.clear();
+  renderPlaces();
+  placesUpdateBulkBar();
+}
+
+function placesGetVisible() {
+  const q = (document.getElementById('placesSearch')?.value || '').toLowerCase();
+  return allPlaces.filter(p => {
+    if (placesFilter === 'unnamed' && p.name) return false;
+    if (placesFilter === 'named' && !p.name) return false;
+    if (q && !((p.name||'').toLowerCase().includes(q) || (p.suggestedName||'').toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
+
+function placesUpdateBulkBar() {
+  const bar = document.getElementById('places-bulk-bar');
+  const count = document.getElementById('places-bulk-count');
+  if (!bar) return;
+  if (placesSelected.size === 0) {
+    bar.style.display = 'none';
+  } else {
+    bar.style.display = 'flex';
+    count.textContent = placesSelected.size + ' vybráno';
+  }
+}
+
+async function placesDeleteSelected() {
+  if (!confirm(`Smazat ${placesSelected.size} míst?`)) return;
+  const ids = [...placesSelected];
+  for (const id of ids) {
+    await fetch('/places/' + id, { method: 'DELETE' });
+  }
+  allPlaces = allPlaces.filter(p => !ids.includes(p.id));
+  placesSelected.clear();
+  await loadPlaces();
+  renderPlaces();
+  reloadPlacesOnMap();
+  placesUpdateBulkBar();
 }
 function goToMap(id,lat,lon){
   showPage('map');
