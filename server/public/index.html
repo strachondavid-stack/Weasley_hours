@@ -2325,6 +2325,15 @@ function scRenderAiLogs(logs) {
     if (l.type === 'place_saved') {
       return '<div style="margin-bottom:4px;color:#166534;font-size:11px">💾 Uloženo: ' + (l.name || l.suggestedName || '?') + ' (confidence: ' + l.aiConfidence + ')</div>';
     }
+    if (l.type === 'stop_candidate') {
+      return '<div style="margin-bottom:4px;color:#888;font-size:11px">🔍 Kandidát zastávky: ' + l.gapMinutes + ' min, ' + l.placesCount + ' POI, zdroj: ' + (l.source||'?') + '</div>';
+    }
+    if (l.type === 'place_rejected') {
+      return '<div style="margin-bottom:4px;color:#991b1b;font-size:11px">✗ Zamítnuto: ' + (l.reason||'') + (l.aiReason ? ' — ' + l.aiReason.substring(0,80) + '...' : '') + '</div>';
+    }
+    if (l.type === 'ai_error') {
+      return '<div style="margin-bottom:4px;color:#dc2626;font-size:11px">⚠ AI chyba: ' + (l.error||'').substring(0,100) + '</div>';
+    }
     return '';
   }).filter(Boolean).join('');
 }
@@ -2375,24 +2384,47 @@ function renderScReports() {
 async function scLoadReportLogs(report) {
   try {
     const since = report.startTs - 5000;
-    const data = await fetch('/logs?limit=200').then(r => r.json());
-    const logs = (data.logs || []).filter(l => l.ts >= since);
+    // Načti dostatek logů — celý běh scénáře může mít stovky záznamů
+    const data = await fetch('/logs?limit=500').then(r => r.json());
+    const allLogs = (data.logs || [])
+      .filter(l => l.ts >= since && l.ts <= (report.endTs || Date.now()) + 60000)
+      .sort((a, b) => a.ts - b.ts);
 
-    // Přiřaď logy k zastávkám podle souřadnic
+    const AI_TYPES = ['ai_request','ai_response','ai_error','place_saved','place_rejected','stop_candidate'];
+
+    // Přiřaď logy k zastávkám podle souřadnic (radius 2km — GPS stop candidate může být kousek jinak)
     for (const stop of report.stops) {
       if (stop.stayMin === 0) continue;
-      const nearLogs = logs.filter(l => {
-        if (!['ai_request','ai_response','place_saved','place_rejected'].includes(l.type)) return false;
+
+      stop.aiLogs = allLogs.filter(l => {
+        if (!AI_TYPES.includes(l.type)) return false;
         if (!l.lat || !l.lon) return false;
-        const dist = Math.sqrt(Math.pow((l.lat - stop.lat)*111000, 2) + Math.pow((l.lon - stop.lon)*74000, 2));
-        return dist < 500;
+        const dist = Math.sqrt(
+          Math.pow((l.lat - stop.lat) * 111000, 2) +
+          Math.pow((l.lon - stop.lon) * 74000, 2)
+        );
+        return dist < 2000; // 2km radius
       });
-      stop.aiLogs = nearLogs.sort((a,b) => a.ts - b.ts);
 
       // Najdi uložené místo
-      const saved = logs.find(l => l.type === 'place_saved' && l.lat && Math.sqrt(Math.pow((l.lat - stop.lat)*111000, 2) + Math.pow((l.lon - stop.lon)*74000, 2)) < 500);
-      if (saved) stop.savedPlace = { name: saved.name || saved.suggestedName, lat: saved.lat, lon: saved.lon };
+      const saved = allLogs.find(l =>
+        l.type === 'place_saved' && l.lat &&
+        Math.sqrt(Math.pow((l.lat - stop.lat)*111000, 2) + Math.pow((l.lon - stop.lon)*74000, 2)) < 2000
+      );
+      if (saved) stop.savedPlace = {
+        name: saved.name || saved.suggestedName,
+        lat: saved.lat, lon: saved.lon
+      };
     }
+
+    // Logy které se nevázaly na žádnou zastávku — přidej do první zastávky se stayMin>0
+    const assignedLogIds = new Set(report.stops.flatMap(s => (s.aiLogs||[]).map(l => l.ts + l.type)));
+    const unassigned = allLogs.filter(l => AI_TYPES.includes(l.type) && !assignedLogIds.has(l.ts + l.type));
+    if (unassigned.length > 0) {
+      const firstStop = report.stops.find(s => s.stayMin > 0);
+      if (firstStop) firstStop.aiLogs = [...(firstStop.aiLogs || []), ...unassigned];
+    }
+
   } catch(e) { console.error('scLoadReportLogs:', e); }
 }
 
