@@ -2384,11 +2384,10 @@ function renderScReports() {
 async function scLoadReportLogs(report) {
   try {
     const since = report.startTs - 5000;
-    // Načti dostatek logů — celý běh scénáře může mít stovky záznamů
-    const data = await fetch('/logs?limit=500').then(r => r.json());
-    const allLogs = (data.logs || [])
-      .filter(l => l.ts >= since && l.ts <= (report.endTs || Date.now()) + 60000)
-      .sort((a, b) => a.ts - b.ts);
+    const until = (report.endTs || Date.now()) + 120000;
+    // Načti AI logy podle časového okna — bez limitu na GPS body
+    const data = await fetch(`/logs?since=${since}&until=${until}`).then(r => r.json());
+    const allLogs = (data.logs || []).sort((a, b) => a.ts - b.ts);
 
     const AI_TYPES = ['ai_request','ai_response','ai_error','place_saved','place_rejected','stop_candidate'];
 

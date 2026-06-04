@@ -1217,9 +1217,14 @@ app.delete('/geofences/:id', async (req, res) => {
 // GET /logs?limit=50&type=ai_response&member=tatka
 app.get('/logs', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 50, 500);
     const filterType = req.query.type || null;
     const filterMember = req.query.member || null;
+    const since = req.query.since ? parseInt(req.query.since) : null;
+    const until = req.query.until ? parseInt(req.query.until) : null;
+    // Pokud je časové okno, prohledej všechny logy bez limitu (jen AI typy)
+    const AI_TYPES = ['ai_request','ai_response','ai_error','place_saved','place_rejected','stop_candidate','fence_added'];
+    const timeWindow = since !== null && until !== null;
+    const limit = timeWindow ? 50000 : Math.min(parseInt(req.query.limit) || 50, 500);
     const totalKeys = await redis.lLen('log:index');
     const BATCH = 200;
     const results = [];
@@ -1236,10 +1241,22 @@ app.get('/logs', async (req, res) => {
           const entry = JSON.parse(raw);
           if (filterType && entry.type !== filterType) continue;
           if (filterMember && entry.member !== filterMember) continue;
+          // Časové filtrování
+          if (since !== null && entry.ts < since) continue;
+          if (until !== null && entry.ts > until) continue;
+          // V časovém okně vrať jen AI typy (ne GPS body — těch jsou tisíce)
+          if (timeWindow && !filterType && !AI_TYPES.includes(entry.type)) continue;
           results.push(entry);
         } catch(e) { continue; }
       }
       offset += BATCH;
+      // Pokud hledáme v časovém okně a logy jsou seřazeny od nejnovějších,
+      // můžeme skončit jakmile jsme před since
+      if (timeWindow && results.length > 0) {
+        const lastKey = keys[keys.length - 1];
+        const ts = parseInt(lastKey.split(':')[1]);
+        if (ts && ts < since) break;
+      }
     }
 
     res.json({ count: results.length, logs: results });
