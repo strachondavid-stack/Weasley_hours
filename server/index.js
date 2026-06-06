@@ -643,6 +643,9 @@ const IMG_DIR_PLACES = '/app/public/img/places';  // místa — doma, školka, k
 const IMG_DIR_MOTION = '/app/public/img/motion';  // pohyb — auto, kolo, běh, pěšky
 const IMG_CACHE_TTL = 7 * 24 * 3600;
 
+// Per-member image cache — drží obrázek po dobu jednoho pobytu na statusu
+const memberImgCache = {}; // { member: { status, img } }
+
 const MOTION_STATUSES = ['auto', 'kolo', 'běh', 'beh', 'pěšky', 'pesky', 'running', 'cycling', 'walking'];
 
 function isMotionStatus(status) {
@@ -672,20 +675,10 @@ async function suggestImageForStatus(status) {
   });
 
   if (directMatches.length > 0) {
-    // Zkontroluj cache — pokud už byl vybrán, drž ho
-    const cacheKeyDirect = 'imgcache:' + statusKey;
-    try {
-      const cached = await redis.get(cacheKeyDirect);
-      if (cached) {
-        console.log(`[IMG] Cache hit (přímá): "${status}" → "${cached}"`);
-        return cached;
-      }
-    } catch(e) {}
-    // První výběr — náhodně z variant, ulož do cache
+    // Náhodně vyber variantu — volající (processGPS) ji drží přes memberImgCache
     const chosen = directMatches[Math.floor(Math.random() * directMatches.length)];
     const finalPath = subfolder + '/' + chosen;
-    console.log(`[IMG] Status "${status}" → přímá shoda "${chosen}" (${directMatches.length} variant), ukládám do cache`);
-    try { await redis.set(cacheKeyDirect, finalPath, { EX: IMG_CACHE_TTL }); } catch(e) {}
+    console.log(`[IMG] Status "${status}" → varianta "${chosen}" (${directMatches.length} dostupných)`);
     return finalPath;
   }
 
@@ -697,20 +690,15 @@ async function suggestImageForStatus(status) {
     if (cached !== null) {
       // Cache může obsahovat JSON pole kandidátů nebo jeden soubor
       let candidates;
-      // Cache obsahuje jeden vybraný soubor (string) nebo pole kandidátů (starý formát)
-      let chosen;
-      try {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) {
-          // Starý formát — vyber náhodně a přepiš cache na jeden soubor
-          chosen = parsed[Math.floor(Math.random() * parsed.length)] || '';
-          await redis.set(cacheKey, chosen, { EX: IMG_CACHE_TTL });
-        } else {
-          chosen = cached; // nový formát — jeden soubor
-        }
-      } catch(e) { chosen = cached; }
-      console.log(`[IMG] Cache hit: "${status}" → "${chosen}"`);
-      return chosen || null;
+      // Cache obsahuje JSON pole kandidátů — vyber náhodně (nový pobyt = nová varianta)
+      let candidates;
+      try { candidates = JSON.parse(cached); } catch(e) { candidates = cached ? [cached] : []; }
+      if (candidates.length > 0) {
+        const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+        console.log(`[IMG] Cache hit: "${status}" → "${chosen}" (${candidates.length} variant)`);
+        return chosen || null;
+      }
+      return null;
     }
   } catch(e) {}
 
@@ -753,8 +741,8 @@ Odpověz POUZE názvy souborů oddělené čárkou, nebo prázdným stringem. Be
     const finalPath = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : '';
 
     console.log(`[IMG] Status "${status}" (${subfolder}) → AI vybrala ${candidates.length} kandidátů, zvoleno: "${finalPath || 'žádný'}"`);
-    // Ulož jeden vybraný soubor do cache — konzistentní zobrazení
-    await redis.set(cacheKey, finalPath, { EX: IMG_CACHE_TTL });
+    // Ulož pole kandidátů — při každém novém pobytu se vybere náhodná varianta
+    await redis.set(cacheKey, JSON.stringify(candidates), { EX: IMG_CACHE_TTL });
     await logEvent('img_selected', { status, subfolder, candidates, selectedImg: finalPath || null, availableImgs: images });
     return finalPath || null;
 
@@ -815,7 +803,15 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
     }
     // Pokud jsme doma a pohybujeme se — necháme doma
   }
-  const img = await suggestImageForStatus(status);
+  // memberImgCache drží obrázek po dobu jednoho pobytu — mění se jen při změně statusu
+  let img;
+  const mc = memberImgCache[member];
+  if (mc && mc.status === status) {
+    img = mc.img;
+  } else {
+    img = await suggestImageForStatus(status);
+    memberImgCache[member] = { status, img };
+  }
   const data = { status, lat, lon, ts, img };
   await activeRedis.set('member:' + member, JSON.stringify(data));
   await activeRedis.lPush('history:' + member, JSON.stringify({ lat, lon, ts, status }));
@@ -1131,7 +1127,14 @@ app.post('/status/:member', async (req, res) => {
       if (motion) finalStatus = motion;
     }
   }
-  const img = await suggestImageForStatus(finalStatus);
+  let img;
+  const mcSim = memberImgCache[member];
+  if (mcSim && mcSim.status === finalStatus) {
+    img = mcSim.img;
+  } else {
+    img = await suggestImageForStatus(finalStatus);
+    memberImgCache[member] = { status: finalStatus, img };
+  }
   const data = { status: finalStatus, lat: prev.lat || null, lon: prev.lon || null, ts: Date.now(), manual: true, img };
   await redis.set('member:' + member, JSON.stringify(data));
   broadcast({ type: 'update', member, ...data });
