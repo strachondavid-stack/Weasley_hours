@@ -643,9 +643,6 @@ const IMG_DIR_PLACES = '/app/public/img/places';  // místa — doma, školka, k
 const IMG_DIR_MOTION = '/app/public/img/motion';  // pohyb — auto, kolo, běh, pěšky
 const IMG_CACHE_TTL = 7 * 24 * 3600;
 
-// Per-member image cache — drží zvolený obrázek dokud se nezmění status
-const memberImgCache = {}; // { member: { status, img } }
-
 const MOTION_STATUSES = ['auto', 'kolo', 'běh', 'beh', 'pěšky', 'pesky', 'running', 'cycling', 'walking'];
 
 function isMotionStatus(status) {
@@ -675,10 +672,20 @@ async function suggestImageForStatus(status) {
   });
 
   if (directMatches.length > 0) {
-    // Náhodně vyber z přímých shod — střídání variant
+    // Zkontroluj cache — pokud už byl vybrán, drž ho
+    const cacheKeyDirect = 'imgcache:' + statusKey;
+    try {
+      const cached = await redis.get(cacheKeyDirect);
+      if (cached) {
+        console.log(`[IMG] Cache hit (přímá): "${status}" → "${cached}"`);
+        return cached;
+      }
+    } catch(e) {}
+    // První výběr — náhodně z variant, ulož do cache
     const chosen = directMatches[Math.floor(Math.random() * directMatches.length)];
     const finalPath = subfolder + '/' + chosen;
-    console.log(`[IMG] Status "${status}" → přímá shoda "${chosen}" (${directMatches.length} variant)`);
+    console.log(`[IMG] Status "${status}" → přímá shoda "${chosen}" (${directMatches.length} variant), ukládám do cache`);
+    try { await redis.set(cacheKeyDirect, finalPath, { EX: IMG_CACHE_TTL }); } catch(e) {}
     return finalPath;
   }
 
@@ -808,15 +815,7 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
     }
     // Pokud jsme doma a pohybujeme se — necháme doma
   }
-  // Použij cached obrázek pokud se status nezměnil — jinak vyber nový
-  let img;
-  const cached = memberImgCache[member];
-  if (cached && cached.status === status) {
-    img = cached.img;
-  } else {
-    img = await suggestImageForStatus(status);
-    memberImgCache[member] = { status, img };
-  }
+  const img = await suggestImageForStatus(status);
   const data = { status, lat, lon, ts, img };
   await activeRedis.set('member:' + member, JSON.stringify(data));
   await activeRedis.lPush('history:' + member, JSON.stringify({ lat, lon, ts, status }));
@@ -1132,15 +1131,7 @@ app.post('/status/:member', async (req, res) => {
       if (motion) finalStatus = motion;
     }
   }
-  // Per-member cache pro simulaci
-  let img;
-  const cachedSim = memberImgCache[member];
-  if (cachedSim && cachedSim.status === finalStatus) {
-    img = cachedSim.img;
-  } else {
-    img = await suggestImageForStatus(finalStatus);
-    memberImgCache[member] = { status: finalStatus, img };
-  }
+  const img = await suggestImageForStatus(finalStatus);
   const data = { status: finalStatus, lat: prev.lat || null, lon: prev.lon || null, ts: Date.now(), manual: true, img };
   await redis.set('member:' + member, JSON.stringify(data));
   broadcast({ type: 'update', member, ...data });
