@@ -690,13 +690,20 @@ async function suggestImageForStatus(status) {
     if (cached !== null) {
       // Cache může obsahovat JSON pole kandidátů nebo jeden soubor
       let candidates;
-      try { candidates = JSON.parse(cached); } catch(e) { candidates = cached ? [cached] : []; }
-      if (candidates.length > 0) {
-        const chosen = candidates[Math.floor(Math.random() * candidates.length)];
-        console.log(`[IMG] Cache hit: "${status}" → "${chosen}" (${candidates.length} variant)`);
-        return chosen || null;
-      }
-      return null;
+      // Cache obsahuje jeden vybraný soubor (string) nebo pole kandidátů (starý formát)
+      let chosen;
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          // Starý formát — vyber náhodně a přepiš cache na jeden soubor
+          chosen = parsed[Math.floor(Math.random() * parsed.length)] || '';
+          await redis.set(cacheKey, chosen, { EX: IMG_CACHE_TTL });
+        } else {
+          chosen = cached; // nový formát — jeden soubor
+        }
+      } catch(e) { chosen = cached; }
+      console.log(`[IMG] Cache hit: "${status}" → "${chosen}"`);
+      return chosen || null;
     }
   } catch(e) {}
 
@@ -738,8 +745,9 @@ Odpověz POUZE názvy souborů oddělené čárkou, nebo prázdným stringem. Be
 
     const finalPath = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : '';
 
-    console.log(`[IMG] Status "${status}" (${subfolder}) → AI vybrala ${candidates.length} kandidátů: ${candidates.join(', ') || 'žádný'}`);
-    await redis.set(cacheKey, JSON.stringify(candidates), { EX: IMG_CACHE_TTL });
+    console.log(`[IMG] Status "${status}" (${subfolder}) → AI vybrala ${candidates.length} kandidátů, zvoleno: "${finalPath || 'žádný'}"`);
+    // Ulož jeden vybraný soubor do cache — konzistentní zobrazení
+    await redis.set(cacheKey, finalPath, { EX: IMG_CACHE_TTL });
     await logEvent('img_selected', { status, subfolder, candidates, selectedImg: finalPath || null, availableImgs: images });
     return finalPath || null;
 
