@@ -688,8 +688,6 @@ async function suggestImageForStatus(status) {
   try {
     const cached = await redis.get(cacheKey);
     if (cached !== null) {
-      // Cache může obsahovat JSON pole kandidátů nebo jeden soubor
-      let candidates;
       // Cache obsahuje JSON pole kandidátů — vyber náhodně (nový pobyt = nová varianta)
       let candidates;
       try { candidates = JSON.parse(cached); } catch(e) { candidates = cached ? [cached] : []; }
