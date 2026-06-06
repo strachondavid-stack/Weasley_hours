@@ -659,35 +659,58 @@ function getAvailableImages(dir) {
 async function suggestImageForStatus(status) {
   if (!status || status === 'cesta' || status === 'neznamo') return null;
 
-  console.log(`[IMG] suggestImageForStatus called: "${status}"`);
-  const cacheKey = 'imgcache:' + status.toLowerCase();
-  try {
-    const cached = await redis.get(cacheKey);
-    if (cached !== null) {
-      console.log(`[IMG] Cache hit: "${status}" → "${cached || 'žádný'}"`);
-      return cached || null;
-    }
-  } catch(e) { console.log(`[IMG] Cache error: ${e.message}`); }
-
-  // Vyber správnou složku podle typu statusu
   const dir = isMotionStatus(status) ? IMG_DIR_MOTION : IMG_DIR_PLACES;
   const images = getAvailableImages(dir);
   const subfolder = isMotionStatus(status) ? 'motion' : 'places';
   if (images.length === 0) return null;
+
+  // Zkus přímou shodu — soubory které obsahují název statusu (auto, auto_1, auto_2...)
+  const statusKey = status.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const directMatches = images.filter(f => {
+    const base = f.toLowerCase().replace(/\.[^.]+$/, ''); // bez přípony
+    return base === statusKey || base.startsWith(statusKey + '_') || base.startsWith(statusKey + '-');
+  });
+
+  if (directMatches.length > 0) {
+    // Náhodně vyber z přímých shod — střídání variant
+    const chosen = directMatches[Math.floor(Math.random() * directMatches.length)];
+    const finalPath = subfolder + '/' + chosen;
+    console.log(`[IMG] Status "${status}" → přímá shoda "${chosen}" (${directMatches.length} variant)`);
+    return finalPath;
+  }
+
+  // Žádná přímá shoda — zavolej AI (výsledek cachuj, ale ze seznamu AI kandidátů
+  // vyber náhodně při každém volání)
+  const cacheKey = 'imgcache:' + statusKey;
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached !== null) {
+      // Cache může obsahovat JSON pole kandidátů nebo jeden soubor
+      let candidates;
+      try { candidates = JSON.parse(cached); } catch(e) { candidates = cached ? [cached] : []; }
+      if (candidates.length > 0) {
+        const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+        console.log(`[IMG] Cache hit: "${status}" → "${chosen}" (${candidates.length} variant)`);
+        return chosen || null;
+      }
+      return null;
+    }
+  } catch(e) {}
+
   if (!ANTHROPIC_API_KEY) return null;
 
   try {
-    const prompt = `Vybíráš obrázek pro zobrazení stavu člena rodiny na GPS hodinkách.
+    const prompt = `Vybíráš obrázky pro zobrazení stavu člena rodiny na GPS hodinkách.
 
 Aktuální stav: "${status}"
 
 Dostupné obrázky (názvy souborů):
 ${images.map(f => '- ' + f).join('\n')}
 
-Vyber JEDEN soubor který nejvíce odpovídá danému stavu.
-Pokud žádný obrázek neodpovídá, vrať prázdný string.
+Vyber VŠECHNY soubory které by mohly odpovídat danému stavu (mohou být varianty stejného tématu).
+Pokud žádný neodpovídá, vrať prázdný string.
 
-Odpověz POUZE názvem souboru nebo prázdným stringem, bez jakéhokoliv dalšího textu.`;
+Odpověz POUZE názvy souborů oddělené čárkou, nebo prázdným stringem. Bez dalšího textu.`;
 
     const data = await httpPost(
       'api.anthropic.com',
@@ -699,20 +722,22 @@ Odpověz POUZE názvem souboru nebo prázdným stringem, bez jakéhokoliv dalš�
       },
       JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 50,
+        max_tokens: 100,
         messages: [{ role: 'user', content: prompt }]
       })
     );
 
     const result = (data.content?.[0]?.text || '').trim();
-    const validFile = images.find(f => f === result);
-    const finalResult = validFile || '';
-    // Uložíme s prefixem složky pro správné URL
-    const finalPath = finalResult ? subfolder + '/' + finalResult : '';
+    const candidates = result.split(',')
+      .map(f => f.trim())
+      .filter(f => images.includes(f))
+      .map(f => subfolder + '/' + f);
 
-    console.log(`[IMG] Status "${status}" (${subfolder}) → "${finalResult || 'žádný'}"`);
-    await redis.set(cacheKey, finalPath, { EX: IMG_CACHE_TTL });
-    await logEvent('img_selected', { status, subfolder, selectedImg: finalResult || null, availableImgs: images, prompt });
+    const finalPath = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : '';
+
+    console.log(`[IMG] Status "${status}" (${subfolder}) → AI vybrala ${candidates.length} kandidátů: ${candidates.join(', ') || 'žádný'}`);
+    await redis.set(cacheKey, JSON.stringify(candidates), { EX: IMG_CACHE_TTL });
+    await logEvent('img_selected', { status, subfolder, candidates, selectedImg: finalPath || null, availableImgs: images });
     return finalPath || null;
 
   } catch(e) {
