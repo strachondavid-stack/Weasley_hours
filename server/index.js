@@ -670,7 +670,7 @@ async function suggestImageForStatus(status) {
   // Zkus přímou shodu — soubory které obsahují název statusu (auto, auto_1, auto_2...)
   const statusKey = status.toLowerCase().replace(/[^a-z0-9]/g, '_');
   const directMatches = images.filter(f => {
-    const base = f.toLowerCase().replace(/\.[^.]+$/, ''); // bez přípony
+    const base = f.toLowerCase().replace(/\.[^.]+$/, '').replace(/[^a-z0-9]/g, '_');
     return base === statusKey || base.startsWith(statusKey + '_') || base.startsWith(statusKey + '-');
   });
 
