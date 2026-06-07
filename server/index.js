@@ -449,11 +449,11 @@ function clusterCenter(points) {
 }
 
 // ─── Zpracování zastávky ──────────────────────────────────────────────────────
-async function processStopCandidate(member, lat, lon, gapMinutes, source) {
+async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat = false) {
 
-  // Deduplikace — stejné místo max jednou za hodinu
+  // Deduplikace — stejné místo max jednou za hodinu (přeskočit pro opakované detekce)
   const dedupeKey = member + '_' + lat.toFixed(3) + '_' + lon.toFixed(3);
-  if (recentlyDetected[dedupeKey] && Date.now() - recentlyDetected[dedupeKey] < 60 * 60 * 1000) {
+  if (!repeat && recentlyDetected[dedupeKey] && Date.now() - recentlyDetected[dedupeKey] < 60 * 60 * 1000) {
     console.log(`[STOP] Duplikát ${dedupeKey}, přeskakuji`);
     return;
   }
@@ -575,14 +575,14 @@ async function detectSilentStop(member, prevPoint, newLat, newLon, newTs) {
 
 // ─── Cluster tracking ─────────────────────────────────────────────────────────
 // Move mode: husté body v malém okruhu = reálná zastávka.
-async function evaluateCluster(member, cluster) {
+async function evaluateCluster(member, cluster, repeat = false) {
   if (!cluster || cluster.points.length < MIN_STOP_POINTS) return;
   // Pouzij ts posledniho bodu misto Date.now() — funguje i se simulovanym casem
   const lastTs = cluster.points[cluster.points.length - 1].ts;
   const duration = lastTs - cluster.startTs;
   if (duration < MIN_STOP_DURATION) return;
   const center = clusterCenter(cluster.points);
-  await processStopCandidate(member, center.lat, center.lon, Math.round(duration / 60000), 'cluster');
+  await processStopCandidate(member, center.lat, center.lon, Math.round(duration / 60000), 'cluster', repeat);
 }
 
 // ─── Hlavní tracker ───────────────────────────────────────────────────────────
@@ -613,11 +613,16 @@ async function updateTracker(member, lat, lon, ts, motionActivities = []) {
     tracker.cluster.points.push({ lat, lon, ts, stationary: !isAutomotive });
     const durMin = Math.round((ts - tracker.cluster.startTs) / 60000);
     console.log(`[TRACK] [${member}] V clusteru dist=${Math.round(dist)}m dur=${durMin}min pts=${tracker.cluster.points.length}`);
-    // Průběžná detekce po 10 minutách — nečekej na odchod
-    if (!tracker.cluster.earlyDetected && durMin >= 10 && tracker.cluster.points.length >= MIN_STOP_POINTS) {
-      tracker.cluster.earlyDetected = true;
-      console.log(`[TRACK] [${member}] Průběžná detekce po ${durMin} min`);
-      evaluateCluster(member, tracker.cluster); // async, neblokuj
+    // Průběžná detekce — každých 10 minut spusť novou detekci
+    // S každou další detekcí roste délka zastávky → AI dá vyšší confidence
+    const EARLY_INTERVAL = 10; // minut
+    const nextDetectAt = ((tracker.cluster.earlyDetectCount || 0) + 1) * EARLY_INTERVAL;
+    if (durMin >= nextDetectAt && tracker.cluster.points.length >= MIN_STOP_POINTS) {
+      tracker.cluster.earlyDetectCount = (tracker.cluster.earlyDetectCount || 0) + 1;
+      tracker.cluster.earlyDetected = true; // zabrání detekci při odchodu pokud už proběhla
+      const isRepeat = tracker.cluster.earlyDetectCount > 1;
+      console.log(`[TRACK] [${member}] Průběžná detekce #${tracker.cluster.earlyDetectCount} po ${durMin} min`);
+      evaluateCluster(member, tracker.cluster, isRepeat); // async, neblokuj
     }
   } else if (dist > LEAVE_RADIUS || forceClose) {
     if (forceClose) console.log(`[TRACK] [${member}] automotive uzavrel stani dist=${Math.round(dist)}m`);
