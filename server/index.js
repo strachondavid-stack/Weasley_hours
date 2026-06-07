@@ -211,14 +211,14 @@ async function askClaude(member, lat, lon, context) {
 
 Člen rodiny: ${member}
 Čas: ${dayOfWeek} ${timeStr}
-Zdroj: ${source === 'silence' ? 'Significant mode (GPS bod před odjezdem, mezera ' + gapMinutes + ' min)' : 'cluster bodů v Move mode, délka ' + gapMinutes + ' min'}
+Zdroj: ${source === 'silence' ? 'Significant mode (GPS bod před odjezdem, mezera ' + gapMinutes + ' min)' : 'cluster bodů v Move mode, délka minimálně ' + gapMinutes + ' min (člen je pravděpodobně stále na místě — skutečná délka bude delší)'}
 Souřadnice: ${lat.toFixed(5)}, ${lon.toFixed(5)}
 Předchozí návštěvy tohoto místa: ${historyVisits}x
 ${nearbyStr}
 Nejbližší místa z Google Places:
 ${placesStr}
 
-Rodina v ČR. Chceme ukládat: práce, obchod, lékař, restaurace, sport, škola, návštěvy, turistické atrakce. Nechceme: průjezdy, čekání v autě, GPS artefakty.
+Rodina v ČR. Chceme ukládat: práce, obchod, lékař, restaurace, sport, škola, návštěvy, turistické atrakce. Nechceme: průjezdy, čekání v autě, GPS artefakty. Délka zastávky je minimální hodnota — skutečná délka je delší, proto nezamítej jen kvůli krátké délce.
 
 Pravidla pro výběr názvu:
 1. Ignoruj generická místa bez turistické/praktické hodnoty: bankomaty (atm), benzínky, parkoviště, utility, průmyslové služby.
