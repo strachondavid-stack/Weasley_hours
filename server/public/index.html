@@ -2538,9 +2538,14 @@ let scPreviewMarker = null;
 let scQueue = []; // fronta scénářů
 
 function scSelectAll() {
-  const allIds = SC_SCENARIOS.map(s => s.id);
+  const visible = scActiveCat
+    ? (SC_CATEGORIES.find(c => c.id === scActiveCat)?.scenarios || [])
+    : SC_SCENARIOS;
+  const allIds = visible.map(s => s.id);
   const allSelected = allIds.every(id => scQueue.includes(id));
-  scQueue = allSelected ? [] : [...allIds];
+  scQueue = allSelected
+    ? scQueue.filter(id => !allIds.includes(id))  // odeber jen viditelné
+    : [...new Set([...scQueue, ...allIds])];        // přidej viditelné
   scUpdateQueueUI();
   renderScenarios();
 }
