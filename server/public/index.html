@@ -2077,11 +2077,11 @@ function renderScenarios() {
   // Category tabs
   const catBar = document.getElementById('sc-cat-bar');
   if (catBar && SC_CATEGORIES.length > 0) {
-    catBar.innerHTML = '<button class="fbtn' + (scActiveCat === null ? ' active' : '') + '" onclick="scSetCat(null)">Vše (' + SC_SCENARIOS.length + ')</button>' +
-      SC_CATEGORIES.map(c =>
-        '<button class="fbtn' + (scActiveCat === c.id ? ' active' : '') + '" onclick="scSetCat('' + c.id + '')">' +
-        c.icon + ' ' + c.title + ' (' + (c.scenarios||[]).length + ')</button>'
-      ).join('');
+    const btns = ['<button class="fbtn' + (scActiveCat === null ? ' active' : '') + '" onclick="scSetCat(null)">Vše (' + SC_SCENARIOS.length + ')</button>'];
+    SC_CATEGORIES.forEach(c => {
+      btns.push('<button class="fbtn' + (scActiveCat === c.id ? ' active' : '') + '" onclick="scSetCat(\'' + c.id + '\')">' + c.icon + ' ' + c.title + ' (' + (c.scenarios||[]).length + ')</button>');
+    });
+    catBar.innerHTML = btns.join('');
   }
 
   // Filtruj scénáře podle aktivní kategorie
