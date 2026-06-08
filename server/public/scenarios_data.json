@@ -3237,14 +3237,14 @@
       "icon": "🛒",
       "scenarios": [
         {
-          "id": "tesco_tesco_hypermarket_liberec",
-          "title": "Tesco Hypermarket Liberec",
+          "id": "tesco_tesco_hypermarket_praha_eden",
+          "title": "Tesco Hypermarket Praha Eden",
           "icon": "🛒",
           "tags": [
             "errand",
             "shopping"
           ],
-          "desc": "Nákup v Tesco Hypermarket Liberec, Liberec.",
+          "desc": "Nákup v Tesco Hypermarket Praha Eden, Praha.",
           "steps": [
             {
               "name": "Náš domeček",
@@ -3255,9 +3255,9 @@
               "icon": "🏠"
             },
             {
-              "name": "Tesco Hypermarket Liberec",
-              "lat": 50.7656708,
-              "lon": 15.0558375,
+              "name": "Tesco Hypermarket Praha Eden",
+              "lat": 50.0679813,
+              "lon": 14.4689623,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
@@ -3273,14 +3273,14 @@
           ]
         },
         {
-          "id": "tesco_tesco_supermarket_ruprechtice",
-          "title": "Tesco Supermarket Ruprechtice",
+          "id": "tesco_tesco_hypermarket_praha_letnany",
+          "title": "Tesco Hypermarket Praha Letňany",
           "icon": "🛒",
           "tags": [
             "errand",
             "shopping"
           ],
-          "desc": "Nákup v Tesco Supermarket Ruprechtice, Liberec.",
+          "desc": "Nákup v Tesco Hypermarket Praha Letňany, Praha.",
           "steps": [
             {
               "name": "Náš domeček",
@@ -3291,9 +3291,9 @@
               "icon": "🏠"
             },
             {
-              "name": "Tesco Supermarket Ruprechtice",
-              "lat": 50.784339,
-              "lon": 15.0605932,
+              "name": "Tesco Hypermarket Praha Letňany",
+              "lat": 50.1349548,
+              "lon": 14.5013724,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
@@ -3309,14 +3309,14 @@
           ]
         },
         {
-          "id": "tesco_tesco_supermarket_olbrachtova",
-          "title": "Tesco Supermarket Olbrachtova",
+          "id": "tesco_tesco_hypermarket_praha_novodvorska",
+          "title": "Tesco Hypermarket Praha Novodvorská",
           "icon": "🛒",
           "tags": [
             "errand",
             "shopping"
           ],
-          "desc": "Nákup v Tesco Supermarket Olbrachtova, Liberec.",
+          "desc": "Nákup v Tesco Hypermarket Praha Novodvorská, Praha.",
           "steps": [
             {
               "name": "Náš domeček",
@@ -3327,9 +3327,1089 @@
               "icon": "🏠"
             },
             {
-              "name": "Tesco Supermarket Olbrachtova",
-              "lat": 50.7609023,
-              "lon": 15.0904828,
+              "name": "Tesco Hypermarket Praha Novodvorská",
+              "lat": 50.027126,
+              "lon": 14.4330578,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_hypermarket_praha_novy_smichov",
+          "title": "Tesco Hypermarket Praha Nový Smíchov",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Hypermarket Praha Nový Smíchov, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Hypermarket Praha Nový Smíchov",
+              "lat": 50.0721476,
+              "lon": 14.4011525,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_hypermarket_praha_skalka",
+          "title": "Tesco Hypermarket Praha Skalka",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Hypermarket Praha Skalka, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Hypermarket Praha Skalka",
+              "lat": 50.0702854,
+              "lon": 14.5103746,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_hypermarket_praha_zlicin",
+          "title": "Tesco Hypermarket Praha Zličín",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Hypermarket Praha Zličín, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Hypermarket Praha Zličín",
+              "lat": 50.0494597,
+              "lon": 14.2954384,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_my_narodni",
+          "title": "Tesco My Národní",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco My Národní, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco My Národní",
+              "lat": 50.08231,
+              "lon": 14.4194807,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_supermarket_praha_brandlova",
+          "title": "Tesco Supermarket Praha Brandlova",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Supermarket Praha Brandlova, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Supermarket Praha Brandlova",
+              "lat": 50.032313,
+              "lon": 14.5144513,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_supermarket_praha_kvet",
+          "title": "Tesco Supermarket Praha Květ",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Supermarket Praha Květ, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Supermarket Praha Květ",
+              "lat": 50.0566884,
+              "lon": 14.497718,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_supermarket_praha_luka",
+          "title": "Tesco Supermarket Praha Luka",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Supermarket Praha Luka, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Supermarket Praha Luka",
+              "lat": 50.0455343,
+              "lon": 14.3228023,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_supermarket_praha_zahalka",
+          "title": "Tesco Supermarket Praha Zahálka",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Supermarket Praha Zahálka, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Supermarket Praha Zahálka",
+              "lat": 50.0168362,
+              "lon": 14.4014739,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_supermarket_praha_kunratice",
+          "title": "Tesco Supermarket Praha Kunratice",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Supermarket Praha Kunratice, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Supermarket Praha Kunratice",
+              "lat": 50.0136745,
+              "lon": 14.4869796,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_arbesovo_nam",
+          "title": "Tesco Expres Praha Arbesovo nám.",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Arbesovo nám., Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Arbesovo nám.",
+              "lat": 50.0769037,
+              "lon": 14.4044385,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_belehradska",
+          "title": "Tesco Expres Praha Bělehradská",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Bělehradská, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Bělehradská",
+              "lat": 50.0762143,
+              "lon": 14.4317332,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_belocerkevska",
+          "title": "Tesco Expres Praha Bělocerkevská",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Bělocerkevská, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Bělocerkevská",
+              "lat": 50.0725996,
+              "lon": 14.4710115,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_cakovice",
+          "title": "Tesco Expres Praha Čakovice",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Čakovice, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Čakovice",
+              "lat": 50.1513546,
+              "lon": 14.5302676,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_hartigova",
+          "title": "Tesco Expres Praha Hartigova",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Hartigova, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Hartigova",
+              "lat": 50.0899998,
+              "lon": 14.4672457,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_hradcanska",
+          "title": "Tesco Expres Praha Hradčanská",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Hradčanská, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Hradčanská",
+              "lat": 50.0971781,
+              "lon": 14.4057272,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_kodanska",
+          "title": "Tesco Expres Praha Kodaňská",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Kodaňská, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Kodaňská",
+              "lat": 50.071348,
+              "lon": 14.4567256,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_makovskeho",
+          "title": "Tesco Expres Praha Makovského",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Makovského, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Makovského",
+              "lat": 50.0660622,
+              "lon": 14.3009292,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_mendelova",
+          "title": "Tesco Expres Praha Mendelova",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Mendelova, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Mendelova",
+              "lat": 50.0330229,
+              "lon": 14.5325235,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_moskevska",
+          "title": "Tesco Expres Praha Moskevská",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Moskevská, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Moskevská",
+              "lat": 50.0669979,
+              "lon": 14.4602264,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_na_piskach",
+          "title": "Tesco Expres Praha Na Pískách",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Na Pískách, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Na Pískách",
+              "lat": 50.1041402,
+              "lon": 14.3724423,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_nuselska",
+          "title": "Tesco Expres Praha Nuselská",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Nuselská, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Nuselská",
+              "lat": 50.0613305,
+              "lon": 14.4474545,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_prazskeho_pov",
+          "title": "Tesco Expres Praha Pražského pov.",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Pražského pov., Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Pražského pov.",
+              "lat": 50.0562597,
+              "lon": 14.4337901,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_prokopova",
+          "title": "Tesco Expres Praha Prokopova",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Prokopova, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Prokopova",
+              "lat": 50.0855371,
+              "lon": 14.4538091,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_roztylske_nam",
+          "title": "Tesco Expres Praha Roztylské nám.",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Roztylské nám., Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Roztylské nám.",
+              "lat": 50.046899,
+              "lon": 14.4753265,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_sokolovska",
+          "title": "Tesco Expres Praha Sokolovská",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Sokolovská, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Sokolovská",
+              "lat": 50.1069983,
+              "lon": 14.4881405,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_starodubecska",
+          "title": "Tesco Expres Praha Starodubečská",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Starodubečská, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Starodubečská",
+              "lat": 50.0617934,
+              "lon": 14.5889886,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_svobodova",
+          "title": "Tesco Expres Praha Svobodova",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Svobodova, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Svobodova",
+              "lat": 50.0679805,
+              "lon": 14.4176064,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_praha_taborska",
+          "title": "Tesco Expres Praha Táborská",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Praha Táborská, Praha.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Praha Táborská",
+              "lat": 50.0627456,
+              "lon": 14.4420596,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_expres_dolni_brezany",
+          "title": "Tesco Expres Dolní Břežany",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Expres Dolní Břežany, Praha okolí.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Expres Dolní Břežany",
+              "lat": 49.9651894,
+              "lon": 14.4591826,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_hypermarket_ricany",
+          "title": "Tesco Hypermarket Říčany",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Hypermarket Říčany, Praha okolí.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Hypermarket Říčany",
+              "lat": 50.0026169,
+              "lon": 14.6582581,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
@@ -3525,14 +4605,14 @@
           ]
         },
         {
-          "id": "tesco_tesco_hypermarket_chomutov",
-          "title": "Tesco Hypermarket Chomutov",
+          "id": "tesco_tesco_supermarket_chomutov_pisecna",
+          "title": "Tesco Supermarket Chomutov Písečná",
           "icon": "🛒",
           "tags": [
             "errand",
             "shopping"
           ],
-          "desc": "Nákup v Tesco Hypermarket Chomutov, Chomutov.",
+          "desc": "Nákup v Tesco Supermarket Chomutov Písečná, Chomutov.",
           "steps": [
             {
               "name": "Náš domeček",
@@ -3543,9 +4623,9 @@
               "icon": "🏠"
             },
             {
-              "name": "Tesco Hypermarket Chomutov",
-              "lat": 50.4601,
-              "lon": 13.4072,
+              "name": "Tesco Supermarket Chomutov Písečná",
+              "lat": 50.4850616,
+              "lon": 13.4377642,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
@@ -3561,14 +4641,14 @@
           ]
         },
         {
-          "id": "tesco_tesco_hypermarket_teplice",
-          "title": "Tesco Hypermarket Teplice",
+          "id": "tesco_tesco_supermarket_chomutov_chomutovka",
+          "title": "Tesco Supermarket Chomutov Chomutovka",
           "icon": "🛒",
           "tags": [
             "errand",
             "shopping"
           ],
-          "desc": "Nákup v Tesco Hypermarket Teplice, Teplice.",
+          "desc": "Nákup v Tesco Supermarket Chomutov Chomutovka, Chomutov.",
           "steps": [
             {
               "name": "Náš domeček",
@@ -3579,9 +4659,9 @@
               "icon": "🏠"
             },
             {
-              "name": "Tesco Hypermarket Teplice",
-              "lat": 50.6547,
-              "lon": 13.8272,
+              "name": "Tesco Supermarket Chomutov Chomutovka",
+              "lat": 50.4619734,
+              "lon": 13.4142082,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
@@ -3597,14 +4677,14 @@
           ]
         },
         {
-          "id": "tesco_tesco_hypermarket_usti_nad_labem",
-          "title": "Tesco Hypermarket Ústí nad Labem",
+          "id": "tesco_tesco_supermarket_usti_nad_labem",
+          "title": "Tesco Supermarket Ústí nad Labem",
           "icon": "🛒",
           "tags": [
             "errand",
             "shopping"
           ],
-          "desc": "Nákup v Tesco Hypermarket Ústí nad Labem, Ústí nad Labem.",
+          "desc": "Nákup v Tesco Supermarket Ústí nad Labem, Ústí nad Labem.",
           "steps": [
             {
               "name": "Náš domeček",
@@ -3615,9 +4695,9 @@
               "icon": "🏠"
             },
             {
-              "name": "Tesco Hypermarket Ústí nad Labem",
-              "lat": 50.6539,
-              "lon": 14.0418,
+              "name": "Tesco Supermarket Ústí nad Labem",
+              "lat": 50.6758115,
+              "lon": 14.1093494,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
@@ -3633,14 +4713,14 @@
           ]
         },
         {
-          "id": "tesco_tesco_hypermarket_decin",
-          "title": "Tesco Hypermarket Děčín",
+          "id": "tesco_tesco_ostrava_futurum",
+          "title": "Tesco Ostrava Futurum",
           "icon": "🛒",
           "tags": [
             "errand",
             "shopping"
           ],
-          "desc": "Nákup v Tesco Hypermarket Děčín, Děčín.",
+          "desc": "Nákup v Tesco Ostrava Futurum, Ostrava.",
           "steps": [
             {
               "name": "Náš domeček",
@@ -3651,9 +4731,9 @@
               "icon": "🏠"
             },
             {
-              "name": "Tesco Hypermarket Děčín",
-              "lat": 50.7748,
-              "lon": 14.2131,
+              "name": "Tesco Ostrava Futurum",
+              "lat": 49.8326014,
+              "lon": 18.2643193,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
@@ -3669,14 +4749,14 @@
           ]
         },
         {
-          "id": "tesco_tesco_hypermarket_ceska_lipa",
-          "title": "Tesco Hypermarket Česká Lípa",
+          "id": "tesco_tesco_extra_ostrava_hrabova",
+          "title": "Tesco Extra Ostrava Hrabová",
           "icon": "🛒",
           "tags": [
             "errand",
             "shopping"
           ],
-          "desc": "Nákup v Tesco Hypermarket Česká Lípa, Česká Lípa.",
+          "desc": "Nákup v Tesco Extra Ostrava Hrabová, Ostrava.",
           "steps": [
             {
               "name": "Náš domeček",
@@ -3687,9 +4767,9 @@
               "icon": "🏠"
             },
             {
-              "name": "Tesco Hypermarket Česká Lípa",
-              "lat": 50.6897,
-              "lon": 14.5355,
+              "name": "Tesco Extra Ostrava Hrabová",
+              "lat": 49.7737141,
+              "lon": 18.2643964,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
@@ -3705,14 +4785,14 @@
           ]
         },
         {
-          "id": "tesco_tesco_hypermarket_mlada_boleslav",
-          "title": "Tesco Hypermarket Mladá Boleslav",
+          "id": "tesco_tesco_shopland_ostrava_trebovice",
+          "title": "Tesco Shopland Ostrava Třebovice",
           "icon": "🛒",
           "tags": [
             "errand",
             "shopping"
           ],
-          "desc": "Nákup v Tesco Hypermarket Mladá Boleslav, Mladá Boleslav.",
+          "desc": "Nákup v Tesco Shopland Ostrava Třebovice, Ostrava.",
           "steps": [
             {
               "name": "Náš domeček",
@@ -3723,9 +4803,405 @@
               "icon": "🏠"
             },
             {
-              "name": "Tesco Hypermarket Mladá Boleslav",
-              "lat": 50.4118,
-              "lon": 14.9119,
+              "name": "Tesco Shopland Ostrava Třebovice",
+              "lat": 49.8279316,
+              "lon": 18.2011474,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_havirov",
+          "title": "Tesco Havířov",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Havířov, Havířov.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Havířov",
+              "lat": 49.7788,
+              "lon": 18.4339,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_karvina",
+          "title": "Tesco Karviná",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Karviná, Karviná.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Karviná",
+              "lat": 49.8457676,
+              "lon": 18.552884,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_hypermarket_frydek_mistek",
+          "title": "TESCO Hypermarket Frýdek-Místek",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v TESCO Hypermarket Frýdek-Místek, Frýdek-Místek.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "TESCO Hypermarket Frýdek-Místek",
+              "lat": 49.6718439,
+              "lon": 18.3292367,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_frydek_mistek_silesia",
+          "title": "Tesco Frýdek-Místek Silesia",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Frýdek-Místek Silesia, Frýdek-Místek.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Frýdek-Místek Silesia",
+              "lat": 49.6777262,
+              "lon": 18.3616343,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_opava",
+          "title": "Tesco Opava",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Opava, Opava.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Opava",
+              "lat": 49.9361,
+              "lon": 17.9043,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_cesky_tesin",
+          "title": "Tesco Český Těšín",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Český Těšín, Český Těšín.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Český Těšín",
+              "lat": 49.7477,
+              "lon": 18.62,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_hypermarket_liberec",
+          "title": "Tesco Hypermarket Liberec",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Hypermarket Liberec, Liberec.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Hypermarket Liberec",
+              "lat": 50.7656708,
+              "lon": 15.0558375,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_supermarket_liberec_ruprechtice",
+          "title": "Tesco Supermarket Liberec Ruprechtice",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Supermarket Liberec Ruprechtice, Liberec.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Supermarket Liberec Ruprechtice",
+              "lat": 50.784339,
+              "lon": 15.0605932,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_supermarket_liberec_olbrachtova",
+          "title": "Tesco Supermarket Liberec Olbrachtova",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Supermarket Liberec Olbrachtova, Liberec.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Supermarket Liberec Olbrachtova",
+              "lat": 50.7609023,
+              "lon": 15.0904828,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_supermarket_jablonec_nad_nisou",
+          "title": "Tesco Supermarket Jablonec nad Nisou",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Supermarket Jablonec nad Nisou, Jablonec n. N..",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Supermarket Jablonec nad Nisou",
+              "lat": 50.7267,
+              "lon": 15.1653,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_frydlant",
+          "title": "Tesco Frýdlant",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Frýdlant, Frýdlant.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Frýdlant",
+              "lat": 50.9214,
+              "lon": 15.0874,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
@@ -3760,8 +5236,8 @@
             },
             {
               "name": "Tesco Hypermarket Hradec Králové",
-              "lat": 50.2063,
-              "lon": 15.8329,
+              "lat": 50.190303,
+              "lon": 15.8033629,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
@@ -3777,14 +5253,14 @@
           ]
         },
         {
-          "id": "tesco_tesco_hypermarket_pardubice",
-          "title": "Tesco Hypermarket Pardubice",
+          "id": "tesco_tesco_supermarket_trutnov",
+          "title": "Tesco Supermarket Trutnov",
           "icon": "🛒",
           "tags": [
             "errand",
             "shopping"
           ],
-          "desc": "Nákup v Tesco Hypermarket Pardubice, Pardubice.",
+          "desc": "Nákup v Tesco Supermarket Trutnov, Trutnov.",
           "steps": [
             {
               "name": "Náš domeček",
@@ -3795,9 +5271,9 @@
               "icon": "🏠"
             },
             {
-              "name": "Tesco Hypermarket Pardubice",
-              "lat": 50.039,
-              "lon": 15.7801,
+              "name": "Tesco Supermarket Trutnov",
+              "lat": 50.5615,
+              "lon": 15.9117,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
@@ -3813,14 +5289,14 @@
           ]
         },
         {
-          "id": "tesco_tesco_hypermarket_brno_sopky",
-          "title": "Tesco Hypermarket Brno Šopky",
+          "id": "tesco_tesco_supermarket_jicin",
+          "title": "Tesco Supermarket Jičín",
           "icon": "🛒",
           "tags": [
             "errand",
             "shopping"
           ],
-          "desc": "Nákup v Tesco Hypermarket Brno Šopky, Brno.",
+          "desc": "Nákup v Tesco Supermarket Jičín, Jičín.",
           "steps": [
             {
               "name": "Náš domeček",
@@ -3831,9 +5307,9 @@
               "icon": "🏠"
             },
             {
-              "name": "Tesco Hypermarket Brno Šopky",
-              "lat": 49.1869,
-              "lon": 16.6478,
+              "name": "Tesco Supermarket Jičín",
+              "lat": 50.4368,
+              "lon": 15.362,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
@@ -3849,14 +5325,14 @@
           ]
         },
         {
-          "id": "tesco_tesco_hypermarket_brno_futurum",
-          "title": "Tesco Hypermarket Brno Futurum",
+          "id": "tesco_tesco_dvur_kralove",
+          "title": "Tesco Dvůr Králové",
           "icon": "🛒",
           "tags": [
             "errand",
             "shopping"
           ],
-          "desc": "Nákup v Tesco Hypermarket Brno Futurum, Brno.",
+          "desc": "Nákup v Tesco Dvůr Králové, Dvůr Králové n. L..",
           "steps": [
             {
               "name": "Náš domeček",
@@ -3867,9 +5343,9 @@
               "icon": "🏠"
             },
             {
-              "name": "Tesco Hypermarket Brno Futurum",
-              "lat": 49.2044,
-              "lon": 16.5691,
+              "name": "Tesco Dvůr Králové",
+              "lat": 50.4387,
+              "lon": 15.8125,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
@@ -3885,14 +5361,14 @@
           ]
         },
         {
-          "id": "tesco_tesco_hypermarket_ostrava_avion",
-          "title": "Tesco Hypermarket Ostrava Avion",
+          "id": "tesco_tesco_pardubice",
+          "title": "Tesco Pardubice",
           "icon": "🛒",
           "tags": [
             "errand",
             "shopping"
           ],
-          "desc": "Nákup v Tesco Hypermarket Ostrava Avion, Ostrava.",
+          "desc": "Nákup v Tesco Pardubice, Pardubice.",
           "steps": [
             {
               "name": "Náš domeček",
@@ -3903,9 +5379,9 @@
               "icon": "🏠"
             },
             {
-              "name": "Tesco Hypermarket Ostrava Avion",
-              "lat": 49.8275,
-              "lon": 18.2501,
+              "name": "Tesco Pardubice",
+              "lat": 50.0363772,
+              "lon": 15.7673434,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
@@ -3921,14 +5397,14 @@
           ]
         },
         {
-          "id": "tesco_tesco_hypermarket_olomouc",
-          "title": "Tesco Hypermarket Olomouc",
+          "id": "tesco_tesco_supermarket_chrudim",
+          "title": "Tesco Supermarket Chrudim",
           "icon": "🛒",
           "tags": [
             "errand",
             "shopping"
           ],
-          "desc": "Nákup v Tesco Hypermarket Olomouc, Olomouc.",
+          "desc": "Nákup v Tesco Supermarket Chrudim, Chrudim.",
           "steps": [
             {
               "name": "Náš domeček",
@@ -3939,9 +5415,9 @@
               "icon": "🏠"
             },
             {
-              "name": "Tesco Hypermarket Olomouc",
-              "lat": 49.5884,
-              "lon": 17.2696,
+              "name": "Tesco Supermarket Chrudim",
+              "lat": 49.947,
+              "lon": 15.7964,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
@@ -3957,14 +5433,14 @@
           ]
         },
         {
-          "id": "tesco_tesco_hypermarket_zlin",
-          "title": "Tesco Hypermarket Zlín",
+          "id": "tesco_tesco_ceska_trebova",
+          "title": "Tesco Česká Třebová",
           "icon": "🛒",
           "tags": [
             "errand",
             "shopping"
           ],
-          "desc": "Nákup v Tesco Hypermarket Zlín, Zlín.",
+          "desc": "Nákup v Tesco Česká Třebová, Česká Třebová.",
           "steps": [
             {
               "name": "Náš domeček",
@@ -3975,9 +5451,1989 @@
               "icon": "🏠"
             },
             {
-              "name": "Tesco Hypermarket Zlín",
-              "lat": 49.2237,
-              "lon": 17.6598,
+              "name": "Tesco Česká Třebová",
+              "lat": 49.902,
+              "lon": 16.4441,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_usti_nad_orlici",
+          "title": "Tesco Ústí nad Orlicí",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Ústí nad Orlicí, Ústí nad Orlicí.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Ústí nad Orlicí",
+              "lat": 49.973,
+              "lon": 16.395,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_prelouc",
+          "title": "Tesco Přelouč",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Přelouč, Přelouč.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Přelouč",
+              "lat": 50.0363,
+              "lon": 15.5608,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_vysoke_myto",
+          "title": "Tesco Vysoké Mýto",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Vysoké Mýto, Vysoké Mýto.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Vysoké Mýto",
+              "lat": 49.952,
+              "lon": 16.162,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_melnik",
+          "title": "Tesco Mělník",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Mělník, Mělník.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Mělník",
+              "lat": 50.3527,
+              "lon": 14.4741,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_kolin",
+          "title": "Tesco Kolín",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Kolín, Kolín.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Kolín",
+              "lat": 50.022,
+              "lon": 15.199,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_mlada_boleslav",
+          "title": "Tesco Mladá Boleslav",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Mladá Boleslav, Mladá Boleslav.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Mladá Boleslav",
+              "lat": 50.411,
+              "lon": 14.906,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_ceske_budejovice",
+          "title": "TESCO České Budějovice",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v TESCO České Budějovice, České Budějovice.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "TESCO České Budějovice",
+              "lat": 48.9862698,
+              "lon": 14.4587717,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_ceske_budejovice_krajinska",
+          "title": "TESCO České Budějovice Krajinská",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v TESCO České Budějovice Krajinská, České Budějovice.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "TESCO České Budějovice Krajinská",
+              "lat": 48.9764074,
+              "lon": 14.4739879,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_tabor",
+          "title": "Tesco Tábor",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Tábor, Tábor.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Tábor",
+              "lat": 49.4165,
+              "lon": 14.6726,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_pisek",
+          "title": "Tesco Písek",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Písek, Písek.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Písek",
+              "lat": 49.3053,
+              "lon": 14.1447,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_sobeslav",
+          "title": "Tesco Soběslav",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Soběslav, Soběslav.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Soběslav",
+              "lat": 49.265,
+              "lon": 14.7218,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_hypermarket_plzen_rokycanska",
+          "title": "Tesco Hypermarket Plzeň Rokycanská",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Hypermarket Plzeň Rokycanská, Plzeň.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Hypermarket Plzeň Rokycanská",
+              "lat": 49.7454608,
+              "lon": 13.4372047,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_klatovy",
+          "title": "Tesco Klatovy",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Klatovy, Klatovy.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Klatovy",
+              "lat": 49.3965,
+              "lon": 13.2939,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_susice",
+          "title": "Tesco Sušice",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Sušice, Sušice.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Sušice",
+              "lat": 49.229,
+              "lon": 13.5194,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_tachov",
+          "title": "Tesco Tachov",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Tachov, Tachov.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Tachov",
+              "lat": 49.7964,
+              "lon": 12.6361,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_supermarket_karlovy_vary",
+          "title": "Tesco Supermarket Karlovy Vary",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Supermarket Karlovy Vary, Karlovy Vary.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Supermarket Karlovy Vary",
+              "lat": 50.2176,
+              "lon": 12.8512,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_supermarket_karlovy_vary_rybare",
+          "title": "Tesco Supermarket Karlovy Vary Rybáře",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Supermarket Karlovy Vary Rybáře, Karlovy Vary.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Supermarket Karlovy Vary Rybáře",
+              "lat": 50.236,
+              "lon": 12.894,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_cheb",
+          "title": "Tesco Cheb",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Cheb, Cheb.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Cheb",
+              "lat": 50.072,
+              "lon": 12.37,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_sokolov",
+          "title": "Tesco Sokolov",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Sokolov, Sokolov.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Sokolov",
+              "lat": 50.1876,
+              "lon": 12.6429,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_as",
+          "title": "Tesco Aš",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Aš, Aš.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Aš",
+              "lat": 50.2259,
+              "lon": 12.1965,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_ostrov",
+          "title": "Tesco Ostrov",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Ostrov, Ostrov.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Ostrov",
+              "lat": 50.2987,
+              "lon": 12.9388,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_marianske_lazne",
+          "title": "Tesco Mariánské Lázně",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Mariánské Lázně, Mariánské Lázně.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Mariánské Lázně",
+              "lat": 49.9653,
+              "lon": 12.7015,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_decin",
+          "title": "Tesco Děčín",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Děčín, Děčín.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Děčín",
+              "lat": 50.7739,
+              "lon": 14.211,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_rumburk",
+          "title": "Tesco Rumburk",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Rumburk, Rumburk.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Rumburk",
+              "lat": 50.9555,
+              "lon": 14.5576,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_hypermarket_brno_kralovo_pole",
+          "title": "Tesco Hypermarket Brno Královo Pole",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Hypermarket Brno Královo Pole, Brno.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Hypermarket Brno Královo Pole",
+              "lat": 49.2172182,
+              "lon": 16.6080282,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_hypermarket_brno_herspice",
+          "title": "Tesco Hypermarket Brno Heršpice",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Hypermarket Brno Heršpice, Brno.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Hypermarket Brno Heršpice",
+              "lat": 49.1584376,
+              "lon": 16.6275422,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_hypermarket_brno_bohunice",
+          "title": "Tesco Hypermarket Brno Bohunice",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Hypermarket Brno Bohunice, Brno.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Hypermarket Brno Bohunice",
+              "lat": 49.1775199,
+              "lon": 16.5661221,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_hypermarket_brno_videnska",
+          "title": "Tesco Hypermarket Brno Vídeňská",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Hypermarket Brno Vídeňská, Brno.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Hypermarket Brno Vídeňská",
+              "lat": 49.1566925,
+              "lon": 16.5974953,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_supermarket_brno_julianov",
+          "title": "Tesco Supermarket Brno Juliánov",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Supermarket Brno Juliánov, Brno.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Supermarket Brno Juliánov",
+              "lat": 49.1906613,
+              "lon": 16.6609788,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_znojmo",
+          "title": "Tesco Znojmo",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Znojmo, Znojmo.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Znojmo",
+              "lat": 48.855,
+              "lon": 16.0497,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_breclav",
+          "title": "Tesco Břeclav",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Břeclav, Břeclav.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Břeclav",
+              "lat": 48.7571,
+              "lon": 16.8875,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_mikulov",
+          "title": "Tesco Mikulov",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Mikulov, Mikulov.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Mikulov",
+              "lat": 48.8058,
+              "lon": 16.6378,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_ivancice",
+          "title": "Tesco Ivančice",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Ivančice, Ivančice.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Ivančice",
+              "lat": 49.1012,
+              "lon": 16.3801,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_pohorelice",
+          "title": "Tesco Pohořelice",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Pohořelice, Pohořelice.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Pohořelice",
+              "lat": 48.9762,
+              "lon": 16.5226,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_rajhrad",
+          "title": "Tesco Rajhrad",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Rajhrad, Rajhrad.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Rajhrad",
+              "lat": 49.0936,
+              "lon": 16.6097,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_boskovice",
+          "title": "Tesco Boskovice",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Boskovice, Boskovice.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Boskovice",
+              "lat": 49.4867,
+              "lon": 16.6548,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_zlin",
+          "title": "Tesco Zlín",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Zlín, Zlín.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Zlín",
+              "lat": 49.22,
+              "lon": 17.66,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_uherske_hradiste",
+          "title": "Tesco Uherské Hradiště",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Uherské Hradiště, Uherské Hradiště.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Uherské Hradiště",
+              "lat": 49.0686,
+              "lon": 17.4641,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_holesov",
+          "title": "Tesco Holešov",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Holešov, Holešov.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Holešov",
+              "lat": 49.3333,
+              "lon": 17.5795,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_kromeriz",
+          "title": "Tesco Kroměříž",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Kroměříž, Kroměříž.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Kroměříž",
+              "lat": 49.2975,
+              "lon": 17.3901,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_valasske_mezirici",
+          "title": "Tesco Valašské Meziříčí",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Valašské Meziříčí, Valašské Meziříčí.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Valašské Meziříčí",
+              "lat": 49.47,
+              "lon": 17.9733,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_uhersky_brod",
+          "title": "Tesco Uherský Brod",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Uherský Brod, Uherský Brod.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Uherský Brod",
+              "lat": 49.0243,
+              "lon": 17.647,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_slavicin",
+          "title": "Tesco Slavičín",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Slavičín, Slavičín.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Slavičín",
+              "lat": 49.098,
+              "lon": 17.876,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_olomouc",
+          "title": "TESCO Olomouc",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v TESCO Olomouc, Olomouc.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "TESCO Olomouc",
+              "lat": 49.5751494,
+              "lon": 17.2283489,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_prerov_kojetinska",
+          "title": "TESCO Přerov Kojetínská",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v TESCO Přerov Kojetínská, Přerov.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "TESCO Přerov Kojetínská",
+              "lat": 49.4500337,
+              "lon": 17.4434933,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_prerov_17_listopadu",
+          "title": "TESCO Přerov 17. listopadu",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v TESCO Přerov 17. listopadu, Přerov.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "TESCO Přerov 17. listopadu",
+              "lat": 49.4533841,
+              "lon": 17.4569787,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_prostejov",
+          "title": "Tesco Prostějov",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Prostějov, Prostějov.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Prostějov",
+              "lat": 49.4748,
+              "lon": 17.1056,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_sternberk",
+          "title": "Tesco Šternberk",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Šternberk, Šternberk.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Šternberk",
+              "lat": 49.7319,
+              "lon": 17.2994,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_litovel",
+          "title": "Tesco Litovel",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Litovel, Litovel.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Litovel",
+              "lat": 49.7027,
+              "lon": 17.0777,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_unicov",
+          "title": "Tesco Uničov",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Uničov, Uničov.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Uničov",
+              "lat": 49.7773,
+              "lon": 17.1125,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_hypermarket_jihlava",
+          "title": "Tesco Hypermarket Jihlava",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Hypermarket Jihlava, Jihlava.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Hypermarket Jihlava",
+              "lat": 49.3963445,
+              "lon": 15.6097229,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_chotebor",
+          "title": "Tesco Chotěboř",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Chotěboř, Chotěboř.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Chotěboř",
+              "lat": 49.7219,
+              "lon": 15.6703,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_telc",
+          "title": "Tesco Telč",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Telč, Telč.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Telč",
+              "lat": 49.1828,
+              "lon": 15.4516,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_trebic",
+          "title": "Tesco Třebíč",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Třebíč, Třebíč.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Třebíč",
+              "lat": 49.2145,
+              "lon": 15.8892,
+              "stayMin": 25,
+              "mode": "driving-car",
+              "icon": "🛒"
+            },
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            }
+          ]
+        },
+        {
+          "id": "tesco_tesco_vyskov",
+          "title": "Tesco Vyškov",
+          "icon": "🛒",
+          "tags": [
+            "errand",
+            "shopping"
+          ],
+          "desc": "Nákup v Tesco Vyškov, Vyškov.",
+          "steps": [
+            {
+              "name": "Náš domeček",
+              "lat": 50.7793,
+              "lon": 15.0581,
+              "stayMin": 0,
+              "mode": "driving-car",
+              "icon": "🏠"
+            },
+            {
+              "name": "Tesco Vyškov",
+              "lat": 49.2785,
+              "lon": 17.0012,
               "stayMin": 25,
               "mode": "driving-car",
               "icon": "🛒"
