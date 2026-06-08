@@ -1349,6 +1349,28 @@ app.get('/tracker', (req, res) => {
   res.json(out);
 });
 
+// ─── Scenarios API ───────────────────────────────────────────────────────────
+const SCENARIOS_FILE = '/app/public/scenarios_data.json';
+
+app.get('/scenarios', (req, res) => {
+  try {
+    const data = fs.readFileSync(SCENARIOS_FILE, 'utf8');
+    res.setHeader('Content-Type', 'application/json');
+    res.send(data);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/scenarios', (req, res) => {
+  try {
+    fs.writeFileSync(SCENARIOS_FILE, JSON.stringify(req.body, null, 2), 'utf8');
+    res.json({ ok: true });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Scenario Reports ────────────────────────────────────────────────────────
 const SC_REPORTS_KEY = 'sc_reports';
 const SC_REPORTS_MAX = 100;

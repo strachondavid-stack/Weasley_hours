@@ -1822,6 +1822,9 @@ setInterval(()=>{
   <div class="sc-steps-list" id="sc-steps-list"></div>
 </div>
 
+<!-- category filter -->
+<div id="sc-cat-bar" style="display:flex;gap:4px;padding:6px 12px;background:#fff;border-bottom:1px solid #eee;flex-shrink:0;flex-wrap:wrap"></div>
+
 <!-- scenario cards -->
 <div class="sc-list" id="sc-list"></div>
 
@@ -2064,12 +2067,38 @@ function logDetail(l) {
 let scRunning = false;
 let scAbort = false;
 let scExpanded = null;
+let scActiveCat = null; // null = všechny kategorie
 
 // ── render ────────────────────────────────────────────────────────────────────
 function renderScenarios() {
   const list = document.getElementById('sc-list');
   if (!list) return;
-  list.innerHTML = SC_SCENARIOS.map(s => renderScCard(s)).join('');
+
+  // Category tabs
+  const catBar = document.getElementById('sc-cat-bar');
+  if (catBar && SC_CATEGORIES.length > 0) {
+    catBar.innerHTML = '<button class="fbtn' + (scActiveCat === null ? ' active' : '') + '" onclick="scSetCat(null)">Vše (' + SC_SCENARIOS.length + ')</button>' +
+      SC_CATEGORIES.map(c =>
+        '<button class="fbtn' + (scActiveCat === c.id ? ' active' : '') + '" onclick="scSetCat('' + c.id + '')">' +
+        c.icon + ' ' + c.title + ' (' + (c.scenarios||[]).length + ')</button>'
+      ).join('');
+  }
+
+  // Filtruj scénáře podle aktivní kategorie
+  const visible = scActiveCat
+    ? (SC_CATEGORIES.find(c => c.id === scActiveCat)?.scenarios || [])
+    : SC_SCENARIOS;
+
+  if (visible.length === 0) {
+    list.innerHTML = '<div class="empty-state">Načítám scénáře...</div>';
+    return;
+  }
+  list.innerHTML = visible.map(s => renderScCard(s)).join('');
+}
+
+function scSetCat(catId) {
+  scActiveCat = catId;
+  renderScenarios();
 }
 
 function renderScCard(s) {
