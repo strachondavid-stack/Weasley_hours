@@ -338,31 +338,75 @@ def load_msmt():
     return list(out.values())
 
 
-def geocode(address):
-    """Nominatim geokodovani adresy (RUIAN data); max 1 dotaz/s."""
-    q = urllib.parse.urlencode({"q": address + ", Czechia", "format": "json", "limit": 1})
-    req = urllib.request.Request(NOMINATIM + "?" + q, headers={"User-Agent": UA})
+GEOCODE_CACHE = "geocode_cache.json"
+_geo_cache = None
+
+
+def _geo_load():
+    global _geo_cache
+    if _geo_cache is None:
+        try:
+            with open(GEOCODE_CACHE, encoding="utf-8") as f:
+                _geo_cache = json.load(f)
+        except Exception:
+            _geo_cache = {}
+    return _geo_cache
+
+
+def _geo_save():
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            res = json.loads(resp.read().decode("utf-8"))
-        if res:
-            return float(res[0]["lat"]), float(res[0]["lon"])
-    except Exception as e:
-        print("  ! geocode '%s': %s" % (address[:40], e))
-    return None
+        with open(GEOCODE_CACHE, "w", encoding="utf-8") as f:
+            json.dump(_geo_cache, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def geocode(address):
+    """Nominatim (RUIAN adresy). Cache na disku, strukturovany dotaz + freeform fallback."""
+    cache = _geo_load()
+    if address in cache:
+        v = cache[address]
+        return tuple(v) if v else None
+    parts = [p.strip() for p in address.split(",") if p.strip()]
+    street = parts[0] if parts else address
+    attempts = [
+        {"street": street, "city": OBEC, "country": "Czechia"},
+        {"q": address + ", Czechia"},
+    ]
+    result = None
+    for params in attempts:
+        params.update({"format": "json", "limit": 1})
+        try:
+            time.sleep(1.1)   # Nominatim limit 1 dotaz/s
+            req = urllib.request.Request(NOMINATIM + "?" + urllib.parse.urlencode(params),
+                                         headers={"User-Agent": UA})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                res = json.loads(resp.read().decode("utf-8"))
+            if res:
+                result = (float(res[0]["lat"]), float(res[0]["lon"]))
+                break
+        except Exception as e:
+            print("  ! geocode '%s': %s" % (address[:40], e))
+    cache[address] = list(result) if result else None
+    _geo_save()
+    return result
 
 
 # ─── Merge ────────────────────────────────────────────────────────────────────
 def find_in_dataset(places, reg):
+    """Shoda = nazev + vzdalenost < MATCH_DIST. Cisty name-match jen kdyz
+    registrovy zaznam nema souradnice (geocode selhal) — jinak by se
+    odloucena pracoviste stejne pojmenovane skoly slepila do jednoho mista."""
+    name_only = None
     for p in places:
         if reg["lat"] is not None and p.get("lat") is not None:
             if (haversine(reg["lat"], reg["lon"], p["lat"], p["lon"]) < MATCH_DIST
                     and names_match(reg["name"], p["name"])):
                 return p
-        if names_match(reg["name"], p["name"]):
-            # bez souradnic (MSMT) staci shoda nazvu + kontrola ulice pokud je
-            return p
-    return None
+        elif names_match(reg["name"], p["name"]):
+            if name_only is None:
+                name_only = p
+    return name_only if reg["lat"] is None else None
 
 
 def main():
@@ -386,9 +430,16 @@ def main():
     except Exception as e:
         print("  ! MSMT vetev selhala (%s) — pokracuji jen s NRPZS" % e)
 
-    upgraded, added, geocoded_fail = [], [], []
+    upgraded_ids, added, geocoded_fail = set(), [], []
     seq = 0
     for reg in registry:
+        # geokodovat PRED matchovanim — jinak nelze rozlisit odloucena pracoviste
+        geocoded = False
+        if reg["lat"] is None:
+            gps = geocode(reg["address"])
+            if gps:
+                reg["lat"], reg["lon"] = round(gps[0], 6), round(gps[1], 6)
+                geocoded = True
         hit = find_in_dataset(ds["places"], reg)
         if hit:
             if "registr" not in hit.get("sources", []):
@@ -397,19 +448,12 @@ def main():
             hit["registry_name"] = reg["name"]
             if not hit.get("address"):
                 hit["address"] = reg["address"]
-            upgraded.append(reg["name"])
+            upgraded_ids.add(hit["id"])
             continue
-        # novy zaznam — pripadne geokodovat (jen MSMT, NRPZS ma GPS)
         if reg["lat"] is None:
-            time.sleep(1.1)
-            gps = geocode(reg["address"])
-            if not gps:
-                geocoded_fail.append(reg)
-                continue
-            reg["lat"], reg["lon"] = round(gps[0], 6), round(gps[1], 6)
-            tier = "B"      # souradnice z 1 zdroje → na kontrolu
-        else:
-            tier = "A"      # NRPZS GPS = primo RUIAN, uredni zdroj
+            geocoded_fail.append(reg)
+            continue
+        tier = "B" if geocoded else "A"   # Nominatim = 1 zdroj → kontrola; NRPZS GPS = RUIAN
         seq += 1
         ds["places"].append({
             "id": "lbc_reg_%s_%04d" % (reg["category"], seq),
@@ -431,14 +475,14 @@ def main():
 
     ds["version"] = "v2-registry"
     ds["generated"] = datetime.now(timezone.utc).isoformat()
-    ds["registry_merge"] = {"matched_upgraded": len(upgraded), "added": len(added),
+    ds["registry_merge"] = {"matched_upgraded": len(upgraded_ids), "added": len(added),
                             "geocode_failed": len(geocoded_fail)}
     with open("golden_dataset_v2.json", "w", encoding="utf-8") as f:
         json.dump(ds, f, ensure_ascii=False, indent=1)
 
     with open("registry_report.txt", "w", encoding="utf-8") as f:
         f.write("Registry merge — %s\n\n" % datetime.now().isoformat())
-        f.write("Povyseno na tier A (shoda s registrem): %d\n" % len(upgraded))
+        f.write("Povyseno na tier A (unikatnich mist): %d\n" % len(upgraded_ids))
         f.write("Nove pridano z registru: %d\n\n" % len(added))
         for a in added:
             f.write("  + %s\n" % a)
@@ -452,7 +496,7 @@ def main():
         print("  %-10s %3d" % (c, counts[c]))
     print("\n✓ golden_dataset_v2.json (%d mist) + registry_report.txt" % len(ds["places"]))
     print("  povyseno: %d | pridano: %d | geocode selhal: %d"
-          % (len(upgraded), len(added), len(geocoded_fail)))
+          % (len(upgraded_ids), len(added), len(geocoded_fail)))
 
 
 if __name__ == "__main__":
