@@ -32,7 +32,12 @@ from datetime import datetime, timezone
 
 NRPZS_CSV = ("https://datanzis.uzis.gov.cz/data/NR-01-NRPZS/NR-01-06/"
              "Otevrena-data-NR-01-06-nrpzs-mista-poskytovani-zdravotnich-sluzeb.csv")
-MSMT_XML = "https://rejstriky.msmt.cz/opendata/vrejcz051.xml"   # Liberecky kraj CZ051
+# MSMT: stary XML export byl zrusen — URL distribuce se zjistuje za behu pres NKOD SPARQL.
+NKOD_SPARQL = "https://data.gov.cz/sparql"
+MSMT_FALLBACK_URLS = [
+    "https://rejstriky.msmt.cz/opendata/vrejcz051.xml",
+    "https://rejstriky.msmt.cz/opendata/VREJCZ051.xml",
+]
 NOMINATIM = "https://nominatim.openstreetmap.org/search"
 UA = "WeasleyHours-dataset/1.0 (family test data, github strachondavid-stack)"
 
@@ -164,14 +169,104 @@ def classify_school(name):
     return None  # stredni/VOS/internaty atd. preskocit
 
 
-def load_msmt():
-    print("→ Stahuji MSMT rejstrik skol (Liberecky kraj)...")
-    req = urllib.request.Request(MSMT_XML, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=300) as resp:
-        data = resp.read()
+def discover_msmt_urls():
+    """Najde aktualni download URL rejstriku skol (Liberecky kraj) v NKOD pres SPARQL."""
+    query = (
+        'PREFIX dcat: <http://www.w3.org/ns/dcat#> '
+        'PREFIX dct: <http://purl.org/dc/terms/> '
+        'SELECT DISTINCT ?u WHERE { '
+        '?ds a dcat:Dataset ; dct:title ?t ; dcat:distribution ?d . '
+        '?d dcat:downloadURL ?u . '
+        'FILTER(CONTAINS(LCASE(STR(?t)),"rejst") && CONTAINS(LCASE(STR(?t)),"skol") '
+        '|| CONTAINS(LCASE(STR(?t)),"\u0161kol")) '
+        'FILTER(CONTAINS(STR(?t),"Libereck")) } LIMIT 10'
+    )
+    try:
+        url = NKOD_SPARQL + "?" + urllib.parse.urlencode(
+            {"query": query, "format": "application/sparql-results+json"})
+        req = urllib.request.Request(url, headers={
+            "User-Agent": UA, "Accept": "application/sparql-results+json"})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            res = json.loads(resp.read().decode("utf-8"))
+        urls = [b["u"]["value"] for b in res.get("results", {}).get("bindings", [])]
+        if urls:
+            print("  NKOD nasel %d distribuci: %s" % (len(urls), ", ".join(urls)))
+        return urls
+    except Exception as e:
+        print("  ! NKOD SPARQL selhal: %s" % e)
+        return []
+
+
+def _collect_addr(obj, parts, depth=0):
+    if depth > 6:
+        return
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            kl = k.lower()
+            if isinstance(v, str) and v.strip() and (
+                    "adres" in kl or kl in ("ulice", "obec", "psc", "misto", "castobce")):
+                parts.append(v.strip())
+            elif isinstance(v, (dict, list)) and ("adres" in kl or "mist" in kl):
+                _collect_addr(v, parts, depth + 1)
+    elif isinstance(obj, list):
+        for it in obj:
+            _collect_addr(it, parts, depth + 1)
+
+
+def _find_mist_lists(obj, depth=0):
+    """Rekurzivne najde vsechny seznamy pod klici obsahujicimi 'mist' (mista vykonu)."""
+    results = []
+    if depth > 8:
+        return results
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if "mist" in k.lower() and isinstance(v, list):
+                results.append(v)
+            elif isinstance(v, (dict, list)):
+                results += _find_mist_lists(v, depth + 1)
+    elif isinstance(obj, list):
+        for it in obj:
+            results += _find_mist_lists(it, depth + 1)
+    return results
+
+
+def _walk_json(obj, out, depth=0):
+    """Genericky pruchod JSON-LD: hleda objekty se 'nazev' skoly + adresami mist."""
+    if depth > 12:
+        return
+    if isinstance(obj, dict):
+        name = None
+        for k, v in obj.items():
+            if isinstance(v, str) and "nazev" in k.lower() and classify_school(v):
+                name = v.strip()
+                break
+        if name:
+            # mista vykonu cinnosti: seznamy pod klicem obsahujicim 'mist',
+            # hledane rekurzivne v celem podstromu (mohou byt zanorena pod 'skoly' apod.)
+            places_found = False
+            for lst in _find_mist_lists(obj):
+                for m in lst:
+                    parts = []
+                    _collect_addr(m, parts)
+                    if parts:
+                        out.append((name, ", ".join(parts)))
+                        places_found = True
+            if not places_found:
+                parts = []
+                _collect_addr(obj, parts)
+                if parts:
+                    out.append((name, ", ".join(parts)))
+        for v in obj.values():
+            if isinstance(v, (dict, list)):
+                _walk_json(v, out, depth + 1)
+    elif isinstance(obj, list):
+        for it in obj:
+            _walk_json(it, out, depth + 1)
+
+
+def _parse_msmt_xml(data):
     root = ET.fromstring(data)
-    out = {}
-    # struktura: PravniSubjekt > SkolyZarizeni > SkolaZarizeni > SkolaMistaVykonuCinnosti
+    out = []
     for skola in root.iter():
         if not skola.tag.endswith("SkolaZarizeni"):
             continue
@@ -180,25 +275,66 @@ def load_msmt():
             if ch.tag.endswith("SkolaPlnyNazev") or ch.tag.endswith("SkolaNazev"):
                 nazev = (ch.text or "").strip()
                 break
-        cls = classify_school(nazev)
-        if not cls:
+        if not classify_school(nazev):
             continue
-        cat, icon, radius = cls
         for misto in skola.iter():
             if not misto.tag.endswith("SkolaMistoVykonuCinnosti"):
                 continue
             lines = [(ch.text or "").strip() for ch in misto
                      if "Adresa" in ch.tag and (ch.text or "").strip()]
-            full = ", ".join(lines)
-            # obec: posledni radek typu "460 01 Liberec 1" / "Liberec XXX-..."
-            if not re.search(r"\bLiberec\b", full):
-                continue
-            key = norm(nazev) + "|" + norm(full)
-            out[key] = {
-                "name": nazev, "category": cat, "icon": icon, "radius": radius,
-                "lat": None, "lon": None, "address": full, "registry": "msmt",
-            }
+            if lines:
+                out.append((nazev, ", ".join(lines)))
+    return out
+
+
+def load_msmt():
+    print("→ Stahuji MSMT rejstrik skol (Liberecky kraj)...")
+    urls = discover_msmt_urls() + MSMT_FALLBACK_URLS
+    pairs = []
+    for u in urls:
+        try:
+            req = urllib.request.Request(u, headers={"User-Agent": UA})
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                data = resp.read()
+        except Exception as e:
+            print("  ! %s: %s" % (u[:70], e))
+            continue
+        # uloz raw pro pripadnou analyzu
+        ext = "xml" if data.lstrip()[:1] == b"<" else "json"
+        with open("msmt_raw." + ext, "wb") as f:
+            f.write(data)
+        try:
+            if ext == "xml":
+                pairs = _parse_msmt_xml(data)
+            else:
+                doc = json.loads(data.decode("utf-8"))
+                _walk_json(doc, pairs)
+        except Exception as e:
+            print("  ! parsovani %s selhalo: %s" % (u[:70], e))
+            continue
+        if len(pairs) >= 20:
+            print("  zdroj: %s" % u)
+            break
+        print("  ! %s dalo jen %d zaznamu, zkousim dalsi" % (u[:70], len(pairs)))
+        pairs = []
+
+    # filtr na Liberec + klasifikace + dedup
+    out = {}
+    for nazev, addr in pairs:
+        if not re.search(r"\bLiberec\b", addr):
+            continue
+        cls = classify_school(nazev)
+        if not cls:
+            continue
+        cat, icon, radius = cls
+        key = norm(nazev) + "|" + norm(addr)
+        out[key] = {
+            "name": nazev, "category": cat, "icon": icon, "radius": radius,
+            "lat": None, "lon": None, "address": addr, "registry": "msmt",
+        }
     print("  %d mist vykonu cinnosti v %s" % (len(out), OBEC))
+    if not out:
+        print("  ! MSMT zdroj nedostupny/neparsovatelny — posli mi zacatek msmt_raw.* a parser doladim")
     return list(out.values())
 
 
@@ -244,7 +380,11 @@ def main():
         return 1
     print("→ Vstup: %s (%d mist)" % (src, len(ds["places"])))
 
-    registry = load_nrpzs() + load_msmt()
+    registry = load_nrpzs()
+    try:
+        registry += load_msmt()
+    except Exception as e:
+        print("  ! MSMT vetev selhala (%s) — pokracuji jen s NRPZS" % e)
 
     upgraded, added, geocoded_fail = [], [], []
     seq = 0
