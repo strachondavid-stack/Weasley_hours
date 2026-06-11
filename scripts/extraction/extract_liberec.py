@@ -27,7 +27,12 @@ from datetime import datetime, timezone
 OVERPASS_URLS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
 ]
+
+# Zalozni bounding box Liberce (kdyz area dotaz neprojde):
+BBOX = "(50.69,14.93,50.83,15.15)"
 
 AREA = 'area["name"="Liberec"]["boundary"="administrative"]["admin_level"="8"]->.a;'
 
@@ -65,23 +70,34 @@ CATEGORIES = [
 ]
 
 
-def overpass(filters):
-    """Spustí Overpass dotaz, zkusí mirror při selhání."""
-    body = "[out:json][timeout:90];" + AREA + "(" + "".join(filters) + ");out center tags;"
+def overpass_once(body):
     data = urllib.parse.urlencode({"data": body}).encode("utf-8")
     last_err = None
-    for url in OVERPASS_URLS:
-        try:
-            req = urllib.request.Request(url, data=data, headers={
-                "User-Agent": "WeasleyHours-dataset/1.0 (family test data, contact: github strachondavid-stack)"
-            })
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except Exception as e:
-            last_err = e
-            print("  ! %s selhal: %s — zkouším další mirror" % (url, e))
-            time.sleep(5)
+    for attempt in range(2):                     # 2 kola pres vsechny mirrory
+        for url in OVERPASS_URLS:
+            try:
+                req = urllib.request.Request(url, data=data, headers={
+                    "User-Agent": "WeasleyHours-dataset/1.0 (family test data, contact: github strachondavid-stack)"
+                })
+                with urllib.request.urlopen(req, timeout=240) as resp:
+                    return json.loads(resp.read().decode("utf-8"))
+            except Exception as e:
+                last_err = e
+                print("  ! %s selhal: %s" % (url.split('/')[2], e))
+                time.sleep(10 + attempt * 20)    # pri 2. kole cekej dele
     raise RuntimeError("Vsechny Overpass servery selhaly: %s" % last_err)
+
+
+def overpass(filters):
+    """Spusti Overpass dotaz; kdyz area dotaz selze vsude, zkusi bounding box."""
+    body = "[out:json][timeout:180];" + AREA + "(" + "".join(filters) + ");out center tags;"
+    try:
+        return overpass_once(body)
+    except RuntimeError:
+        print("  ! Area dotaz neprosel, zkousim bounding box fallback...")
+        bbox_filters = "".join(f.replace("(area.a)", BBOX) for f in filters)
+        body = "[out:json][timeout:180];(" + bbox_filters + ");out center tags;"
+        return overpass_once(body)
 
 
 def norm_name(name):
