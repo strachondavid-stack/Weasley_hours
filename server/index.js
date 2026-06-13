@@ -213,7 +213,7 @@ async function askClaude(member, lat, lon, context) {
 Čas: ${dayOfWeek} ${timeStr}
 Zdroj: ${source === 'silence' ? 'Significant mode (GPS bod před odjezdem, mezera ' + gapMinutes + ' min)' : 'cluster bodů v Move mode, délka minimálně ' + gapMinutes + ' min (člen je pravděpodobně stále na místě — skutečná délka bude delší)'}
 Souřadnice: ${lat.toFixed(5)}, ${lon.toFixed(5)}
-Předchozí návštěvy tohoto místa: ${historyVisits}x
+Předchozí návštěvy tohoto místa: ${historyVisits}×${historyVisits >= 3 ? ' — PRAVIDELNĚ navštěvované místo. Opakovaná návštěva je SILNÝ důkaz, že místo je pro rodinu důležité (i bez klasického POI, např. práce, návštěva, kroužek) — silně zvaž uložení a vyšší confidence.' : (historyVisits >= 1 ? ' — místo už bylo navštíveno dříve, zvaž to jako signál.' : '')}
 ${nearbyStr}
 Nejbližší místa z Google Places:
 ${placesStr}
@@ -315,6 +315,10 @@ const SILENCE_MAX_GAP = 4 * 60 * 60 * 1000;
 
 const AI_AUTOSAVE_THRESHOLD = 0.80;
 const AI_SUGGEST_THRESHOLD = 0.65;
+
+// Bonus k confidence za opakované návštěvy (deterministicky, nezávisle na AI)
+const VISIT_BONUS_PER = 0.07;   // za každou návštěvu nad první
+const VISIT_BONUS_MAX = 0.30;   // strop bonusu
 
 // Cooldown na AI dotazy pro stejnou oblast — jedno místo spálí AI max jednou za 6 h
 const AI_COOLDOWN_MS = 6 * 60 * 60 * 1000;
@@ -542,6 +546,18 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
   console.log(`[STOP] Kandidát [${member}] ${gapMinutes}min @ ${lat.toFixed(5)},${lon.toFixed(5)} | ${placesNearby.length} POI | ${historyVisits}x navštíveno`);
 
   const aiResult = await askClaude(member, lat, lon, { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source });
+
+  // Tvrdý bonus k confidence za opakované návštěvy — opakování je silný signál,
+  // který nenecháváme jen na uvážení AI. +0,07 za každou návštěvu nad první, strop +0,30.
+  if (aiResult && typeof aiResult.confidence === 'number' && historyVisits > 1) {
+    const bonus = Math.min(VISIT_BONUS_MAX, (historyVisits - 1) * VISIT_BONUS_PER);
+    const before = aiResult.confidence;
+    aiResult.confidence = Math.min(1, aiResult.confidence + bonus);
+    if (bonus > 0) {
+      console.log(`[STOP] Bonus za ${historyVisits}× návštěvu: confidence ${before.toFixed(2)} → ${aiResult.confidence.toFixed(2)} (+${bonus.toFixed(2)})`);
+      await logEvent('visit_bonus', { member, lat, lon, historyVisits, confidenceBefore: before, confidenceAfter: aiResult.confidence, bonus });
+    }
+  }
 
   if (!aiResult) {
     // Fallback — jen pokud je místo opakované a má POI
