@@ -207,6 +207,17 @@
   🧪 TESTOVACÍ REŽIM — data se neukládají do live
   <button onclick="switchMode('live')" style="margin-left:12px;font-size:12px;padding:2px 10px;border:1px solid #fff;border-radius:10px;background:none;color:#fff;cursor:pointer">Přepnout na LIVE</button>
 </div>
+<!-- SIM HUD — sdílený pruh běhu scénáře, viditelný na všech záložkách -->
+<div id="sim-hud" style="display:none;align-items:center;gap:14px;background:#11131a;color:#e8e8ea;padding:7px 14px;border-bottom:1px solid #2a2d3a;flex-wrap:wrap">
+  <div style="display:flex;align-items:baseline;gap:8px;flex-shrink:0">
+    <span id="hud-simclock" style="font-family:ui-monospace,monospace;font-size:24px;font-weight:700;letter-spacing:0.02em;color:#fff;line-height:1">07:00</span>
+    <span id="hud-realrun" style="font-size:11px;color:#7c8197">běh 0:00 · 30×</span>
+  </div>
+  <div id="hud-members" style="display:flex;gap:5px;flex-wrap:wrap;flex:1;min-width:160px"></div>
+  <div style="width:90px;height:4px;background:#2a2d3a;border-radius:2px;overflow:hidden;flex-shrink:0"><div id="hud-bar" style="height:100%;width:0;background:#5e7fff;transition:width 0.4s"></div></div>
+  <button id="hud-stop" onclick="scStopAll()" style="font-size:12px;padding:3px 12px;border:1px solid #5a3a3a;border-radius:5px;background:none;color:#f99;cursor:pointer;flex-shrink:0">■ Stop</button>
+</div>
+
 <div class="nav-tabs">
   <button class="nav-tab active" id="tab-map"       onclick="showPage('map')">🗺 Mapa</button>
   <button class="nav-tab"        id="tab-clock"     onclick="showPage('clock')">🕰 Hodiny</button>
@@ -2309,10 +2320,36 @@ async function scRunFamily(scenarioId) {
   scRunning = true; scAbort = false;
   console.log('[FAM] start', scenarioId, 'speed', speed);
   let progTimer = null;
+  const fmtClock = (simMs) => {
+    const t = 7 * 60 + Math.floor(simMs / 60000);
+    return (Math.floor(t / 60) % 24) + ':' + String(t % 60).padStart(2, '0');
+  };
+  const memNames = { tatka:'TÁTA', mamka:'MÁMA', misak:'MIŠÁK', kubik:'KUBÍK' };
+  const setMemberStatus = (m, txt) => {
+    const hud = document.getElementById('hud-chip-' + m);
+    if (hud) hud.textContent = (memNames[m]||m) + ': ' + txt;
+    const chip = document.getElementById('fam-chip-' + m);   // i na záložce Scénáře
+    if (chip) chip.textContent = (memNames[m]||m) + ': ' + txt;
+  };
   try {
     scStartReport(scenarioId, 'rodina');
     renderScenarios();
 
+    const members = sc.members || Object.keys(sc.tracks);
+
+    // ── Globální HUD (viditelný na všech záložkách) ──
+    const hud = document.getElementById('sim-hud');
+    const hudClock = document.getElementById('hud-simclock');
+    const hudReal = document.getElementById('hud-realrun');
+    const hudBar = document.getElementById('hud-bar');
+    const hudMembers = document.getElementById('hud-members');
+    hudMembers.innerHTML = members.map(m =>
+      `<span id="hud-chip-${m}" style="font-size:11px;background:#1c1f2b;border:1px solid #2a2d3a;border-radius:10px;padding:2px 8px;white-space:nowrap">${memNames[m]||m}: start</span>`
+    ).join('');
+    hud.style.display = 'flex';
+    hudClock.textContent = '07:00';
+
+    // progress lišta na záložce Scénáře (zůstává)
     const progWrap = document.getElementById('sc-progress');
     const progTitle = document.getElementById('sc-prog-title');
     const progStatus = document.getElementById('sc-prog-status');
@@ -2323,9 +2360,6 @@ async function scRunFamily(scenarioId) {
     stopBtn.style.display = '';
     progTitle.textContent = sc.icon + ' ' + sc.title + ' — celá rodina';
     progStatus.textContent = '🕐 07:00 — spouštím rodinu...';
-
-    const members = sc.members || Object.keys(sc.tracks);
-    const memNames = { tatka:'TÁTA', mamka:'MÁMA', misak:'MIŠÁK', kubik:'KUBÍK' };
     stepsList.innerHTML = members.map(m =>
       `<span class="sc-step-chip" id="fam-chip-${m}">${memNames[m]||m}: start</span>`
     ).join('');
@@ -2342,46 +2376,55 @@ async function scRunFamily(scenarioId) {
 
     const runMember = async (m) => {
       const segs = sc.tracks[m] || [];
-      const chip = document.getElementById('fam-chip-' + m);
       for (const seg of segs) {
         if (scAbort) break;
         await sleepUntilSim(seg.startMin * 60000);
         if (scAbort) break;
         if (seg.type === 'travel') {
-          if (chip) chip.textContent = (memNames[m]||m) + ': 🚗 → ' + seg.name;
+          setMemberStatus(m, '🚗 → ' + seg.name);
           await scDoRoute(m, { lat: seg.fromLat, lon: seg.fromLon },
                           { lat: seg.lat, lon: seg.lon }, seg.mode, speed, null, () => {});
         } else if (seg.type === 'stay') {
-          if (chip) chip.textContent = (memNames[m]||m) + ': ⏱ ' + seg.name;
+          setMemberStatus(m, '⏱ ' + seg.name);
           await scDoStay(m, seg.lat, seg.lon, seg.durMin, speed, null, () => {}, seg.stopJitterM);
         }
       }
-      if (chip && !scAbort) { chip.textContent = (memNames[m]||m) + ': ✓ doma'; chip.classList.add('done'); }
+      if (!scAbort) setMemberStatus(m, '✓ doma');
     };
 
     const maxSim = Math.max(...members.flatMap(m =>
       (sc.tracks[m]||[]).map(s => (s.startMin + (s.durMin||0)) * 60000)), 60000);
     progTimer = setInterval(() => {
       if (scAbort) return;
-      const pct = Math.min(100, Math.round(simNowMs() / maxSim * 100));
+      const sm = simNowMs();
+      const pct = Math.min(100, Math.round(sm / maxSim * 100));
+      const realSec = Math.floor((Date.now() - realStart) / 1000);
+      const clk = fmtClock(sm);
+      hudClock.textContent = clk;
+      hudReal.textContent = 'běh ' + Math.floor(realSec/60) + ':' + String(realSec%60).padStart(2,'0') + ' · ' + speed + '×';
+      hudBar.style.width = pct + '%';
       progBar.style.width = pct + '%';
-      const t = 7*60 + Math.floor(simNowMs()/60000);
-      progStatus.textContent = '🕐 ' + (Math.floor(t/60)%24) + ':' + String(t%60).padStart(2,'0') + ' — běží ' + members.length + ' členů paralelně';
+      progStatus.textContent = '🕐 ' + clk + ' — běží ' + members.length + ' členů paralelně';
     }, 500);
 
     await Promise.all(members.map(runMember));
 
     progBar.style.width = scAbort ? progBar.style.width : '100%';
+    hudBar.style.width = scAbort ? hudBar.style.width : '100%';
     progStatus.textContent = scAbort ? '⏸ Přerušeno' : '✅ Hotovo';
+    if (hudClock) hudClock.textContent = scAbort ? hudClock.textContent : fmtClock(maxSim);
     stopBtn.style.display = 'none';
     if (scCurrentReport) { await scLoadReportLogs(scCurrentReport); scFinishReport(); }
   } catch (e) {
     console.error('[FAM] chyba:', e);
     const ps = document.getElementById('sc-prog-status');
     if (ps) ps.textContent = '❌ Chyba: ' + e.message;
+    const hr = document.getElementById('hud-realrun');
+    if (hr) hr.textContent = 'chyba: ' + e.message;
   } finally {
     if (progTimer) clearInterval(progTimer);
     scRunning = false;
+    setTimeout(() => { const h = document.getElementById('sim-hud'); if (h && !scRunning) h.style.display = 'none'; }, scAbort ? 0 : 3000);
     renderScenarios();
   }
 }
