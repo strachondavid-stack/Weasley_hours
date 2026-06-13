@@ -1,20 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-gen_scenarios.py — Krok 5: Generátor rodinných scénářů z golden datasetu.
+gen_scenarios.py — Krok 5: Generátor REÁLNÝCH rodinných dnů z golden datasetu.
 
-Z golden_dataset_v2.json poskládá pro 5 modelových rodin týdenní rutiny
-(odvoz do školy/školky → práce → kroužek → nákup → lékař → domů) a vyexportuje
-je do scenarios_data.json formátu, který umí přehrát simulační engine.
+Modeluje skutečný život čtyřčlenné rodiny: rodič odveze dítě (spolujízda),
+dítě tam zůstane, rodič paralelně jede dál (práce/doktor), druhý rodič mezitím
+veze druhé dítě a později vyzvedne první na kroužek (předávka).
 
-Každé rodině přiřadí konkrétní místa z datasetu (jejich školka, jejich pediatr...)
-deterministicky podle seedu, aby běhy byly opakovatelné. Ke každému kroku přidá
-golden truth (truthName, truthLat, truthLon, category) pro pozdější vyhodnocení
-detekce, a stopJitterM = realistický rozptyl parkoviště podle kategorie.
+Den se zadává jako seznam JÍZD:
+    {"depart": minuty, "who": [členové], "from": ref, "to": ref, "mode": ...}
+Z jízd se PER ČLEN automaticky odvodí stání (kde kdo mezi jízdami zůstává).
+Spolujízda = víc členů v "who" (sdílí trasu i čas). Předávka = dítě je ráno
+v jízdě s jedním rodičem a odpoledne s druhým; mezitím stojí na místě.
 
-    python3 gen_scenarios.py [golden_dataset_v2.json] [vystup.json]
-Výstup:
-    scenarios_generated.json — nová kategorie "rodiny" se scénáři
-    (slouci se do scenarios_data.json pres PUT /scenarios nebo rucne)
+    python3 gen_scenarios.py [golden_dataset_v2.json] [scenarios_generated.json]
 """
 
 import json
@@ -24,169 +22,195 @@ import sys
 import unicodedata
 from datetime import datetime
 
-HOME = {"name": "Náš domeček", "lat": 50.7793, "lon": 15.0581, "icon": "🏠"}
+HOME = {"name": "Náš domeček", "lat": 50.7793, "lon": 15.0581}
 
-# rozptyl mista zastaveni (parkoviste/vchod) podle kategorie — simuluje stop bod
-JITTER_M = {
-    "skola": 90, "skolka": 70, "obchod": 110, "kultura": 130, "sport": 100,
-    "lekar": 60, "zubar": 60, "lekarna": 50, "zus": 70, "krouzky": 80, "logoped": 50,
-}
+JITTER_M = {"skola": 90, "skolka": 70, "obchod": 110, "kultura": 130, "sport": 100,
+            "lekar": 60, "zubar": 60, "lekarna": 50, "zus": 70, "krouzky": 80,
+            "logoped": 50, "prace": 70}
+ICON = {"skola": "🏫", "skolka": "🧸", "obchod": "🛒", "kultura": "🎭", "sport": "⚽",
+        "lekar": "🩺", "zubar": "🦷", "lekarna": "💊", "zus": "🎻", "krouzky": "🎨",
+        "logoped": "🗣", "prace": "💼", "home": "🏠"}
 
-# typicka delka navstevy v minutach podle kategorie
-STAY_MIN = {
-    "skola": 5, "skolka": 8, "obchod": 35, "kultura": 110, "sport": 75,
-    "lekar": 40, "zubar": 45, "lekarna": 10, "zus": 60, "krouzky": 75, "logoped": 45,
-}
-
-ICON = {
-    "skola": "🏫", "skolka": "🧸", "obchod": "🛒", "kultura": "🎭", "sport": "⚽",
-    "lekar": "🩺", "zubar": "🦷", "lekarna": "💊", "zus": "🎻", "krouzky": "🎨",
-    "logoped": "🗣",
-}
-
-# ── profily rodin: kdo a jakou ma tydenni rutinu ───────────────────────────────
-# clenove: tatka, mamka, misak (starsi - skola), kubik (mladsi - skolka)
-PROFILES = [
-    {
-        "id": "strachonovi", "title": "Strachoňovi (základ)", "seed": 1,
-        "desc": "Mišák do školy, Kubík do školky, oba rodiče do práce, odpoledne kroužek a nákup.",
-        "days": {
-            "po": [("misak", "skola"), ("kubik", "skolka"), ("mamka", "obchod"), ("misak", "krouzky")],
-            "ut": [("misak", "skola"), ("kubik", "skolka"), ("kubik", "zus")],
-            "st": [("misak", "skola"), ("kubik", "skolka"), ("mamka", "obchod"), ("misak", "sport")],
-        },
-    },
-    {
-        "id": "novakovi", "title": "Novákovi (dvě školky)", "seed": 2,
-        "desc": "Dvě malé děti ve školkách, máma na rodičovské, časté návštěvy lékárny a pediatra.",
-        "days": {
-            "po": [("kubik", "skolka"), ("misak", "skolka"), ("mamka", "lekarna"), ("mamka", "obchod")],
-            "ut": [("kubik", "skolka"), ("misak", "skolka"), ("kubik", "lekar")],
-            "st": [("kubik", "skolka"), ("misak", "skolka"), ("mamka", "obchod")],
-        },
-    },
-    {
-        "id": "svobodovi", "title": "Svobodovi (sportovní)", "seed": 3,
-        "desc": "Starší dítě intenzivně sportuje, kroužky každý den, k tomu zubař a kultura o víkendu.",
-        "days": {
-            "po": [("misak", "skola"), ("misak", "sport"), ("mamka", "obchod")],
-            "ut": [("misak", "skola"), ("misak", "krouzky"), ("misak", "zubar")],
-            "st": [("misak", "skola"), ("misak", "sport")],
-            "so": [("mamka", "kultura"), ("tatka", "obchod")],
-        },
-    },
-    {
-        "id": "dvorakovi", "title": "Dvořákovi (zaneprázdnění)", "seed": 4,
-        "desc": "Oba rodiče pracují, hodně přejezdů, nákupy ve více řetězcích, ZUŠ a logoped.",
-        "days": {
-            "po": [("kubik", "skolka"), ("misak", "skola"), ("kubik", "zus"), ("mamka", "obchod")],
-            "ut": [("kubik", "skolka"), ("misak", "skola"), ("kubik", "logoped"), ("tatka", "obchod")],
-            "st": [("kubik", "skolka"), ("misak", "skola"), ("misak", "krouzky"), ("mamka", "lekar")],
-        },
-    },
-    {
-        "id": "prochazkovi", "title": "Procházkovi (zdravotní kolečko)", "seed": 5,
-        "desc": "Týden s mnoha návštěvami lékařů — pediatr, zubař, lékárna — k otestování detekce ordinací.",
-        "days": {
-            "po": [("misak", "skola"), ("kubik", "skolka"), ("kubik", "lekar"), ("mamka", "lekarna")],
-            "ut": [("misak", "skola"), ("kubik", "skolka"), ("misak", "zubar"), ("mamka", "lekarna")],
-            "st": [("misak", "skola"), ("kubik", "skolka"), ("mamka", "lekar"), ("misak", "logoped")],
-        },
-    },
-]
-
-DAY_NAMES = {"po": "Pondělí", "ut": "Úterý", "st": "Středa", "ct": "Čtvrtek",
-             "pa": "Pátek", "so": "Sobota", "ne": "Neděle"}
-
-
-def norm(name):
-    n = unicodedata.normalize("NFD", (name or "").lower())
-    n = "".join(c for c in n if unicodedata.category(c) != "Mn")
-    return n
+AVG_KMH = 24.0
 
 
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000.0
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
-    a = (math.sin(dlat / 2) ** 2
-         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2)
+    a = (math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) *
+         math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2)
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def pick_places(places, category, n, rng, near=None):
-    """Vybere n míst dané kategorie; pokud near, preferuje bližší (rodina jezdí poblíž domova)."""
-    pool = [p for p in places if p["category"] == category and p.get("lat") and p.get("lon")]
+def travel_min(a, b):
+    d_km = haversine(a["lat"], a["lon"], b["lat"], b["lon"]) / 1000.0
+    return max(5, round(d_km / AVG_KMH * 60 + 3))
+
+
+def pick_near(places, category, rng, near, n=1, exclude_ids=None):
+    pool = [p for p in places if p["category"] == category and p.get("lat") and p.get("lon")
+            and (not exclude_ids or p["id"] not in exclude_ids)]
     if not pool:
         return []
-    if near:
-        # vážený výběr: bližší místa pravděpodobnější, ale ne deterministicky nejbližší
-        pool.sort(key=lambda p: haversine(near["lat"], near["lon"], p["lat"], p["lon"]))
-        # vyber z bližší poloviny + trocha náhody
-        top = pool[:max(n * 4, 8)]
-        rng.shuffle(top)
-        return top[:n]
-    rng.shuffle(pool)
-    return pool[:n]
+    pool.sort(key=lambda p: haversine(near["lat"], near["lon"], p["lat"], p["lon"]))
+    top = pool[:max(n * 4, 8)]
+    rng.shuffle(top)
+    return top[:n]
 
 
-def build_step(place, category, rng, mode="driving-car"):
-    jitter = JITTER_M.get(category, 80)
-    return {
-        "name": place["name"],
-        "lat": round(place["lat"], 6),
-        "lon": round(place["lon"], 6),
-        "stayMin": STAY_MIN.get(category, 20),
-        "mode": mode,
-        "icon": ICON.get(category, "📍"),
-        # ── golden truth + simulacni parametry (cte simulator/vyhodnoceni) ──
-        "category": category,
-        "stopJitterM": jitter,
-        "truthName": place["name"],
-        "truthLat": round(place["lat"], 6),
-        "truthLon": round(place["lon"], 6),
-        "truthId": place["id"],
-    }
+DAY_PLANS = {
+    "klasicky_den": {
+        "title": "Klasický všední den",
+        "desc": "Táta veze Kubíka do školky a jede do práce, máma veze Mišáka do školy "
+                "a na nákup; odpoledne předávka — máma vyzvedne Kubíka, táta Mišáka z kroužku.",
+        "trips": [
+            {"depart": 10,  "who": ["tatka", "kubik"], "from": "home",   "to": "skolka", "mode": "driving-car"},
+            {"depart": 28,  "who": ["tatka"],          "from": "skolka", "to": "prace_tatka", "mode": "driving-car"},
+            {"depart": 15,  "who": ["mamka", "misak"], "from": "home",   "to": "skola",  "mode": "driving-car"},
+            {"depart": 33,  "who": ["mamka"],          "from": "skola",  "to": "obchod", "mode": "driving-car"},
+            {"depart": 80,  "who": ["mamka"],          "from": "obchod", "to": "home",   "mode": "driving-car"},
+            {"depart": 420, "who": ["mamka"],          "from": "home",   "to": "skola",  "mode": "driving-car"},
+            {"depart": 440, "who": ["mamka", "misak"], "from": "skola",  "to": "krouzky","mode": "driving-car"},
+            {"depart": 470, "who": ["mamka"],          "from": "krouzky","to": "skolka", "mode": "driving-car"},
+            {"depart": 495, "who": ["mamka", "kubik"], "from": "skolka", "to": "home",   "mode": "driving-car"},
+            {"depart": 510, "who": ["tatka"],          "from": "prace_tatka", "to": "krouzky", "mode": "driving-car"},
+            {"depart": 535, "who": ["tatka", "misak"], "from": "krouzky","to": "home",   "mode": "driving-car"},
+        ],
+    },
+    "den_s_doktorem": {
+        "title": "Den s návštěvou lékaře",
+        "desc": "Máma vezme Kubíka k pediatrovi a do lékárny, táta odveze Mišáka do školy "
+                "a jede do práce; odpoledne táta vyzvedne obě děti.",
+        "trips": [
+            {"depart": 12,  "who": ["tatka", "misak"], "from": "home",   "to": "skola",  "mode": "driving-car"},
+            {"depart": 30,  "who": ["tatka"],          "from": "skola",  "to": "prace_tatka", "mode": "driving-car"},
+            {"depart": 20,  "who": ["mamka", "kubik"], "from": "home",   "to": "lekar",  "mode": "driving-car"},
+            {"depart": 75,  "who": ["mamka", "kubik"], "from": "lekar",  "to": "lekarna","mode": "driving-car"},
+            {"depart": 95,  "who": ["mamka", "kubik"], "from": "lekarna","to": "home",   "mode": "driving-car"},
+            {"depart": 430, "who": ["tatka"],          "from": "prace_tatka", "to": "skola", "mode": "driving-car"},
+            {"depart": 450, "who": ["tatka", "misak"], "from": "skola",  "to": "sport",  "mode": "driving-car"},
+            {"depart": 540, "who": ["tatka", "misak"], "from": "sport",  "to": "home",   "mode": "driving-car"},
+        ],
+    },
+    "krouzkovy_den": {
+        "title": "Nabitý kroužkový den",
+        "desc": "Obě děti mají odpoledne kroužky na různých místech, oba rodiče se střídají "
+                "v odvozech a vyzvedávání, mezitím nákup.",
+        "trips": [
+            {"depart": 10,  "who": ["mamka", "kubik"], "from": "home",   "to": "skolka", "mode": "driving-car"},
+            {"depart": 28,  "who": ["mamka", "misak"], "from": "skolka", "to": "skola",  "mode": "driving-car"},
+            {"depart": 45,  "who": ["mamka"],          "from": "skola",  "to": "prace_mamka", "mode": "driving-car"},
+            {"depart": 400, "who": ["tatka"],          "from": "home",   "to": "skola",  "mode": "driving-car"},
+            {"depart": 420, "who": ["tatka", "misak"], "from": "skola",  "to": "zus",    "mode": "driving-car"},
+            {"depart": 450, "who": ["tatka"],          "from": "zus",    "to": "obchod", "mode": "driving-car"},
+            {"depart": 490, "who": ["tatka"],          "from": "obchod", "to": "skolka", "mode": "driving-car"},
+            {"depart": 512, "who": ["tatka", "kubik"], "from": "skolka", "to": "krouzky","mode": "driving-car"},
+            {"depart": 525, "who": ["mamka"],          "from": "prace_mamka", "to": "zus", "mode": "driving-car"},
+            {"depart": 550, "who": ["mamka", "misak"], "from": "zus",    "to": "home",   "mode": "driving-car"},
+            {"depart": 585, "who": ["tatka", "kubik"], "from": "krouzky","to": "home",   "mode": "driving-car"},
+        ],
+    },
+}
+
+PROFILES = [
+    {"id": "strachonovi", "title": "Strachoňovi", "seed": 1, "plans": ["klasicky_den", "krouzkovy_den"]},
+    {"id": "novakovi",    "title": "Novákovi",    "seed": 2, "plans": ["klasicky_den", "den_s_doktorem"]},
+    {"id": "svobodovi",   "title": "Svobodovi",   "seed": 3, "plans": ["krouzkovy_den", "den_s_doktorem"]},
+    {"id": "dvorakovi",   "title": "Dvořákovi",   "seed": 4, "plans": ["klasicky_den", "krouzkovy_den"]},
+    {"id": "prochazkovi", "title": "Procházkovi", "seed": 5, "plans": ["den_s_doktorem", "klasicky_den"]},
+]
+
+WORK = {
+    "prace_tatka": {"name": "Práce – táta", "lat": 50.7665, "lon": 15.0560, "category": "prace"},
+    "prace_mamka": {"name": "Práce – máma", "lat": 50.7702, "lon": 15.0820, "category": "prace"},
+}
 
 
-def home_step():
-    s = dict(HOME)
-    s.update({"stayMin": 0, "mode": "driving-car"})
-    return s
+def resolve_places(profile, plans, places):
+    rng = random.Random(profile["seed"])
+    needed = set()
+    for plan_id in plans:
+        for trip in DAY_PLANS[plan_id]["trips"]:
+            needed.add(trip["from"]); needed.add(trip["to"])
+    resolved = {"home": dict(HOME, category="home")}
+    used = set()
+    fixed_cats = {"skola", "skolka", "zus"}
+    for ref in sorted(needed):
+        if ref == "home":
+            continue
+        if ref in WORK:
+            resolved[ref] = dict(WORK[ref]); continue
+        cat = ref
+        sel = pick_near(places, cat, rng, HOME, n=1, exclude_ids=used)
+        if not sel:
+            resolved[ref] = None; continue
+        p = sel[0]
+        if cat in fixed_cats:
+            used.add(p["id"])
+        resolved[ref] = {"name": p["name"], "lat": p["lat"], "lon": p["lon"],
+                         "category": cat, "id": p["id"]}
+    return resolved
+
+
+def compile_tracks(plan, resolved):
+    members = {}
+    for trip in plan["trips"]:
+        frm, to = resolved.get(trip["from"]), resolved.get(trip["to"])
+        if not frm or not to:
+            continue
+        dur = travel_min(frm, to)
+        for mi, m in enumerate(trip["who"]):
+            members.setdefault(m, []).append({
+                "depart": trip["depart"], "arrive": trip["depart"] + dur,
+                "from": frm, "to": to, "mode": trip["mode"],
+            })
+    tracks = {}
+    for m, trips in members.items():
+        trips.sort(key=lambda t: t["depart"])
+        segs = []
+        for i, t in enumerate(trips):
+            segs.append({
+                "type": "travel", "startMin": t["depart"],
+                "fromLat": round(t["from"]["lat"], 6), "fromLon": round(t["from"]["lon"], 6),
+                "lat": round(t["to"]["lat"], 6), "lon": round(t["to"]["lon"], 6),
+                "name": t["to"]["name"], "mode": t["mode"],
+                "icon": ICON.get(t["to"]["category"], "📍"),
+            })
+            nxt = trips[i + 1] if i + 1 < len(trips) else None
+            stay_start = t["arrive"]
+            stay_end = nxt["depart"] if nxt else t["arrive"]
+            stay_dur = max(0, stay_end - stay_start)
+            if stay_dur >= 5 and t["to"]["category"] != "home":
+                cat = t["to"]["category"]
+                seg = {"type": "stay", "startMin": stay_start, "durMin": stay_dur,
+                       "lat": round(t["to"]["lat"], 6), "lon": round(t["to"]["lon"], 6),
+                       "name": t["to"]["name"], "stopJitterM": JITTER_M.get(cat, 80),
+                       "icon": ICON.get(cat, "📍"), "category": cat}
+                if "id" in t["to"]:
+                    seg.update({"truthName": t["to"]["name"], "truthLat": round(t["to"]["lat"], 6),
+                                "truthLon": round(t["to"]["lon"], 6), "truthId": t["to"]["id"]})
+                segs.append(seg)
+        tracks[m] = segs
+    return tracks
 
 
 def build_family(profile, places):
-    rng = random.Random(profile["seed"])
-    # přiřaď rodině konkrétní stálá místa (jejich školka, jejich škola...)
-    fixed = {}
-    for cat, count in [("skola", 1), ("skolka", 1), ("zus", 1)]:
-        sel = pick_places(places, cat, count, rng, near=HOME)
-        if sel:
-            fixed[cat] = sel[0]
-
     scenarios = []
-    for day, errands in profile["days"].items():
-        steps = [home_step()]
-        for member, cat in errands:
-            # stálé místo pokud existuje, jinak vyber blízké
-            if cat in fixed:
-                place = fixed[cat]
-            else:
-                sel = pick_places(places, cat, 1, rng, near=HOME)
-                if not sel:
-                    continue
-                place = sel[0]
-            steps.append(build_step(place, cat, rng))
-        steps.append(home_step())  # návrat domů
-        if len(steps) <= 2:
+    resolved_all = resolve_places(profile, profile["plans"], places)
+    for plan_id in profile["plans"]:
+        plan = DAY_PLANS[plan_id]
+        tracks = compile_tracks(plan, resolved_all)
+        if not tracks:
             continue
+        n_stays = sum(1 for segs in tracks.values() for s in segs if s["type"] == "stay")
         scenarios.append({
-            "id": "%s-%s" % (profile["id"], day),
-            "title": "%s — %s" % (profile["title"], DAY_NAMES.get(day, day)),
-            "icon": "👨‍👩‍👧‍👦",
-            "tags": ["rodina", profile["id"], day],
-            "desc": profile["desc"],
-            "steps": steps,
+            "id": "%s-%s" % (profile["id"], plan_id),
+            "title": "%s — %s" % (profile["title"], plan["title"]),
+            "icon": "👨‍👩‍👧‍👦", "type": "family",
+            "tags": ["rodina", profile["id"], plan_id],
+            "desc": plan["desc"], "members": sorted(tracks.keys()),
+            "tracks": tracks, "_stats": {"stays": n_stays},
         })
     return scenarios
 
@@ -203,27 +227,21 @@ def main():
     for prof in PROFILES:
         sc = build_family(prof, places)
         all_scenarios += sc
-        steps_total = sum(len(s["steps"]) for s in sc)
-        print("  %s: %d scénářů, %d kroků" % (prof["title"], len(sc), steps_total))
+        for s in sc:
+            legs = sum(len(t) for t in s["tracks"].values())
+            print("  %-30s členů=%d stání=%d segmentů=%d"
+                  % (s["title"][:30], len(s["tracks"]), s["_stats"]["stays"], legs))
+    for s in all_scenarios:
+        s.pop("_stats", None)
 
-    category = {
-        "id": "rodiny",
-        "title": "Rodiny (test)",
-        "icon": "👨‍👩‍👧‍👦",
-        "scenarios": all_scenarios,
-    }
-    result = {
-        "generated": datetime.now().isoformat(),
-        "source": src,
-        "note": "Vygenerovane rodinne scenare. Kazdy krok ma truthName/truthLat/truthLon "
-                "pro vyhodnoceni detekce + stopJitterM (rozptyl parkoviste).",
-        "category": category,
-    }
+    category = {"id": "rodiny", "title": "Rodiny (test)", "icon": "👨‍👩‍👧‍👦",
+                "scenarios": all_scenarios}
+    result = {"generated": datetime.now().isoformat(), "source": src,
+              "note": "Soubezne rodinne dny (type=family, tracks per clen).",
+              "category": category}
     with open(out, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=1)
-
-    print("\n✓ %s — kategorie 'rodiny' s %d scénáři" % (out, len(all_scenarios)))
-    print("  Sloučení do scenarios_data.json: viz merge_scenarios.py nebo rucne pres /scenarios")
+    print("\n✓ %s — kategorie 'rodiny' s %d rodinnými dny" % (out, len(all_scenarios)))
 
 
 if __name__ == "__main__":
