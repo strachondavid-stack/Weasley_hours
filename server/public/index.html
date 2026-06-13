@@ -2325,11 +2325,21 @@ async function scRunFamily(scenarioId) {
     return (Math.floor(t / 60) % 24) + ':' + String(t % 60).padStart(2, '0');
   };
   const memNames = { tatka:'TÁTA', mamka:'MÁMA', misak:'MIŠÁK', kubik:'KUBÍK' };
-  const setMemberStatus = (m, txt) => {
-    const hud = document.getElementById('hud-chip-' + m);
-    if (hud) hud.textContent = (memNames[m]||m) + ': ' + txt;
-    const chip = document.getElementById('fam-chip-' + m);   // i na záložce Scénáře
-    if (chip) chip.textContent = (memNames[m]||m) + ': ' + txt;
+  // Stav každého člena: text statusu + simulovaný čas začátku aktuálního segmentu
+  const memState = {};   // m -> { txt, since (simMs) | null }
+  const fmtDur = (simMs) => {
+    const min = Math.floor(simMs / 60000);
+    if (min < 60) return min + ' min';
+    return Math.floor(min / 60) + 'h ' + (min % 60) + 'min';
+  };
+  const setMemberStatus = (m, txt, sinceSimMs) => {
+    memState[m] = { txt, since: (typeof sinceSimMs === 'number' ? sinceSimMs : null) };
+  };
+  const renderMemberChip = (m, nowSimMs) => {
+    const st = memState[m];
+    if (!st) return (memNames[m]||m) + ': start';
+    const dur = st.since != null ? ' (' + fmtDur(Math.max(0, nowSimMs - st.since)) + ')' : '';
+    return (memNames[m]||m) + ': ' + st.txt + dur;
   };
   try {
     scStartReport(scenarioId, 'rodina');
@@ -2381,15 +2391,15 @@ async function scRunFamily(scenarioId) {
         await sleepUntilSim(seg.startMin * 60000);
         if (scAbort) break;
         if (seg.type === 'travel') {
-          setMemberStatus(m, '🚗 → ' + seg.name);
+          setMemberStatus(m, '🚗 → ' + seg.name, seg.startMin * 60000);
           await scDoRoute(m, { lat: seg.fromLat, lon: seg.fromLon },
                           { lat: seg.lat, lon: seg.lon }, seg.mode, speed, null, () => {});
         } else if (seg.type === 'stay') {
-          setMemberStatus(m, '⏱ ' + seg.name);
+          setMemberStatus(m, '⏱ ' + seg.name, seg.startMin * 60000);
           await scDoStay(m, seg.lat, seg.lon, seg.durMin, speed, null, () => {}, seg.stopJitterM);
         }
       }
-      if (!scAbort) setMemberStatus(m, '✓ doma');
+      if (!scAbort) setMemberStatus(m, '✓ doma', null);
     };
 
     const maxSim = Math.max(...members.flatMap(m =>
@@ -2405,6 +2415,14 @@ async function scRunFamily(scenarioId) {
       hudBar.style.width = pct + '%';
       progBar.style.width = pct + '%';
       progStatus.textContent = '🕐 ' + clk + ' — běží ' + members.length + ' členů paralelně';
+      // per-člen chip s běžící dobou v aktuálním segmentu
+      for (const m of members) {
+        const txt = renderMemberChip(m, sm);
+        const h = document.getElementById('hud-chip-' + m);
+        if (h) h.textContent = txt;
+        const c = document.getElementById('fam-chip-' + m);
+        if (c) c.textContent = txt;
+      }
     }, 500);
 
     await Promise.all(members.map(runMember));
