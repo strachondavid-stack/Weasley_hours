@@ -871,7 +871,7 @@ async function runSimStep(member) {
   sim.timer = setTimeout(() => runSimStep(member), intervalMs);
 }
 
-async function runSimStay(member, lat, lon, minutes, onDone) {
+async function runSimStay(member, lat, lon, minutes, onDone, jitterM) {
   const sim = activeSimulations[member];
   if (!sim) return;
 
@@ -884,8 +884,13 @@ async function runSimStay(member, lat, lon, minutes, onDone) {
 
   const doStep = async () => {
     if (!sim.stayActive || !activeSimulations[member]) return;
-    const dLat = (Math.random() - 0.5) * 0.00025;
-    const dLon = (Math.random() - 0.5) * 0.00025;
+    // Rozptyl mista zastaveni (parkoviste/vchod): jitterM v metrech -> stupne.
+    // 1 stupen lat ~111320m; lon koriguj cos(lat). Fallback ~28m (puvodni chovani).
+    const _jit = (typeof jitterM === 'number' && jitterM > 0) ? jitterM : 14;
+    const _dLatM = (Math.random() - 0.5) * 2 * _jit;
+    const _dLonM = (Math.random() - 0.5) * 2 * _jit;
+    const dLat = _dLatM / 111320;
+    const dLon = _dLonM / (111320 * Math.cos(lat * Math.PI / 180));
     sim.simTime += 30000;
     if (sim.stayStep === 0) console.log(`[SIM] Stay start simTime=${sim.simTime}`);
     await simSendGPSServer(member, lat + dLat, lon + dLon, 0, ['stationary'], sim.simTime);
@@ -1011,7 +1016,7 @@ app.post('/simulate/route', async (req, res) => {
 
 // Simulace — stání na místě
 app.post('/simulate/stay', async (req, res) => {
-  const { member, lat, lon, minutes = 10, speed = 5 } = req.body;
+  const { member, lat, lon, minutes = 10, speed = 5, jitterM } = req.body;
   if (!member || !lat || !lon) return res.status(400).json({ error: 'member, lat, lon required' });
 
   if (activeSimulations[member]) {
@@ -1049,7 +1054,7 @@ app.post('/simulate/stay', async (req, res) => {
     } else {
       console.log(`[SIM] Cluster po stání: ${tracker2.cluster?.points.length || 0} bodů — málo pro vyhodnocení`);
     }
-  });
+  }, jitterM);
   res.json({ ok: true, member, minutes });
 });
 

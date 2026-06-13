@@ -2224,7 +2224,7 @@ async function scRun(scenarioId) {
       globalStatus.textContent = `⏱ ${step.name}`;
       simTime = await scDoStay(member, step.lat, step.lon, step.stayMin, speed, simTime, (cur, total) => {
         progStatus.textContent = `⏱ ${step.name} — ${cur}/${total} min`;
-      });
+      }, step.stopJitterM);
       if (scAbort) break;
     }
 
@@ -2258,7 +2258,7 @@ async function scRun(scenarioId) {
 }
 
 // Stání přes /simulate/stay + čekání na sim_arrived
-function scDoStay(member, lat, lon, minutes, speed, simTime, onProgress) {
+function scDoStay(member, lat, lon, minutes, speed, simTime, onProgress, jitterM) {
   return new Promise(async (resolve) => {
     if (scAbort) return resolve(simTime);
 
@@ -2284,7 +2284,7 @@ function scDoStay(member, lat, lon, minutes, speed, simTime, onProgress) {
       const resp = await fetch('/simulate/stay', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ member, lat, lon, minutes, speed, startSimTime: simTime || undefined }),
+        body: JSON.stringify({ member, lat, lon, minutes, speed, startSimTime: simTime || undefined, jitterM }),
       });
       const data = await resp.json();
       // Server vrátí výsledný simTime po dokončení stání
