@@ -2116,12 +2116,31 @@ function scSetCat(catId) {
   renderScenarios();
 }
 
+function scFamilyStops(s) {
+  // kompaktní přehled per člen: ikony zastávek v pořadí, s časem příjezdu
+  const memNames = { tatka:'TÁTA', mamka:'MÁMA', misak:'MIŠÁK', kubik:'KUBÍK' };
+  const fmtClock = (min) => {
+    const t = 7 * 60 + min; // den začíná 07:00
+    const h = Math.floor(t / 60) % 24, m = t % 60;
+    return h + ':' + String(m).padStart(2, '0');
+  };
+  return (s.members || Object.keys(s.tracks || {})).map(mk => {
+    const segs = (s.tracks[mk] || []);
+    const stays = segs.filter(x => x.type === 'stay');
+    const chips = stays.map(st =>
+      `<span class="sc-step-chip" title="${fmtClock(st.startMin)} (${st.durMin>=60?Math.round(st.durMin/60*10)/10+'h':st.durMin+'min'})" onclick="scShowOnMap(${st.lat},${st.lon},'${st.name.replace(/'/g,"\\'")}')" style="cursor:pointer">${st.icon||'📍'} ${st.name}</span>`
+    ).join(' ');
+    return `<div style="margin:5px 0"><div style="font-size:11px;font-weight:700;color:#888">${memNames[mk]||mk}</div><div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:2px">${chips||'<span style="color:#ccc;font-size:11px">doma</span>'}</div></div>`;
+  }).join('');
+}
+
 function renderScCard(s) {
   const isExp = scExpanded === s.id;
+  const isFamily = s.type === 'family';
   const tagHtml = s.tags.map(t => `<span class="sc-tag ${t}">${SC_TAG_LABELS[t]||t}</span>`).join('');
 
   // Stops timeline
-  const stopsHtml = s.steps.map((st, i) => {
+  const stopsHtml = isFamily ? scFamilyStops(s) : s.steps.map((st, i) => {
     const isFirst = i === 0;
     const isLast = i === s.steps.length - 1;
     const hasNext = i < s.steps.length - 1;
@@ -2152,7 +2171,7 @@ function renderScCard(s) {
       </div>
       <div class="sc-card-meta">
         ${tagHtml}
-        <span style="font-size:11px;color:#bbb">${s.steps.length} zastávek</span>
+        <span style="font-size:11px;color:#bbb">${isFamily ? (s.members ? s.members.length : Object.keys(s.tracks||{}).length) + ' členů' : s.steps.length + ' zastávek'}</span>
       </div>
       <div class="sc-card-chevron${isExp?' open':''}">›</div>
     <button class="sc-btn" style="font-size:11px;padding:2px 8px;flex-shrink:0" onclick="event.stopPropagation();scToggleQueue('${s.id}')" id="sc-qbtn2-${s.id}">${scQueue.includes(s.id) ? '✓' : '+'}</button>
@@ -2160,9 +2179,9 @@ function renderScCard(s) {
     <div class="sc-card-body${isExp?' open':''}">
       <div class="sc-stops">${stopsHtml}</div>
       <div class="sc-run-row">
-        <button class="sc-btn primary" onclick="scRun('${s.id}')" ${scRunning?'disabled':''}>▶ Spustit</button>
+        <button class="sc-btn primary" onclick="${isFamily ? `scRunFamily('${s.id}')` : `scRun('${s.id}')`}" ${scRunning?'disabled':''}>▶ Spustit${isFamily ? ' (celá rodina)' : ''}</button>
         <button class="sc-btn" onclick="scToggleQueue('${s.id}')" id="sc-qbtn-${s.id}">${scQueue.includes(s.id) ? '✓ Ve frontě' : '+ Fronta'}</button>
-        <span style="font-size:12px;color:#aaa">člena: <b id="sc-run-member-label">${document.getElementById('sc-member')?.value||'?'}</b> · rychlost: <b id="sc-run-speed-label">${document.getElementById('sc-speed')?.value||'?'}×</b></span>
+        <span style="font-size:12px;color:#aaa">${isFamily ? 'všichni 4 členové paralelně' : 'člena: <b id="sc-run-member-label">'+(document.getElementById('sc-member')?.value||'?')+'</b>'} · rychlost: <b id="sc-run-speed-label">${document.getElementById('sc-speed')?.value||'?'}×</b></span>
       </div>
     </div>
   </div>`;
@@ -2269,6 +2288,88 @@ async function scRun(scenarioId) {
     await scLoadReportLogs(scCurrentReport);
     scFinishReport();
   }
+  renderScenarios();
+}
+
+// ── Souběžný rodinný přehrávač ─────────────────────────────────────────────
+// Přehraje VŠECHNY členy paralelně na sdílených simulovaných hodinách.
+// Spolujízda = členové mají shodné travel segmenty ve stejném startMin → jedou spolu.
+// Předávka = dítě má stay segment mezi odvozem a vyzvednutím.
+async function scRunFamily(scenarioId) {
+  if (scRunning) return;
+  const sc = SC_SCENARIOS.find(s => s.id === scenarioId);
+  if (!sc || !sc.tracks) return;
+  const speed = parseInt(document.getElementById('sc-speed').value) || 30;
+
+  scRunning = true; scAbort = false;
+  scStartReport(scenarioId, 'rodina');
+  renderScenarios();
+
+  const progWrap = document.getElementById('sc-progress');
+  const progTitle = document.getElementById('sc-prog-title');
+  const progStatus = document.getElementById('sc-prog-status');
+  const progBar = document.getElementById('sc-prog-bar');
+  const stepsList = document.getElementById('sc-steps-list');
+  const stopBtn = document.getElementById('sc-stop-btn');
+  progWrap.classList.add('visible');
+  stopBtn.style.display = '';
+  progTitle.textContent = sc.icon + ' ' + sc.title + ' — celá rodina';
+
+  const members = sc.members || Object.keys(sc.tracks);
+  const memNames = { tatka:'TÁTA', mamka:'MÁMA', misak:'MIŠÁK', kubik:'KUBÍK' };
+  stepsList.innerHTML = members.map(m =>
+    `<span class="sc-step-chip" id="fam-chip-${m}">${memNames[m]||m}: start</span>`
+  ).join('');
+
+  // Sdílené simulované hodiny: realStart → sim 0, sim běží speed× rychleji než realita
+  const realStart = Date.now();
+  const simNowMs = () => (Date.now() - realStart) * speed;        // simulované ms od začátku dne
+  const sleepUntilSim = async (simMs) => {
+    while (!scAbort) {
+      const remainingReal = (simMs - simNowMs()) / speed;
+      if (remainingReal <= 0) break;
+      await new Promise(r => setTimeout(r, Math.min(remainingReal, 400)));
+    }
+  };
+
+  const runMember = async (m) => {
+    const segs = sc.tracks[m] || [];
+    const chip = document.getElementById('fam-chip-' + m);
+    for (const seg of segs) {
+      if (scAbort) break;
+      await sleepUntilSim(seg.startMin * 60000);   // čekej, až sdílené hodiny dosáhnou startu segmentu
+      if (scAbort) break;
+      if (seg.type === 'travel') {
+        if (chip) chip.textContent = (memNames[m]||m) + ': 🚗 → ' + seg.name;
+        await scDoRoute(m, { lat: seg.fromLat, lon: seg.fromLon },
+                        { lat: seg.lat, lon: seg.lon }, seg.mode, speed, null, () => {});
+      } else if (seg.type === 'stay') {
+        if (chip) chip.textContent = (memNames[m]||m) + ': ⏱ ' + seg.name;
+        await scDoStay(m, seg.lat, seg.lon, seg.durMin, speed, null, () => {}, seg.stopJitterM);
+      }
+    }
+    if (chip && !scAbort) { chip.textContent = (memNames[m]||m) + ': ✓ doma'; chip.classList.add('done'); }
+  };
+
+  // progress: kolik je hotových z celkového sim trvání
+  const maxSim = Math.max(...members.flatMap(m =>
+    (sc.tracks[m]||[]).map(s => (s.startMin + (s.durMin||0)) * 60000)), 60000);
+  const progTimer = setInterval(() => {
+    if (scAbort) return;
+    const pct = Math.min(100, Math.round(simNowMs() / maxSim * 100));
+    progBar.style.width = pct + '%';
+    const t = 7*60 + Math.floor(simNowMs()/60000);
+    progStatus.textContent = '🕐 ' + (Math.floor(t/60)%24) + ':' + String(t%60).padStart(2,'0') + ' — běží ' + members.length + ' členů paralelně';
+  }, 500);
+
+  await Promise.all(members.map(runMember));
+
+  clearInterval(progTimer);
+  progBar.style.width = scAbort ? progBar.style.width : '100%';
+  progStatus.textContent = scAbort ? '⏸ Přerušeno' : '✅ Hotovo';
+  stopBtn.style.display = 'none';
+  scRunning = false;
+  if (scCurrentReport) { await scLoadReportLogs(scCurrentReport); scFinishReport(); }
   renderScenarios();
 }
 
