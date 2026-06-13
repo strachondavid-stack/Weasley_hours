@@ -2442,7 +2442,11 @@ async function scRunFamily(scenarioId) {
   } finally {
     if (progTimer) clearInterval(progTimer);
     scRunning = false;
-    setTimeout(() => { const h = document.getElementById('sim-hud'); if (h && !scRunning) h.style.display = 'none'; }, scAbort ? 0 : 3000);
+    // Po normálním dokončení schovej HUD za 3s. Po STOPu nech HUD viset —
+    // je v něm tlačítko 'Vymazat testovací data', které HUD schová samo.
+    if (!scAbort) {
+      setTimeout(() => { const h = document.getElementById('sim-hud'); if (h && !scRunning) h.style.display = 'none'; }, 3000);
+    }
     renderScenarios();
   }
 }
@@ -2819,9 +2823,39 @@ function scShowOnMap(lat, lon, name) {
 
 function scStopAll() {
   scAbort = true;
-  const member = document.getElementById('sc-member')?.value || 'misak';
-  fetch('/simulate/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({member}) });
-  document.getElementById('sc-global-status').textContent = '⏸ Zastavuji...';
+  // zastav VŠECHNY běžící simulace na serveru (rodina = 4 členové), ne jen jednoho
+  fetch('/simulate/stop-all', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' })
+    .catch(()=>{});
+  const gs = document.getElementById('sc-global-status');
+  if (gs) gs.textContent = '⏹ Zastaveno';
+  // v HUD pruhu nabídni vymazání testovacích dat
+  const hudReal = document.getElementById('hud-realrun');
+  if (hudReal) hudReal.textContent = 'zastaveno';
+  const stopBtn = document.getElementById('hud-stop');
+  if (stopBtn) {
+    stopBtn.textContent = '🗑 Vymazat testovací data';
+    stopBtn.style.borderColor = '#5a3a3a';
+    stopBtn.onclick = scClearTestData;
+  }
+}
+
+async function scClearTestData(ev) {
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  if (!confirm('Vymazat detekovaná testovací místa? (naučené geofences a místa z tohoto běhu)')) return;
+  const btn = document.getElementById('hud-stop');
+  if (btn) { btn.textContent = '🗑 Mažu...'; btn.disabled = true; }
+  try {
+    await fetch('/places/all', { method:'DELETE' });   // maže detected_places + ai_recent v aktivním (test) Redisu
+  } catch(e) {}
+  // obnov pohledy
+  if (typeof reloadPlacesOnMap === 'function') reloadPlacesOnMap();
+  if (typeof loadGeofences === 'function' && currentPage === 'geofences') loadGeofences();
+  if (currentPage === 'places' && typeof loadPlaces === 'function') loadPlaces().then(renderPlaces);
+  // schovej HUD a obnov tlačítko Stop do výchozího stavu
+  const hud = document.getElementById('sim-hud');
+  if (hud) hud.style.display = 'none';
+  const sbtn = document.getElementById('hud-stop');
+  if (sbtn) { sbtn.textContent = '■ Stop'; sbtn.disabled = false; sbtn.onclick = scStopAll; }
 }
 
 // Aktualizuj labely v kartách když se změní member/speed

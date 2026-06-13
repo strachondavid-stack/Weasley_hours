@@ -1135,6 +1135,22 @@ app.post('/simulate/stop', (req, res) => {
   res.json({ ok: true });
 });
 
+// Zastaví VŠECHNY běžící simulace (rodinný scénář = 4 členové paralelně)
+app.post('/simulate/stop-all', (req, res) => {
+  const stopped = [];
+  for (const member of Object.keys(activeSimulations)) {
+    const sim = activeSimulations[member];
+    sim.active = false;
+    sim.stayActive = false;
+    if (sim.timer) clearTimeout(sim.timer);
+    delete activeSimulations[member];
+    broadcast({ type: 'sim_stopped', member });
+    stopped.push(member);
+  }
+  console.log('[SIM] Stop-all: zastaveno ' + stopped.length + ' simulaci (' + stopped.join(', ') + ')');
+  res.json({ ok: true, stopped });
+});
+
 // Simulace — stav
 app.get('/simulate/status', (req, res) => {
   const out = {};
