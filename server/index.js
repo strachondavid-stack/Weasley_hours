@@ -1114,6 +1114,11 @@ app.post('/gps/:member', async (req, res) => {
   const lat = parseFloat(req.body.lat);
   const lon = parseFloat(req.body.lon);
   if (isNaN(lat) || isNaN(lon)) return res.status(400).json({ error: 'lat and lon required' });
+  // V testovacím módu ignoruj reálnou GPS z mobilu, ať neruší simulaci
+  if (currentMode === 'test') {
+    console.log('[TEST] ignoruji reálnou GPS (/gps) od ' + member);
+    return res.json({ ok: false, ignored: true, reason: 'test mode' });
+  }
   const motionactivities = req.body.motionactivities || [];
   const vel = parseFloat(req.body.vel) || 0;
   const simTs = req.body.ts ? parseInt(req.body.ts) : null;
@@ -1472,6 +1477,11 @@ async function startMqtt() {
       const lat = parseFloat(msg.lat);
       const lon = parseFloat(msg.lon);
       if (isNaN(lat) || isNaN(lon)) return;
+      // V testovacím módu ignoruj reálnou GPS z mobilů (OwnTracks), ať neruší simulaci
+      if (currentMode === 'test') {
+        console.log('[TEST] ignoruji reálnou MQTT GPS od ' + member);
+        return;
+      }
       await processGPS(member, lat, lon, msg.motionactivities || [], msg.vel || 0, null, true);
     } catch(e) { console.error('MQTT error:', e.message); }
   });
