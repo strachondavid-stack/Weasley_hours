@@ -275,6 +275,7 @@
       <button class="fbtn"        onclick="setFilter('unnamed',this)">Nepojmenovaná</button>
       <button class="fbtn"        onclick="setFilter('named',this)">Pojmenovaná</button>
     </div>
+    <button class="btn-sm" onclick="dedupePlaces(this)" title="Sloučí blízká nepojmenovaná místa (drift během stání)">⊕ Sloučit blízká</button>
   </div>
   <!-- bulk toolbar -->
   <div id="places-bulk-bar" style="display:none;align-items:center;gap:8px;padding:6px 12px;background:#fff3cd;border-bottom:1px solid #ffc107;flex-shrink:0">
@@ -959,6 +960,20 @@ function setFilter(f,btn){
   document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   renderPlaces();
+}
+
+async function dedupePlaces(btn){
+  const orig=btn.textContent;
+  btn.disabled=true; btn.textContent='⊕ Slučuji...';
+  try{
+    const r=await fetch('/places/dedupe',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const d=await r.json();
+    if(d.ok){
+      btn.textContent = d.merged>0 ? `✓ Sloučeno ${d.merged}` : '✓ Nic ke sloučení';
+      await loadPlaces(); renderPlaces(); reloadPlacesOnMap();
+    } else { btn.textContent='✕ Chyba'; }
+  }catch(e){ btn.textContent='✕ Chyba'; }
+  setTimeout(()=>{btn.disabled=false; btn.textContent=orig;},2000);
 }
 
 function renderPlaces(){

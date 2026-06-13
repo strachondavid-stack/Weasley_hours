@@ -306,6 +306,7 @@ function broadcast(data) {
 // ─── Konstanty ────────────────────────────────────────────────────────────────
 const CLUSTER_RADIUS = 80;
 const LEAVE_RADIUS = 150;
+const MERGE_RADIUS = 150;   // detekce do této vzdálenosti od existujícího místa = totéž místo (drift)
 const MIN_STOP_DURATION = 5 * 60 * 1000;
 const MIN_STOP_POINTS = 3;
 const SILENCE_MIN_DIST = 200;
@@ -410,7 +411,6 @@ function resolveMotionWithHysteresis(member, motionActivities, vel) {
 
 // ─── Tracker ──────────────────────────────────────────────────────────────────
 const trackers = {};
-const recentlyDetected = {};
 
 // Paměť posledního způsobu pohybu — aby rozjezd autem neskočil na kolo
 const lastMotion = {};  // member → { motion, ts }
@@ -451,35 +451,42 @@ function clusterCenter(points) {
 // ─── Zpracování zastávky ──────────────────────────────────────────────────────
 async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat = false) {
 
-  // Deduplikace — stejné místo max jednou za hodinu (přeskočit pro opakované detekce)
-  const dedupeKey = member + '_' + lat.toFixed(3) + '_' + lon.toFixed(3);
-  if (!repeat && recentlyDetected[dedupeKey] && Date.now() - recentlyDetected[dedupeKey] < 60 * 60 * 1000) {
-    console.log(`[STOP] Duplikát ${dedupeKey}, přeskakuji`);
-    return;
-  }
-
-  // Známé místo — nepřidávat znovu
+  // Známé místo — uvnitř existující geofence, nepřidávat znovu
   const alreadyKnown = dynamicFences.some(f => distance(lat, lon, f.lat, f.lon) < Math.max(f.radius, CLUSTER_RADIUS));
   if (alreadyKnown) {
     console.log(`[STOP] Známé místo @ ${lat.toFixed(5)},${lon.toFixed(5)}, přeskakuji`);
     return;
   }
 
-  // Cross-member dedup — jiný člen zachytil stejné místo za posledních 60 minut
-  const recentPlacesRaw = await redis.get('detected_places');
-  const recentPlaces = recentPlacesRaw ? JSON.parse(recentPlacesRaw) : [];
-  const crossDup = recentPlaces.find(p =>
-    p.detectedBy !== member &&
-    distance(lat, lon, p.lat, p.lon) < 150 &&
-    (Date.now() - p.detectedAt) < 60 * 60 * 1000
-  );
-  if (crossDup) {
-    console.log(`[STOP] ${crossDup.detectedBy} už zachytil stejné místo před ${Math.round((Date.now() - crossDup.detectedAt) / 60000)} min`);
-    await logEvent('place_rejected', { member, lat, lon, reason: 'cross_member_dup', otherMember: crossDup.detectedBy, source });
+  // Robustní deduplikace proti driftu — blízké detekce sloučí do JEDNOHO místa.
+  // Řeší i čekající ("?") místa od stejného člena: dlouhé stání s GPS driftem
+  // dříve vytvořilo více klastrů → více "?" míst. Staré dedupeKey (mřížka ~111 m)
+  // ani cross-member kontrola tohle nezachytily.
+  const placesRaw = await redis.get('detected_places');
+  const allPlaces = placesRaw ? JSON.parse(placesRaw) : [];
+  let nearest = null, nearestDist = Infinity;
+  for (const p of allPlaces) {
+    const d = distance(lat, lon, p.lat, p.lon);
+    if (d < MERGE_RADIUS && d < nearestDist) { nearest = p; nearestDist = d; }
+  }
+  if (nearest && !repeat) {
+    if (!nearest.name) {
+      // Čekající místo — aktualizuj (delší trvání, novější čas) místo duplikátu
+      nearest.duration = Math.max(nearest.duration || 0, gapMinutes);
+      nearest.detectedAt = Date.now();
+      nearest.mergeCount = (nearest.mergeCount || 1) + 1;
+      if (!nearest.detectedByAll) nearest.detectedByAll = [nearest.detectedBy];
+      if (!nearest.detectedByAll.includes(member)) nearest.detectedByAll.push(member);
+      await redis.set('detected_places', JSON.stringify(allPlaces));
+      broadcast({ type: 'stop_detected', member, place: nearest });
+      console.log(`[STOP] Sloučeno s čekajícím místem ${nearest.id} (${nearest.mergeCount}×, ${Math.round(nearestDist)}m, ${gapMinutes}min)`);
+      await logEvent('place_merged', { member, lat, lon, mergedInto: nearest.id, mergeCount: nearest.mergeCount, distM: Math.round(nearestDist), gapMinutes, source });
+    } else {
+      console.log(`[STOP] Blízko pojmenovaného místa "${nearest.name}" (${Math.round(nearestDist)}m), přeskakuji`);
+      await logEvent('place_rejected', { member, lat, lon, reason: 'near_named_place', placeName: nearest.name, distM: Math.round(nearestDist), source });
+    }
     return;
   }
-
-  recentlyDetected[dedupeKey] = Date.now();
 
   // Kontext pro AI
   const placesNearby = await getNearbyPlaces(lat, lon, 300);
@@ -1182,6 +1189,42 @@ app.delete('/places/all', async (req, res) => {
   await saveFences();
   console.log('✓ Reset detected_places, zachováno ' + dynamicFences.length + ' manuálních fences');
   res.json({ ok: true, remaining_fences: dynamicFences.length });
+});
+
+// Sloučí již existující ČEKAJÍCÍ (nepojmenovaná) místa, která jsou blízko sebe
+// (drift během dlouhého stání). Pojmenovaná místa zůstanou nedotčena.
+// MUSÍ být před /places/:id
+app.post('/places/dedupe', async (req, res) => {
+  const radius = parseInt(req.body?.radius) || MERGE_RADIUS;
+  const raw = await redis.get('detected_places');
+  const places = raw ? JSON.parse(raw) : [];
+
+  const named = places.filter(p => p.name);
+  const pending = places.filter(p => !p.name);
+  const kept = [];
+  let merged = 0;
+
+  for (const p of pending) {
+    // hledej už ponechané čekající místo blízko (nebo už pojmenované — pak zahoď duplikát)
+    const nearKept = kept.find(k => distance(p.lat, p.lon, k.lat, k.lon) < radius);
+    if (nearKept) {
+      nearKept.duration = Math.max(nearKept.duration || 0, p.duration || 0);
+      nearKept.mergeCount = (nearKept.mergeCount || 1) + 1;
+      nearKept.detectedAt = Math.max(nearKept.detectedAt || 0, p.detectedAt || 0);
+      merged++;
+      continue;
+    }
+    const nearNamed = named.find(n => distance(p.lat, p.lon, n.lat, n.lon) < radius);
+    if (nearNamed) { merged++; continue; }  // už existuje pojmenované → zahoď čekající duplikát
+    kept.push(p);
+  }
+
+  const result = named.concat(kept);
+  await redis.set('detected_places', JSON.stringify(result));
+  console.log(`✓ Dedupe: sloučeno ${merged} čekajících míst, zbývá ${kept.length} čekajících + ${named.length} pojmenovaných`);
+  await logEvent('places_deduped', { merged, pendingBefore: pending.length, pendingAfter: kept.length, radius });
+  broadcast({ type: 'stop_detected', member: null });  // klient si přenačte seznam
+  res.json({ ok: true, merged, pending: kept.length, named: named.length });
 });
 
 app.delete('/places/:id', async (req, res) => {
