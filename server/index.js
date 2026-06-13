@@ -320,6 +320,9 @@ const AI_SUGGEST_THRESHOLD = 0.65;
 const AI_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const AI_COOLDOWN_RADIUS = MERGE_RADIUS;   // 150 m
 
+// Záruka pro dlouhé stání — po této době se místo označí vždy (i když AI nedoporučí)
+const LONG_STAY_MS = 30 * 60 * 1000;       // 30 minut
+
 
 // ─── Rozlišení pohybu ─────────────────────────────────────────────────────────
 // Kombinuje motionactivities (Core Motion iPhone) a vel (GPS rychlost v km/h)
@@ -476,7 +479,7 @@ async function recordAiAsked(lat, lon) {
   } catch(e) {}
 }
 
-async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat = false) {
+async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat = false, forceLong = false) {
 
   // Známé místo — uvnitř existující geofence, nepřidávat znovu
   const alreadyKnown = dynamicFences.some(f => distance(lat, lon, f.lat, f.lon) < Math.max(f.radius, CLUSTER_RADIUS));
@@ -517,7 +520,8 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
 
   // Cooldown brána — pokud pro tuto oblast padl AI dotaz za posledních 6 h, přeskoč
   // Google i Claude. Chytá i zamítnutá místa, po kterých nezůstane "?" k merge.
-  if (await aiRecentlyAsked(lat, lon)) {
+  // forceLong (eskalace dlouhého stání) cooldown OBCHÁZÍ — je to legitimní druhý pokus.
+  if (!forceLong && await aiRecentlyAsked(lat, lon)) {
     console.log(`[STOP] AI cooldown @ ${lat.toFixed(5)},${lon.toFixed(5)} — přeskakuji AI dotaz (úspora)`);
     await logEvent('ai_skipped', { member, lat, lon, reason: 'cooldown', gapMinutes, source });
     return;
@@ -543,6 +547,10 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
     // Fallback — jen pokud je místo opakované a má POI
     if (placesNearby.length > 0 && historyVisits >= 3) {
       await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, null, 0, 'fallback', source);
+    } else if (forceLong) {
+      // Dlouhé stání: AI nedostupné, ale stání 30+ min označ vždy jako "?"
+      console.log(`[STOP] Dlouhé stání ${gapMinutes}min, AI nedostupné — vytvářím "?" napřímo`);
+      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, null, 0, 'long_stay', source);
     } else {
       await logEvent('place_rejected', { member, lat, lon, reason: 'AI nedostupné, nedostatek signálů', source });
     }
@@ -550,6 +558,13 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
   }
 
   if (!aiResult.should_save || aiResult.confidence < AI_SUGGEST_THRESHOLD) {
+    if (forceLong) {
+      // Dlouhé stání: i když AI nedoporučuje, 30+ min na místě označ jako "?"
+      // (s případným návrhem názvu od AI, pokud nějaký dala)
+      console.log(`[STOP] Dlouhé stání ${gapMinutes}min, AI nedoporučila (conf=${aiResult.confidence}) — přesto "?": ${aiResult.reason}`);
+      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, aiResult.name || null, aiResult.confidence || 0, 'long_stay: ' + (aiResult.reason || ''), source);
+      return;
+    }
     console.log(`[STOP] Zamítnuto (confidence=${aiResult.confidence}): ${aiResult.reason}`);
     await logEvent('place_rejected', { member, lat, lon, gapMinutes, source, aiName: aiResult.name, aiConfidence: aiResult.confidence, aiReason: aiResult.reason });
     return;
@@ -618,14 +633,14 @@ async function detectSilentStop(member, prevPoint, newLat, newLon, newTs) {
 
 // ─── Cluster tracking ─────────────────────────────────────────────────────────
 // Move mode: husté body v malém okruhu = reálná zastávka.
-async function evaluateCluster(member, cluster, repeat = false) {
+async function evaluateCluster(member, cluster, repeat = false, forceLong = false) {
   if (!cluster || cluster.points.length < MIN_STOP_POINTS) return;
   // Pouzij ts posledniho bodu misto Date.now() — funguje i se simulovanym casem
   const lastTs = cluster.points[cluster.points.length - 1].ts;
   const duration = lastTs - cluster.startTs;
   if (duration < MIN_STOP_DURATION) return;
   const center = clusterCenter(cluster.points);
-  await processStopCandidate(member, center.lat, center.lon, Math.round(duration / 60000), 'cluster', repeat);
+  await processStopCandidate(member, center.lat, center.lon, Math.round(duration / 60000), 'cluster', repeat, forceLong);
 }
 
 // ─── Hlavní tracker ───────────────────────────────────────────────────────────
@@ -664,6 +679,28 @@ async function updateTracker(member, lat, lon, ts, motionActivities = []) {
       tracker.cluster.earlyDetected = true;
       console.log(`[TRACK] [${member}] Detekce zastávky po ${durMin} min`);
       evaluateCluster(member, tracker.cluster); // async, neblokuj
+    }
+    // Záruka pro DLOUHÉ stání: po LONG_STAY_MIN min, pokud pro tohle místo pořád
+    // není ŽÁDNÉ místo (pojmenované ani "?"), spusť jednu eskalovanou detekci —
+    // obejde cooldown a i při zamítnutí AI vytvoří "?". Délka stání je silný signál.
+    if (!tracker.cluster.longDone
+        && (ts - tracker.cluster.startTs) >= LONG_STAY_MS
+        && tracker.cluster.points.length >= MIN_STOP_POINTS) {
+      tracker.cluster.longDone = true;
+      const c = clusterCenter(tracker.cluster.points);
+      const knownFence = dynamicFences.some(f => distance(c.lat, c.lon, f.lat, f.lon) < Math.max(f.radius, CLUSTER_RADIUS));
+      let knownPlace = knownFence;
+      if (!knownPlace) {
+        try {
+          const raw = await redis.get('detected_places');
+          const places = raw ? JSON.parse(raw) : [];
+          knownPlace = places.some(p => distance(c.lat, c.lon, p.lat, p.lon) < MERGE_RADIUS);
+        } catch(e) {}
+      }
+      if (!knownPlace) {
+        console.log(`[TRACK] [${member}] Dlouhé stání ${durMin}min bez uloženého místa — eskalovaná detekce`);
+        evaluateCluster(member, tracker.cluster, false, true); // forceLong=true
+      }
     }
   } else if (dist > LEAVE_RADIUS || forceClose) {
     if (forceClose) console.log(`[TRACK] [${member}] automotive uzavrel stani dist=${Math.round(dist)}m`);
