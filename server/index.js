@@ -923,15 +923,27 @@ async function runSimStay(member, lat, lon, minutes, onDone, jitterM) {
   sim.stayStep = 0;
   sim.stayTotal = totalPoints;
 
+  // Jednorázový posun parkoviště (kde reálně zastavím vůči POI) — zvolen JEDNOU
+  // na celé stání. Dřív se losoval každý bod zvlášť → body skákaly po velkém
+  // čtverci (nereálný drift + rozbíjelo to potvrzení geofence, protože body
+  // padaly střídavě dovnitř/ven a hystereze se resetovala). Teď: stálé
+  // parkoviště + drobný GPS šum.
+  const parkMax = (typeof jitterM === 'number' && jitterM > 0) ? jitterM : 25;
+  const _ang = Math.random() * 2 * Math.PI;
+  const _r = Math.random() * parkMax;          // 0..parkMax m, jeden směr
+  const parkLatM = _r * Math.cos(_ang);
+  const parkLonM = _r * Math.sin(_ang);
+  const GPS_NOISE_M = 12;                       // drobný šum GPS při stání
+
   const doStep = async () => {
     if (!sim.stayActive || !activeSimulations[member]) return;
     // Rozptyl mista zastaveni (parkoviste/vchod): jitterM v metrech -> stupne.
     // 1 stupen lat ~111320m; lon koriguj cos(lat). Fallback ~28m (puvodni chovani).
-    const _jit = (typeof jitterM === 'number' && jitterM > 0) ? jitterM : 14;
-    const _dLatM = (Math.random() - 0.5) * 2 * _jit;
-    const _dLonM = (Math.random() - 0.5) * 2 * _jit;
-    const dLat = _dLatM / 111320;
-    const dLon = _dLonM / (111320 * Math.cos(lat * Math.PI / 180));
+    // Stálé parkoviště (parkLatM/parkLonM zvoleno jednou) + drobný GPS šum (±12 m)
+    const _latM = parkLatM + (Math.random() - 0.5) * 2 * GPS_NOISE_M;
+    const _lonM = parkLonM + (Math.random() - 0.5) * 2 * GPS_NOISE_M;
+    const dLat = _latM / 111320;
+    const dLon = _lonM / (111320 * Math.cos(lat * Math.PI / 180));
     sim.simTime += 30000;
     if (sim.stayStep === 0) console.log(`[SIM] Stay start simTime=${sim.simTime}`);
     await simSendGPSServer(member, lat + dLat, lon + dLon, 0, ['stationary'], sim.simTime);
