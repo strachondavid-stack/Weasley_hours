@@ -316,6 +316,10 @@ const SILENCE_MAX_GAP = 4 * 60 * 60 * 1000;
 const AI_AUTOSAVE_THRESHOLD = 0.80;
 const AI_SUGGEST_THRESHOLD = 0.65;
 
+// Cooldown na AI dotazy pro stejnou oblast — jedno místo spálí AI max jednou za 6 h
+const AI_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+const AI_COOLDOWN_RADIUS = MERGE_RADIUS;   // 150 m
+
 
 // ─── Rozlišení pohybu ─────────────────────────────────────────────────────────
 // Kombinuje motionactivities (Core Motion iPhone) a vel (GPS rychlost v km/h)
@@ -449,6 +453,29 @@ function clusterCenter(points) {
 }
 
 // ─── Zpracování zastávky ──────────────────────────────────────────────────────
+// ─── AI cooldown: stejná oblast smí spustit AI dotaz max jednou za AI_COOLDOWN_MS ──
+// Ukládá se do aktivního Redisu (v test módu izolováno do redisTest).
+async function aiRecentlyAsked(lat, lon) {
+  try {
+    const raw = await redis.get('ai_recent');
+    const arr = raw ? JSON.parse(raw) : [];
+    const cutoff = Date.now() - AI_COOLDOWN_MS;
+    return arr.some(e => e.ts >= cutoff && distance(lat, lon, e.lat, e.lon) < AI_COOLDOWN_RADIUS);
+  } catch(e) { return false; }
+}
+
+async function recordAiAsked(lat, lon) {
+  try {
+    const raw = await redis.get('ai_recent');
+    let arr = raw ? JSON.parse(raw) : [];
+    const cutoff = Date.now() - AI_COOLDOWN_MS;
+    arr = arr.filter(e => e.ts >= cutoff);   // prune staré
+    arr.push({ lat, lon, ts: Date.now() });
+    if (arr.length > 500) arr = arr.slice(-500);
+    await redis.set('ai_recent', JSON.stringify(arr));
+  } catch(e) {}
+}
+
 async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat = false) {
 
   // Známé místo — uvnitř existující geofence, nepřidávat znovu
@@ -469,7 +496,7 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
     const d = distance(lat, lon, p.lat, p.lon);
     if (d < MERGE_RADIUS && d < nearestDist) { nearest = p; nearestDist = d; }
   }
-  if (nearest && !repeat) {
+  if (nearest) {
     if (!nearest.name) {
       // Čekající místo — aktualizuj (delší trvání, novější čas) místo duplikátu
       nearest.duration = Math.max(nearest.duration || 0, gapMinutes);
@@ -488,7 +515,16 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
     return;
   }
 
+  // Cooldown brána — pokud pro tuto oblast padl AI dotaz za posledních 6 h, přeskoč
+  // Google i Claude. Chytá i zamítnutá místa, po kterých nezůstane "?" k merge.
+  if (await aiRecentlyAsked(lat, lon)) {
+    console.log(`[STOP] AI cooldown @ ${lat.toFixed(5)},${lon.toFixed(5)} — přeskakuji AI dotaz (úspora)`);
+    await logEvent('ai_skipped', { member, lat, lon, reason: 'cooldown', gapMinutes, source });
+    return;
+  }
+
   // Kontext pro AI
+  await recordAiAsked(lat, lon);   // zaznamenej cooldown PŘED drahými voláními (Google + Claude)
   const placesNearby = await getNearbyPlaces(lat, lon, 300);
   const historyVisits = await countNearbyHistory(member, lat, lon, 100);
   const nearbyMembers = await getRecentNearbyMembers(member, lat, lon);
@@ -620,16 +656,14 @@ async function updateTracker(member, lat, lon, ts, motionActivities = []) {
     tracker.cluster.points.push({ lat, lon, ts, stationary: !isAutomotive });
     const durMin = Math.round((ts - tracker.cluster.startTs) / 60000);
     console.log(`[TRACK] [${member}] V clusteru dist=${Math.round(dist)}m dur=${durMin}min pts=${tracker.cluster.points.length}`);
-    // Průběžná detekce — každých 10 minut spusť novou detekci
-    // S každou další detekcí roste délka zastávky → AI dá vyšší confidence
-    const EARLY_INTERVAL = 10; // minut
-    const nextDetectAt = ((tracker.cluster.earlyDetectCount || 0) + 1) * EARLY_INTERVAL;
-    if (durMin >= nextDetectAt && tracker.cluster.points.length >= MIN_STOP_POINTS) {
-      tracker.cluster.earlyDetectCount = (tracker.cluster.earlyDetectCount || 0) + 1;
-      tracker.cluster.earlyDetected = true; // zabrání detekci při odchodu pokud už proběhla
-      const isRepeat = tracker.cluster.earlyDetectCount > 1;
-      console.log(`[TRACK] [${member}] Průběžná detekce #${tracker.cluster.earlyDetectCount} po ${durMin} min`);
-      evaluateCluster(member, tracker.cluster, isRepeat); // async, neblokuj
+    // Detekce JEDNOU krátce po příjezdu (~5 min). Žádné opakování každých 10 min —
+    // cooldown + merge brána ochrání před opakovanými AI dotazy při dlouhém stání.
+    if (!tracker.cluster.earlyDetected
+        && (ts - tracker.cluster.startTs) >= MIN_STOP_DURATION
+        && tracker.cluster.points.length >= MIN_STOP_POINTS) {
+      tracker.cluster.earlyDetected = true;
+      console.log(`[TRACK] [${member}] Detekce zastávky po ${durMin} min`);
+      evaluateCluster(member, tracker.cluster); // async, neblokuj
     }
   } else if (dist > LEAVE_RADIUS || forceClose) {
     if (forceClose) console.log(`[TRACK] [${member}] automotive uzavrel stani dist=${Math.round(dist)}m`);
@@ -959,6 +993,7 @@ app.post('/mode', async (req, res) => {
         console.log('[MODE] Geofences zkopírovány z LIVE do TEST');
       }
     } catch(e) { console.error('[MODE] Chyba kopírování geofences:', e.message); }
+    try { await redisTest.del('ai_recent'); } catch(e) {}   // čistý cooldown pro testovací běhy
   }
   setMode(mode);
   Object.keys(trackers).forEach(m => { trackers[m] = { cluster: null, lastPoint: null }; });
@@ -1190,6 +1225,7 @@ app.post('/places/:id/name', async (req, res) => {
 // MUSÍ být před /places/:id
 app.delete('/places/all', async (req, res) => {
   await redis.del('detected_places');
+  await redis.del('ai_recent');   // reset cooldown spolu s místy
   dynamicFences = dynamicFences.filter(f => f.id.startsWith('manual_'));
   await saveFences();
   console.log('✓ Reset detected_places, zachováno ' + dynamicFences.length + ' manuálních fences');
