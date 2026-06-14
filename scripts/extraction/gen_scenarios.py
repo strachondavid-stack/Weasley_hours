@@ -168,32 +168,61 @@ def compile_tracks(plan, resolved):
                 "depart": trip["depart"], "arrive": trip["depart"] + dur,
                 "from": frm, "to": to, "mode": trip["mode"],
             })
+    FINAL_HOME_MIN = 120   # večerní pobyt doma na konci dne
     tracks = {}
     for m, trips in members.items():
         trips.sort(key=lambda t: t["depart"])
+        home = resolved["home"]
+
+        def home_stay(start, dur):
+            return {"type": "stay", "startMin": start, "durMin": dur,
+                    "lat": round(home["lat"], 6), "lon": round(home["lon"], 6),
+                    "name": home["name"], "stopJitterM": 15, "icon": "🏠", "category": "home"}
+
+        def travel_seg(frm, to, mode, start):
+            return {"type": "travel", "startMin": start,
+                    "fromLat": round(frm["lat"], 6), "fromLon": round(frm["lon"], 6),
+                    "lat": round(to["lat"], 6), "lon": round(to["lon"], 6),
+                    "name": to["name"], "mode": mode,
+                    "icon": ICON.get(to["category"], "📍")}
+
         segs = []
+        # Ranní pobyt doma — od začátku dne (07:00) do prvního odjezdu
+        if trips and trips[0]["depart"] >= 5:
+            segs.append(home_stay(0, trips[0]["depart"]))
+
         for i, t in enumerate(trips):
-            segs.append({
-                "type": "travel", "startMin": t["depart"],
-                "fromLat": round(t["from"]["lat"], 6), "fromLon": round(t["from"]["lon"], 6),
-                "lat": round(t["to"]["lat"], 6), "lon": round(t["to"]["lon"], 6),
-                "name": t["to"]["name"], "mode": t["mode"],
-                "icon": ICON.get(t["to"]["category"], "📍"),
-            })
+            segs.append(travel_seg(t["from"], t["to"], t["mode"], t["depart"]))
             nxt = trips[i + 1] if i + 1 < len(trips) else None
             stay_start = t["arrive"]
-            stay_end = nxt["depart"] if nxt else t["arrive"]
-            stay_dur = max(0, stay_end - stay_start)
-            if stay_dur >= 5 and t["to"]["category"] != "home":
-                cat = t["to"]["category"]
-                seg = {"type": "stay", "startMin": stay_start, "durMin": stay_dur,
-                       "lat": round(t["to"]["lat"], 6), "lon": round(t["to"]["lon"], 6),
-                       "name": t["to"]["name"], "stopJitterM": JITTER_M.get(cat, 80),
-                       "icon": ICON.get(cat, "📍"), "category": cat}
-                if "id" in t["to"]:
-                    seg.update({"truthName": t["to"]["name"], "truthLat": round(t["to"]["lat"], 6),
-                                "truthLon": round(t["to"]["lon"], 6), "truthId": t["to"]["id"]})
-                segs.append(seg)
+            cat = t["to"]["category"]
+            if cat == "home":
+                # pobyt doma mezi cestami; pokud je to poslední cesta → večerní pobyt
+                dur = (nxt["depart"] - stay_start) if nxt else FINAL_HOME_MIN
+                if dur >= 5:
+                    segs.append(home_stay(stay_start, dur))
+            else:
+                stay_end = nxt["depart"] if nxt else stay_start
+                stay_dur = max(0, stay_end - stay_start)
+                if stay_dur >= 5:
+                    seg = {"type": "stay", "startMin": stay_start, "durMin": stay_dur,
+                           "lat": round(t["to"]["lat"], 6), "lon": round(t["to"]["lon"], 6),
+                           "name": t["to"]["name"], "stopJitterM": JITTER_M.get(cat, 80),
+                           "icon": ICON.get(cat, "📍"), "category": cat}
+                    if "id" in t["to"]:
+                        seg.update({"truthName": t["to"]["name"], "truthLat": round(t["to"]["lat"], 6),
+                                    "truthLon": round(t["to"]["lon"], 6), "truthId": t["to"]["id"]})
+                    segs.append(seg)
+
+        # Zajisti, že den končí doma — pokud poslední cesta nekončila doma, dojeď domů
+        if trips and trips[-1]["to"]["category"] != "home":
+            last = trips[-1]
+            dep = last["arrive"] + 5
+            segs.append(travel_seg(last["to"], home, "driving-car", dep))
+            arrive = dep + travel_min(last["to"], home)
+            segs.append(home_stay(arrive, FINAL_HOME_MIN))
+
+        segs.sort(key=lambda s: s["startMin"])
         tracks[m] = segs
     return tracks
 

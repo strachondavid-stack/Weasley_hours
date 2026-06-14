@@ -2578,7 +2578,7 @@ function scStartReport(scenarioId, member) {
   const sc = SC_SCENARIOS.find(s => s.id === scenarioId);
   const familyStops = sc && sc.type === 'family'
     ? Object.entries(sc.tracks || {}).flatMap(([m, segs]) =>
-        (segs || []).filter(x => x.type === 'stay').map(st => ({
+        (segs || []).filter(x => x.type === 'stay' && x.category !== 'home').map(st => ({
           name: st.name, lat: st.lat, lon: st.lon, icon: st.icon || '📍',
           stayMin: st.durMin, member: m, aiLogs: [], savedPlace: null,
         })))
