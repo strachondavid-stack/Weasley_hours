@@ -158,6 +158,25 @@ def apply_action(action, payload):
                 save_ds(ds)
                 return True, "Posunuto " + pid
         return False, "ID nenalezeno: " + str(pid)
+    if action == "update":
+        pid = payload.get("id")
+        for p in places:
+            if p["id"] == pid:
+                if payload.get("name") is not None:
+                    p["name"] = str(payload["name"]).strip() or p["name"]
+                if payload.get("category"):
+                    p["category"] = str(payload["category"]).strip()
+                try:
+                    if payload.get("lat") is not None:
+                        p["lat"] = round(float(payload["lat"]), 6)
+                    if payload.get("lon") is not None:
+                        p["lon"] = round(float(payload["lon"]), 6)
+                except (TypeError, ValueError):
+                    return False, "Neplatne souradnice"
+                p["sources"] = sorted(set(p.get("sources", []) + ["manual_edit"]))
+                save_ds(ds)
+                return True, "Upraveno " + pid
+        return False, "ID nenalezeno: " + str(pid)
     if action == "keep_both":
         st = load_state()
         pair = sorted([payload.get("idA"), payload.get("idB")])
@@ -230,64 +249,82 @@ def render():
          "lat": p["lat"], "lon": p["lon"], "tier": p.get("tier", "?")}
         for p in places
     ], ensure_ascii=False)
+    cat_labels_json = json.dumps(CAT_LABELS, ensure_ascii=False)
     cats_sorted = sorted(counts.keys())
-    cat_checks = "".join(
+    map_checks = "".join(
         '<label class="catf"><input type="checkbox" checked data-cat="' + c + '" '
         'onchange="toggleCat(this)"> ' + CAT_LABELS.get(c, c) + ' (' + str(counts[c]) + ')</label>'
         for c in cats_sorted)
+    list_checks = "".join(
+        '<label class="catf"><input type="checkbox" checked data-cat="' + c + '"> '
+        + CAT_LABELS.get(c, c) + ' (' + str(counts[c]) + ')</label>'
+        for c in cats_sorted)
 
-    map_section = (
-        '<h2>📍 Mapa všech bodů (' + str(len(places)) + ')</h2>'
-        '<p class="meta">Táhni špendlík myší pro posun bodu (uloží se hned). '
-        'Klikni na špendlík pro detail / ověření / smazání. Filtruj kategorie, hledej podle názvu.</p>'
+    list_html = (
         '<div class="mapbar">'
-        '<input id="mapSearch" placeholder="Hledat název… (Enter)" onkeydown="if(event.key===\'Enter\')mapFind()">'
-        '<button onclick="mapFind()">Najít</button>'
-        '<span class="catfilters">' + cat_checks + '</span>'
+        '<input id="listSearch" placeholder="Hledat n\u00e1zev\u2026">'
+        '<label class="meta">\u0158adit: <select id="listSort"><option value="cat">dle kategorie</option>'
+        '<option value="tier">tier B prvn\u00ed</option><option value="name">dle n\u00e1zvu</option></select></label>'
+        '<span class="meta"><b id="listCount">0</b> bod\u016f</span>'
         '</div>'
-        '<div id="qcmap"></div>'
-        '<script>'
-        'var PLACES=' + map_places + ';'
-        'var CATCOLOR={skola:"#1f77b4",skolka:"#ff7f0e",lekar:"#d62728",zubar:"#e377c2",'
-        'lekarna:"#9467bd",obchod:"#2ca02c",kultura:"#8c564b",sport:"#17becf",zus:"#bcbd22",'
-        'krouzky:"#7f7f7f",logoped:"#aec7e8"};'
-        'var qcmap=L.map("qcmap").setView([50.7700,15.0600],12);'
-        'L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(qcmap);'
-        'var layers={},markers={};'
-        'function mIcon(col,tier){var ring=tier==="A"?"#222":"#d33";'
-        'return L.divIcon({className:"",html:"<div style=\\"width:14px;height:14px;border-radius:50%;background:"+col+";border:2px solid "+ring+";box-shadow:0 1px 3px rgba(0,0,0,.4)\\"></div>",iconSize:[14,14],iconAnchor:[7,7]});}'
-        'function popHtml(p){return "<b>"+p.name+"</b><br><small>"+(p.cat)+" · tier "+p.tier+"</small><br>"'
-        '+"<small>"+p.lat.toFixed(5)+", "+p.lon.toFixed(5)+"</small><br>"'
-        '+"<button onclick=\\"mapVerify(\'"+p.id+"\')\\">✓ Ověřit</button> "'
-        '+"<button onclick=\\"mapDelete(\'"+p.id+"\')\\" style=\\"color:#d33\\">Smazat</button>";}'
-        'PLACES.forEach(function(p){'
-        ' var col=CATCOLOR[p.cat]||"#555";'
-        ' var mk=L.marker([p.lat,p.lon],{icon:mIcon(col,p.tier),draggable:true,title:p.name});'
-        ' mk.bindPopup(popHtml(p));'
-        ' mk.on("dragend",function(e){var ll=e.target.getLatLng();'
-        '   fetch("/api/move",{method:"POST",headers:{"Content-Type":"application/json"},'
-        '   body:JSON.stringify({id:p.id,lat:ll.lat,lon:ll.lng})}).then(function(r){return r.json()})'
-        '   .then(function(res){toast(res.ok?("Posunuto: "+p.name):("Chyba: "+res.msg));'
-        '     if(res.ok){p.lat=ll.lat;p.lon=ll.lng;mk.setPopupContent(popHtml(p));}});});'
-        ' if(!layers[p.cat])layers[p.cat]=L.layerGroup().addTo(qcmap);'
-        ' layers[p.cat].addLayer(mk); markers[p.id]=mk;'
-        '});'
-        'function toggleCat(cb){var c=cb.getAttribute("data-cat");if(!layers[c])return;'
-        ' if(cb.checked)qcmap.addLayer(layers[c]);else qcmap.removeLayer(layers[c]);}'
-        'function mapFind(){var q=document.getElementById("mapSearch").value.toLowerCase().trim();if(!q)return;'
-        ' var hit=PLACES.find(function(p){return p.name.toLowerCase().indexOf(q)>-1;});'
-        ' if(hit){qcmap.setView([hit.lat,hit.lon],17);markers[hit.id].openPopup();}else toast("Nenalezeno");}'
-        'function mapVerify(id){fetch("/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},'
-        ' body:JSON.stringify({id:id})}).then(function(r){return r.json()}).then(function(res){toast(res.msg);});}'
-        'function mapDelete(id){if(!confirm("Smazat tento bod?"))return;'
-        ' fetch("/api/delete",{method:"POST",headers:{"Content-Type":"application/json"},'
-        ' body:JSON.stringify({id:id})}).then(function(r){return r.json()}).then(function(res){toast(res.msg);'
-        '   if(res.ok&&markers[id]){qcmap.removeLayer(markers[id]);}});}'
-        '</script>')
+        '<div class="catfilters" id="listCatFilter">' + list_checks + '</div>'
+        '<div id="listContainer"></div>')
+
+    map_html = (
+        '<h2>\U0001F4CD Mapa v\u0161ech bod\u016f (' + str(len(places)) + ')</h2>'
+        '<p class="meta">T\u00e1hni \u0161pend\u00edk my\u0161\u00ed pro posun bodu (ulo\u017e\u00ed se hned). '
+        'Klikni na \u0161pend\u00edk pro detail / ov\u011b\u0159en\u00ed / smaz\u00e1n\u00ed.</p>'
+        '<div class="mapbar">'
+        '<input id="mapSearch" placeholder="Hledat n\u00e1zev\u2026 (Enter)" onkeydown="if(event.key===\'Enter\')mapFind()">'
+        '<button onclick="mapFind()">Naj\u00edt</button>'
+        '<span class="catfilters">' + map_checks + '</span>'
+        '</div>'
+        '<div id="qcmap"></div>')
+
+    shared_js = ('var PLACES=' + map_places + ';var CATLABELS=' + cat_labels_json + ';' + r'''
+var CATCOLOR={skola:"#1f77b4",skolka:"#ff7f0e",lekar:"#d62728",zubar:"#e377c2",lekarna:"#9467bd",obchod:"#2ca02c",kultura:"#8c564b",sport:"#17becf",zus:"#bcbd22",krouzky:"#7f7f7f",logoped:"#aec7e8"};
+function toast(m){var t=document.getElementById("toast");t.textContent=m;t.style.display="block";clearTimeout(t._h);t._h=setTimeout(function(){t.style.display="none"},1800);}
+function jpost(action,payload,cb){fetch("/api/"+action,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}).then(function(r){return r.json()}).then(function(res){toast(res.msg);if(cb)cb(res);}).catch(function(e){toast("Chyba: "+e)});}
+function act(btn,action,payload){jpost(action,payload,function(res){if(!res.ok)return;var tr=btn.closest("tr");tr.classList.add("done");if(action==="delete"){document.querySelectorAll("#tab-check tr[id]").forEach(function(r){if(r.id.indexOf(payload.id)>-1)r.classList.add("done");});}var dc=document.getElementById("dupCount"),bc=document.getElementById("bCount");if(dc)dc.textContent=document.querySelectorAll("#tab-check table:nth-of-type(1) tr[id]:not(.done)").length;if(bc)bc.textContent=document.querySelectorAll("#tab-check table:nth-of-type(2) tr[id]:not(.done)").length;});}
+function showTab(t){document.getElementById("tab-list").style.display=(t==="list")?"block":"none";document.getElementById("tab-check").style.display=(t==="check")?"block":"none";document.getElementById("tb-list").classList.toggle("active",t==="list");document.getElementById("tb-check").classList.toggle("active",t==="check");if(t==="check"&&window.qcmap){setTimeout(function(){window.qcmap.invalidateSize()},60);}}
+''')
+
+    map_js = r'''
+var qcmap=L.map("qcmap").setView([50.7700,15.0600],12);window.qcmap=qcmap;
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"\u00a9 OpenStreetMap"}).addTo(qcmap);
+var layers={},markers={};
+function mIcon(col,tier){var ring=(tier==="A")?"#222":"#d33";return L.divIcon({className:"",html:'<div style="width:14px;height:14px;border-radius:50%;background:'+col+';border:2px solid '+ring+';box-shadow:0 1px 3px rgba(0,0,0,.4)"></div>',iconSize:[14,14],iconAnchor:[7,7]});}
+function popHtml(p){var h='<b>'+p.name+'</b><br><small>'+(CATLABELS[p.cat]||p.cat)+' \u00b7 tier '+p.tier+'</small><br><small>'+p.lat.toFixed(5)+", "+p.lon.toFixed(5)+'</small><br>';h+='<button data-mact="verify" data-id="'+p.id+'">\u2713 Ov\u011b\u0159it</button> <button data-mact="delete" data-id="'+p.id+'" style="color:#d33">Smazat</button>';return h;}
+PLACES.forEach(function(p){var col=CATCOLOR[p.cat]||"#555";var mk=L.marker([p.lat,p.lon],{icon:mIcon(col,p.tier),draggable:true,title:p.name});mk.bindPopup(popHtml(p));mk.on("dragend",function(e){var ll=e.target.getLatLng();jpost("move",{id:p.id,lat:ll.lat,lon:ll.lng},function(res){if(res.ok){p.lat=ll.lat;p.lon=ll.lng;mk.setPopupContent(popHtml(p));}});});if(!layers[p.cat])layers[p.cat]=L.layerGroup().addTo(qcmap);layers[p.cat].addLayer(mk);markers[p.id]=mk;});
+function toggleCat(cb){var c=cb.getAttribute("data-cat");if(!layers[c])return;if(cb.checked)qcmap.addLayer(layers[c]);else qcmap.removeLayer(layers[c]);}
+function mapFind(){var q=document.getElementById("mapSearch").value.toLowerCase().trim();if(!q)return;var hit=PLACES.find(function(p){return p.name.toLowerCase().indexOf(q)>-1;});if(hit){qcmap.setView([hit.lat,hit.lon],17);markers[hit.id].openPopup();}else toast("Nenalezeno");}
+document.getElementById("qcmap").addEventListener("click",function(e){var b=e.target.closest("[data-mact]");if(!b)return;var id=b.getAttribute("data-id");var a=b.getAttribute("data-mact");if(a==="verify"){jpost("verify",{id:id});}else if(a==="delete"){if(confirm("Smazat tento bod?"))jpost("delete",{id:id},function(res){if(res.ok&&markers[id])qcmap.removeLayer(markers[id]);});}});
+'''
+
+    list_js = r'''
+var miniMap=null,miniMarker=null,expandedId=null;
+function escH(s){return (""+s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function tierBadge(t){return (t==="A")?'<span class="tA">A</span>':'<span class="tB">B</span>';}
+function rowHtml(p){var col=CATCOLOR[p.cat]||"#555";return '<div class="lrow" data-id="'+p.id+'"><div class="lhead"><span class="ldot" style="background:'+col+'"></span><span class="lname">'+escH(p.name)+'</span><span class="lcat">'+(CATLABELS[p.cat]||p.cat)+'</span>'+tierBadge(p.tier)+'<span class="lgps">'+p.lat.toFixed(5)+", "+p.lon.toFixed(5)+'</span></div><div class="ledit" data-edit="'+p.id+'"></div></div>';}
+function editHtml(p){var opts=Object.keys(CATLABELS).map(function(k){return '<option value="'+k+'"'+((k===p.cat)?" selected":"")+'>'+CATLABELS[k]+'</option>';}).join("");return '<div class="erow"><label>N\u00e1zev</label><input id="e-name-'+p.id+'" value="'+escH(p.name).replace(/"/g,"&quot;")+'"></div><div class="erow"><label>Kategorie</label><select id="e-cat-'+p.id+'">'+opts+'</select></div><div class="erow"><label>GPS</label><input id="e-lat-'+p.id+'" value="'+p.lat+'" style="width:120px"> <input id="e-lon-'+p.id+'" value="'+p.lon+'" style="width:120px"></div><div id="mini-'+p.id+'" class="mini"></div><p class="meta">T\u00e1hni \u0161pend\u00edk pro posun (p\u0159ep\u00ed\u0161e GPS pole). Po \u00faprav\u011b dej Ulo\u017eit.</p><div class="ebtns"><button class="ok" data-lact="save" data-id="'+p.id+'">\U0001F4BE Ulo\u017eit</button><button data-lact="verify" data-id="'+p.id+'">\u2713 Ov\u011b\u0159it (tier A)</button><button class="del" data-lact="delete" data-id="'+p.id+'">Smazat</button></div>';}
+function renderList(){var q=(document.getElementById("listSearch").value||"").toLowerCase().trim();var checked=[].slice.call(document.querySelectorAll("#listCatFilter input:checked")).map(function(c){return c.getAttribute("data-cat");});var allc=document.querySelectorAll("#listCatFilter input").length;var arr=PLACES.filter(function(p){if(checked.length<allc&&checked.indexOf(p.cat)<0)return false;if(q&&p.name.toLowerCase().indexOf(q)<0)return false;return true;});var sort=document.getElementById("listSort").value;if(sort==="tier")arr.sort(function(a,b){if(a.tier!==b.tier)return (a.tier==="A")?1:-1;return a.name.localeCompare(b.name);});else if(sort==="name")arr.sort(function(a,b){return a.name.localeCompare(b.name);});else arr.sort(function(a,b){if(a.cat!==b.cat)return a.cat.localeCompare(b.cat);return a.name.localeCompare(b.name);});document.getElementById("listContainer").innerHTML=arr.map(rowHtml).join("")||'<p class="meta">Nic nenalezeno</p>';document.getElementById("listCount").textContent=arr.length;expandedId=null;miniMap=null;miniMarker=null;}
+function closeRow(){if(miniMap){miniMap.remove();miniMap=null;miniMarker=null;}if(expandedId){var ed=document.querySelector('[data-edit="'+expandedId+'"]');if(ed){ed.innerHTML="";ed.classList.remove("open");}var row=document.querySelector('.lrow[data-id="'+expandedId+'"]');if(row)row.classList.remove("open");}expandedId=null;}
+function openRow(id){closeRow();expandedId=id;var p=PLACES.find(function(x){return x.id===id;});var ed=document.querySelector('[data-edit="'+id+'"]');ed.innerHTML=editHtml(p);ed.classList.add("open");var row=document.querySelector('.lrow[data-id="'+id+'"]');if(row)row.classList.add("open");setTimeout(function(){miniMap=L.map("mini-"+id).setView([p.lat,p.lon],16);L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"\u00a9 OSM"}).addTo(miniMap);miniMarker=L.marker([p.lat,p.lon],{draggable:true}).addTo(miniMap);miniMarker.on("drag",function(e){var ll=e.target.getLatLng();document.getElementById("e-lat-"+id).value=ll.lat.toFixed(6);document.getElementById("e-lon-"+id).value=ll.lng.toFixed(6);});miniMap.invalidateSize();},60);}
+function saveRow(id){var name=document.getElementById("e-name-"+id).value;var cat=document.getElementById("e-cat-"+id).value;var lat=parseFloat(document.getElementById("e-lat-"+id).value);var lon=parseFloat(document.getElementById("e-lon-"+id).value);jpost("update",{id:id,name:name,category:cat,lat:lat,lon:lon},function(res){if(res.ok){var p=PLACES.find(function(x){return x.id===id;});p.name=name;p.cat=cat;p.lat=lat;p.lon=lon;closeRow();renderList();}});}
+function verifyRow(id){jpost("verify",{id:id},function(res){if(res.ok){var p=PLACES.find(function(x){return x.id===id;});p.tier="A";closeRow();renderList();}});}
+function deleteRow(id){if(!confirm("Smazat tento bod?"))return;jpost("delete",{id:id},function(res){if(res.ok){var i=PLACES.findIndex(function(x){return x.id===id;});if(i>-1)PLACES.splice(i,1);closeRow();renderList();}});}
+document.getElementById("listContainer").addEventListener("click",function(e){var b=e.target.closest("[data-lact]");if(b){var a=b.getAttribute("data-lact"),id=b.getAttribute("data-id");if(a==="save")saveRow(id);else if(a==="verify")verifyRow(id);else if(a==="delete")deleteRow(id);return;}var head=e.target.closest(".lhead");if(head){var row=head.closest(".lrow");var id=row.getAttribute("data-id");if(expandedId===id)closeRow();else openRow(id);}});
+document.getElementById("listSearch").addEventListener("input",renderList);
+document.getElementById("listSort").addEventListener("change",renderList);
+[].slice.call(document.querySelectorAll("#listCatFilter input")).forEach(function(c){c.addEventListener("change",renderList);});
+renderList();
+'''
+
+    scripts = '<script>' + shared_js + '</script><script>' + map_js + '</script><script>' + list_js + '</script>'
 
     html = """<!DOCTYPE html><html lang="cs"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QC — golden dataset Liberec</title>
+<title>QC \u2014 golden dataset Liberec</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
@@ -299,61 +336,77 @@ def render():
  th{background:#f5f5f5} small{color:#888} .cat{color:#999;font-size:12px}
  tr:hover{background:#fafafa}
  .acts{white-space:nowrap}
- button{font-size:12px;padding:4px 10px;margin:1px;border:1px solid #aaa;border-radius:4px;
-        background:#fff;cursor:pointer}
+ button{font-size:12px;padding:4px 10px;margin:1px;border:1px solid #aaa;border-radius:4px;background:#fff;cursor:pointer}
  button:hover{background:#f0f0f0}
  button.del{border-color:#d33;color:#d33} button.del:hover{background:#fff5f5}
  button.ok{border-color:#2a7a2a;color:#2a7a2a} button.ok:hover{background:#f3fff3}
  tr.done{opacity:0.35} tr.done button{display:none}
+ .tabs{display:flex;gap:4px;margin-top:14px;border-bottom:2px solid #ddd}
+ .tabs button{font-size:14px;padding:7px 16px;border:none;border-bottom:2px solid transparent;background:none;margin-bottom:-2px;color:#888;cursor:pointer}
+ .tabs button.active{color:#111;border-bottom-color:#333;font-weight:600}
  #qcmap{height:520px;border:1px solid #ccc;border-radius:6px;margin-top:8px}
  .mapbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
- .mapbar input#mapSearch{font-size:13px;padding:5px 9px;border:1px solid #ccc;border-radius:5px;min-width:200px}
- .catfilters{display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:#555}
+ .mapbar input{font-size:13px;padding:5px 9px;border:1px solid #ccc;border-radius:5px;min-width:200px}
+ .catfilters{display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:#555;margin-top:6px}
  .catf{white-space:nowrap;cursor:pointer}
- #toast{position:fixed;bottom:14px;right:14px;background:#222;color:#fff;padding:8px 14px;
-        border-radius:6px;font-size:13px;display:none}
+ #listContainer{margin-top:10px;border:1px solid #e5e5e5;border-radius:6px}
+ .lrow{border-bottom:1px solid #eee}
+ .lrow:last-child{border-bottom:none}
+ .lrow.open{background:#fafbff}
+ .lhead{display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer}
+ .lhead:hover{background:#f5f5f5}
+ .ldot{width:11px;height:11px;border-radius:50%%;flex-shrink:0;border:1px solid #0003}
+ .lname{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .lcat{font-size:12px;color:#999;white-space:nowrap}
+ .lgps{font-family:monospace;font-size:11px;color:#aaa;white-space:nowrap}
+ .tA{font-size:11px;background:#e7f6e7;color:#2a7a2a;border-radius:8px;padding:1px 7px}
+ .tB{font-size:11px;background:#fff0f0;color:#d33;border-radius:8px;padding:1px 7px}
+ .ledit{display:none;padding:0 12px 12px 32px}
+ .ledit.open{display:block}
+ .erow{display:flex;align-items:center;gap:8px;margin:6px 0}
+ .erow label{width:80px;font-size:12px;color:#777}
+ .erow input,.erow select{font-size:13px;padding:5px 8px;border:1px solid #ccc;border-radius:5px}
+ .erow input:first-of-type{flex:1}
+ .mini{height:240px;border:1px solid #ccc;border-radius:6px;margin:6px 0}
+ .ebtns{display:flex;gap:6px;margin-top:6px}
+ #toast{position:fixed;bottom:14px;right:14px;background:#222;color:#fff;padding:8px 14px;border-radius:6px;font-size:13px;display:none}
 </style></head><body>
-<h1>QC — golden dataset Liberec</h1>
-<p class="meta">%d míst · %s<br>Každá akce se ihned ukládá do %s (záloha: %s)</p>
+<h1>QC \u2014 golden dataset Liberec</h1>
+<p class="meta">%d m\u00edst \u00b7 %s<br>Ka\u017ed\u00e1 akce se ihned ukl\u00e1d\u00e1 do %s (z\u00e1loha: %s)</p>
 
-<!--MAP_SECTION-->
+<div class="tabs">
+  <button id="tb-list" class="active" onclick="showTab('list')">\U0001F4CB Seznam</button>
+  <button id="tb-check" onclick="showTab('check')">\U0001F50E Kontrola (mapa + duplicity)</button>
+</div>
 
-<h2>1. Podezřelé duplicity (<span id="dupCount">%d</span>)</h2>
-<p class="meta">Otevři letecký snímek, nech bod blíž skutečnému vchodu, druhý smaž.</p>
-<table><tr><th>Vzdál.</th><th>Místo A</th><th>Místo B</th><th>Akce</th></tr>
+<div id="tab-list">
+<!--LIST_HTML-->
+</div>
+
+<div id="tab-check" style="display:none">
+<!--MAP_HTML-->
+
+<h2>1. Podez\u0159el\u00e9 duplicity (<span id="dupCount">%d</span>)</h2>
+<p class="meta">Otev\u0159i leteck\u00fd sn\u00edmek, nech bod bl\u00ed\u017e skute\u010dn\u00e9mu vchodu, druh\u00fd sma\u017e.</p>
+<table><tr><th>Vzd\u00e1l.</th><th>M\u00edsto A</th><th>M\u00edsto B</th><th>Akce</th></tr>
 %s</table>
 
-<h2>2. Tier B — ověřit polohu (<span id="bCount">%d</span>)</h2>
-<table><tr><th>Místo</th><th>GPS</th><th>Akce</th></tr>
+<h2>2. Tier B \u2014 ov\u011b\u0159it polohu (<span id="bCount">%d</span>)</h2>
+<table><tr><th>M\u00edsto</th><th>GPS</th><th>Akce</th></tr>
 %s</table>
+</div>
 
 <div id="toast"></div>
-<script>
-function toast(m){var t=document.getElementById('toast');t.textContent=m;
- t.style.display='block';clearTimeout(t._h);t._h=setTimeout(function(){t.style.display='none'},1800);}
-function act(btn,action,payload){
- fetch('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify(payload)})
- .then(function(r){return r.json()})
- .then(function(res){
-   if(!res.ok){toast('Chyba: '+res.msg);return;}
-   var tr=btn.closest('tr');tr.classList.add('done');
-   if(action==='delete'){
-     var pid=payload.id;
-     document.querySelectorAll('tr[id]').forEach(function(r){
-       if(r.id.indexOf(pid)>-1)r.classList.add('done');});}
-   toast(res.msg);
-   var dc=document.getElementById('dupCount'),bc=document.getElementById('bCount');
-   dc.textContent=document.querySelectorAll('table:nth-of-type(1) tr[id]:not(.done)').length;
-   bc.textContent=document.querySelectorAll('table:nth-of-type(2) tr[id]:not(.done)').length;
- })
- .catch(function(e){toast('Chyba spojení: '+e)});
-}
-</script></body></html>""" % (
+<!--SCRIPTS-->
+</body></html>""" % (
         len(places), summary, DATASET, BACKUP,
         len(dups), "\n".join(dup_rows),
         len(tier_b), "\n".join(b_rows))
-    return html.replace("<!--MAP_SECTION-->", map_section)
+
+    html = html.replace("<!--LIST_HTML-->", list_html)
+    html = html.replace("<!--MAP_HTML-->", map_html)
+    html = html.replace("<!--SCRIPTS-->", scripts)
+    return html
 
 
 # ─── HTTP ─────────────────────────────────────────────────────────────────────
@@ -376,7 +429,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "404")
 
     def do_POST(self):
-        m = re.match(r"^/api/(delete|verify|keep_both|move)$", self.path)
+        m = re.match(r"^/api/(delete|verify|keep_both|move|update)$", self.path)
         if not m:
             self._send(404, json.dumps({"ok": False, "msg": "404"}), "application/json")
             return
