@@ -1258,6 +1258,23 @@ app.post('/simulate/stop', (req, res) => {
 });
 
 // Zastaví VŠECHNY běžící simulace (rodinný scénář = 4 členové paralelně)
+// Testovací den: vrátí famDayStart zakotvený na dayOfWeek, ale posunutý o týden
+// za každý běh (test_run_index v aktivním=test Redisu). Tím je každý běh ≥ 7 dní
+// od minulého → počítá se jako samostatná návštěva a návštěvy narůstají i bez mazání.
+app.post('/simulate/test-day', async (req, res) => {
+  const dow = parseInt(req.body.dayOfWeek);
+  const target = (dow >= 0 && dow <= 6) ? dow : 1;
+  let idx = 0;
+  try { const r = await redis.get('test_run_index'); idx = r ? parseInt(r) : 0; } catch(e) {}
+  const d = new Date(); d.setHours(7, 0, 0, 0);
+  let g = 0; while (d.getDay() !== target && g < 7) { d.setDate(d.getDate() + 1); g++; }
+  d.setDate(d.getDate() + idx * 7);   // posun o 'idx' týdnů
+  const famDayStart = d.getTime();
+  try { await redis.set('test_run_index', String(idx + 1)); } catch(e) {}
+  console.log(`[TEST-DAY] běh #${idx + 1}: ${d.toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'numeric' })} 07:00`);
+  res.json({ ok: true, famDayStart, runIndex: idx, dateLabel: d.toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' }) });
+});
+
 app.post('/simulate/stop-all', (req, res) => {
   const stopped = [];
   for (const member of Object.keys(activeSimulations)) {
@@ -1376,6 +1393,8 @@ app.post('/places/:id/name', async (req, res) => {
 app.delete('/places/all', async (req, res) => {
   await redis.del('detected_places');
   await redis.del('ai_recent');   // reset cooldown spolu s místy
+  await redis.del('test_run_index');   // reset počítadla testovacích běhů (posun dne)
+  for (const m of MEMBERS) { try { await redis.del('visits:' + m); } catch(e) {} }  // reset historie návštěv
   dynamicFences = dynamicFences.filter(f => f.id.startsWith('manual_'));
   await saveFences();
   console.log('✓ Reset detected_places, zachováno ' + dynamicFences.length + ' manuálních fences');

@@ -211,6 +211,7 @@
 <div id="sim-hud" style="display:none;align-items:center;gap:14px;background:#11131a;color:#e8e8ea;padding:7px 14px;border-bottom:1px solid #2a2d3a;flex-wrap:wrap">
   <div style="display:flex;align-items:baseline;gap:8px;flex-shrink:0">
     <span id="hud-simclock" style="font-family:ui-monospace,monospace;font-size:24px;font-weight:700;letter-spacing:0.02em;color:#fff;line-height:1">07:00</span>
+    <span id="hud-date" style="font-size:11px;color:#7c9"></span>
     <span id="hud-realrun" style="font-size:11px;color:#7c8197">běh 0:00 · 30×</span>
   </div>
   <div id="hud-members" style="display:flex;gap:5px;flex-wrap:wrap;flex:1;min-width:160px"></div>
@@ -2383,18 +2384,24 @@ async function scRunFamily(scenarioId) {
     ).join('');
 
     const realStart = Date.now();
-    // Kotva simulovaného dne: 07:00 dne platnosti scénáře (dayOfWeek, lze přepsat
-    // v kartě). Najde nejbližší takový den, aby GPS body nesly správný den v týdnu
-    // a AI při testu viděla správnou dobu (ráno/odpoledne + den), ne reálný čas.
+    // Kotva simulovaného dne: 07:00 dne platnosti scénáře (dayOfWeek). Server posune
+    // datum o týden za každý běh (test_run_index), takže opakované testy téhož scénáře
+    // jsou samostatné návštěvy (≥7 dní od sebe) a návštěvy narůstají i bez mazání.
     const targetDow = (typeof sc._dayOverride === 'number') ? sc._dayOverride
                     : (typeof sc.dayOfWeek === 'number' ? sc.dayOfWeek : new Date().getDay());
-    const famDayStart = (() => {
+    let famDayStart, runDateLabel = '';
+    try {
+      const r = await fetch('/simulate/test-day', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dayOfWeek: targetDow }) });
+      const j = await r.json();
+      famDayStart = j.famDayStart;
+      runDateLabel = j.dateLabel || '';
+    } catch(e) {
       const d = new Date(); d.setHours(7, 0, 0, 0);
-      let guard = 0;
-      while (d.getDay() !== targetDow && guard < 7) { d.setDate(d.getDate() + 1); guard++; }
-      return d.getTime();
-    })();
+      let guard = 0; while (d.getDay() !== targetDow && guard < 7) { d.setDate(d.getDate() + 1); guard++; }
+      famDayStart = d.getTime();
+    }
     const segSimTime = (startMin) => famDayStart + startMin * 60000;
+    { const hd = document.getElementById('hud-date'); if (hd) hd.textContent = runDateLabel ? '📅 ' + runDateLabel : ''; }
     const simNowMs = () => (Date.now() - realStart) * speed;
     const sleepUntilSim = async (simMs) => {
       while (!scAbort) {
