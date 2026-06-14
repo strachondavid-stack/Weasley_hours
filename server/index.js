@@ -491,8 +491,9 @@ async function recordAiAsked(lat, lon) {
 
 async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat = false, forceLong = false, ts = Date.now()) {
   // Zaznamenej návštěvu hned (dedup 6 h zajistí, že dlouhé stání = 1 návštěva,
-  // a že early(5 min)+long(30 min) vyhodnocení téhož stání se nezapíše dvakrát)
-  await recordVisit(member, lat, lon, ts);
+  // a že early(5 min)+long(30 min) vyhodnocení téhož stání se nezapíše dvakrát).
+  // isNewVisit = true jen u SAMOSTATNÉ návštěvy (≥6 h od minulé), ne u driftu.
+  const isNewVisit = await recordVisit(member, lat, lon, ts);
 
 
   // Známé místo — uvnitř existující geofence, nepřidávat znovu
@@ -525,6 +526,12 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
       broadcast({ type: 'stop_detected', member, place: nearest });
       console.log(`[STOP] Sloučeno s čekajícím místem ${nearest.id} (${nearest.mergeCount}×, ${Math.round(nearestDist)}m, ${gapMinutes}min)`);
       await logEvent('place_merged', { member, lat, lon, mergedInto: nearest.id, mergeCount: nearest.mergeCount, distM: Math.round(nearestDist), gapMinutes, source });
+      // Samostatná návštěva (≥6 h od minulé) = nová informace → přehodnoť "?" přes AI
+      // s bonusem za opakované návštěvy. Drift téhož stání (isNewVisit=false) jen sloučí.
+      if (isNewVisit) {
+        console.log(`[STOP] Samostatná návštěva čekajícího místa ${nearest.id} — přehodnocuji přes AI`);
+        await reevaluatePendingPlace(member, nearest, allPlaces, ts, source);
+      }
     } else {
       console.log(`[STOP] Blízko pojmenovaného místa "${nearest.name}" (${Math.round(nearestDist)}m), přeskakuji`);
       await logEvent('place_rejected', { member, lat, lon, reason: 'near_named_place', placeName: nearest.name, distM: Math.round(nearestDist), source });
@@ -629,6 +636,58 @@ async function savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, ai
   const places = raw ? JSON.parse(raw) : [];
   places.push(place);
   await redis.set('detected_places', JSON.stringify(places));
+  broadcast({ type: 'stop_detected', member, place });
+}
+
+// Přehodnotí existující čekající ("?") místo přes AI při SAMOSTATNÉ návštěvě —
+// s bonusem za opakované návštěvy. Buď ho povýší na pojmenované (auto-uložení),
+// nebo aspoň zlepší návrh názvu. Obchází cooldown (jde o legitimní novou návštěvu).
+async function reevaluatePendingPlace(member, place, allPlaces, ts, source) {
+  const lat = place.lat, lon = place.lon;
+  const historyVisits = await countNearbyVisits(member, lat, lon, ts, VISIT_RADIUS_M);
+  const placesNearby = await getNearbyPlaces(lat, lon, 300);
+  const nearbyMembers = await getRecentNearbyMembers(member, lat, lon);
+  const now = new Date(ts);
+  const days = ['neděle', 'pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota'];
+  const dayOfWeek = days[now.getDay()];
+  const timeStr = now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0');
+
+  await recordAiAsked(lat, lon);   // záznam cooldownu (přehodnocení je AI dotaz)
+  const aiResult = await askClaude(member, lat, lon, { gapMinutes: place.duration || 0, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source });
+  if (!aiResult) return;   // AI nedostupné — nech "?" jak je
+
+  // Tvrdý bonus za opakované návštěvy (stejně jako v hlavní cestě)
+  if (typeof aiResult.confidence === 'number' && historyVisits > 1) {
+    const bonus = Math.min(VISIT_BONUS_MAX, (historyVisits - 1) * VISIT_BONUS_PER);
+    const before = aiResult.confidence;
+    aiResult.confidence = Math.min(1, aiResult.confidence + bonus);
+    if (bonus > 0) {
+      console.log(`[STOP] Reeval bonus za ${historyVisits}× návštěvu: ${before.toFixed(2)} → ${aiResult.confidence.toFixed(2)}`);
+      await logEvent('visit_bonus', { member, lat, lon, historyVisits, confidenceBefore: before, confidenceAfter: aiResult.confidence, bonus, context: 'reeval' });
+    }
+  }
+
+  // Aktualizuj návrh/confidence na existujícím místě
+  if (aiResult.name) place.suggestedName = aiResult.name;
+  place.aiConfidence = aiResult.confidence;
+  place.aiReason = aiResult.reason;
+
+  const autoSave = aiResult.should_save && aiResult.confidence >= AI_AUTOSAVE_THRESHOLD && aiResult.name;
+  if (autoSave) {
+    place.name = aiResult.name;
+    if (!dynamicFences.some(f => f.id === place.id)) {
+      const fence = { id: place.id, name: aiResult.name, lat, lon, radius: 150 };
+      dynamicFences.push(fence);
+      await saveFences();
+      broadcast({ type: 'fence_added', fence });
+    }
+    console.log(`[STOP] "?" povýšeno na "${aiResult.name}" po ${historyVisits}× návštěvě (conf=${aiResult.confidence.toFixed(2)})`);
+    await logEvent('place_saved', { member, lat, lon, name: aiResult.name, aiConfidence: aiResult.confidence, aiReason: aiResult.reason, autoSave: true, source: 'reeval', historyVisits });
+  } else {
+    console.log(`[STOP] "?" přehodnoceno po ${historyVisits}× návštěvě — návrh "${aiResult.name || '–'}" (conf=${aiResult.confidence.toFixed(2)}), zůstává čekat`);
+    await logEvent('place_reevaluated', { member, lat, lon, historyVisits, confidence: aiResult.confidence, suggested: aiResult.name || null, promoted: false, source: 'reeval' });
+  }
+  await redis.set('detected_places', JSON.stringify(allPlaces));
   broadcast({ type: 'stop_detected', member, place });
 }
 
