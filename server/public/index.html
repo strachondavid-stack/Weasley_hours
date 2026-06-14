@@ -2375,6 +2375,11 @@ async function scRunFamily(scenarioId) {
     ).join('');
 
     const realStart = Date.now();
+    // Kotva simulovaného dne: 07:00 dnešního dne. Každý segment dostane absolutní
+    // simulovaný čas (kotva + startMin), takže GPS body nesou simulovaný čas dne
+    // a AI při testu vidí správnou dobu (ráno/odpoledne), ne reálný čas serveru.
+    const famDayStart = (() => { const d = new Date(); d.setHours(7, 0, 0, 0); return d.getTime(); })();
+    const segSimTime = (startMin) => famDayStart + startMin * 60000;
     const simNowMs = () => (Date.now() - realStart) * speed;
     const sleepUntilSim = async (simMs) => {
       while (!scAbort) {
@@ -2393,10 +2398,10 @@ async function scRunFamily(scenarioId) {
         if (seg.type === 'travel') {
           setMemberStatus(m, '🚗 → ' + seg.name, seg.startMin * 60000);
           await scDoRoute(m, { lat: seg.fromLat, lon: seg.fromLon },
-                          { lat: seg.lat, lon: seg.lon }, seg.mode, speed, null, () => {});
+                          { lat: seg.lat, lon: seg.lon }, seg.mode, speed, segSimTime(seg.startMin), () => {});
         } else if (seg.type === 'stay') {
           setMemberStatus(m, '⏱ ' + seg.name, seg.startMin * 60000);
-          await scDoStay(m, seg.lat, seg.lon, seg.durMin, speed, null, () => {}, seg.stopJitterM);
+          await scDoStay(m, seg.lat, seg.lon, seg.durMin, speed, segSimTime(seg.startMin), () => {}, seg.stopJitterM);
         }
       }
       if (!scAbort) setMemberStatus(m, '✓ doma', null);

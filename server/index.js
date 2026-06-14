@@ -547,7 +547,7 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
   const historyVisits = await countNearbyVisits(member, lat, lon, ts, VISIT_RADIUS_M);
   const nearbyMembers = await getRecentNearbyMembers(member, lat, lon);
 
-  const now = new Date();
+  const now = new Date(ts);   // čas datového bodu (v simulaci = simulovaný čas, ne reálný)
   const days = ['neděle', 'pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota'];
   const dayOfWeek = days[now.getDay()];
   const timeStr = now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0');
@@ -1107,7 +1107,7 @@ app.post('/simulate/route-osrm', async (req, res) => {
 });
 
 app.post('/simulate/route', async (req, res) => {
-  const { member, coords, profile = 'driving-car', speed = 5 } = req.body;
+  const { member, coords, profile = 'driving-car', speed = 5, startSimTime } = req.body;
   if (!member || !coords || !coords.length) return res.status(400).json({ error: 'member a coords required' });
   if (!MEMBERS.includes(member)) return res.status(404).json({ error: 'Unknown member' });
 
@@ -1121,7 +1121,7 @@ app.post('/simulate/route', async (req, res) => {
   activeSimulations[member] = {
     active: true, stayActive: false,
     coords, step: 0, profile, speed,
-    simTime: Date.now(), timer: null
+    simTime: startSimTime || Date.now(), timer: null
   };
 
   // Reset fence hystereze při startu nového úseku
@@ -1133,7 +1133,7 @@ app.post('/simulate/route', async (req, res) => {
 
 // Simulace — stání na místě
 app.post('/simulate/stay', async (req, res) => {
-  const { member, lat, lon, minutes = 10, speed = 5, jitterM } = req.body;
+  const { member, lat, lon, minutes = 10, speed = 5, jitterM, startSimTime } = req.body;
   if (!member || !lat || !lon) return res.status(400).json({ error: 'member, lat, lon required' });
 
   if (activeSimulations[member]) {
@@ -1145,7 +1145,7 @@ app.post('/simulate/stay', async (req, res) => {
   activeSimulations[member] = {
     active: false, stayActive: false,
     coords: [], step: 0, speed,
-    simTime: Date.now(), timer: null
+    simTime: startSimTime || Date.now(), timer: null
   };
 
   console.log(`[SIM] Stání pro ${member}: ${minutes} min na ${lat.toFixed(5)},${lon.toFixed(5)}`);
