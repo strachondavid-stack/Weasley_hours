@@ -432,6 +432,46 @@ const trackers = {};
 // Paměť posledního způsobu pohybu — aby rozjezd autem neskočil na kolo
 const lastMotion = {};  // member → { motion, ts }
 
+// ─── Lepkavý dopravní prostředek ───────────────────────────────────────────────
+// Aktivita je setrvačná: jednou na kole jedeš dlouho. Krátké zpomalení/zastávka
+// (semafor, kopec, provoz) prostředek nemění. Změna jen na opakované potvrzení,
+// dlouhé stání prostředek zapomene (reálně jsi dorazil a vystoupil).
+const MOTION_CHANGE_CONFIRM = 5;             // bodů po sobě pro ZMĚNU prostředku
+const MOTION_STOP_FORGET_MS = 5 * 60 * 1000; // stání → po 5 min zapomeň prostředek
+const motionState = {};  // member → { mode, candMode, candCount, stoppedSince }
+
+function resolveMotionSticky(member, motionActivities, vel, ts) {
+  const inst = resolveMotion(motionActivities, vel);   // okamžité zařazení (rychlost+motion)
+  let st = motionState[member];
+  if (!st) { st = { mode: null, candMode: null, candCount: 0, stoppedSince: null }; motionState[member] = st; }
+
+  // ── Stojí / velmi pomalu (inst===null) ──────────────────────────────────────
+  if (inst === null) {
+    if (!st.mode) return null;                 // nic nedržíme
+    if (st.stoppedSince === null) st.stoppedSince = ts;
+    if (ts - st.stoppedSince >= MOTION_STOP_FORGET_MS) {
+      // dost dlouhé stání → zapomeň prostředek (příští rozjezd se klasifikuje znovu)
+      st.mode = null; st.candMode = null; st.candCount = 0; st.stoppedSince = null;
+      return null;
+    }
+    return st.mode;                            // krátká pauza → drž prostředek (semafor, zácpa)
+  }
+
+  // ── Pohyb (inst je auto/kolo/běh/pěšky) ──────────────────────────────────────
+  st.stoppedSince = null;                      // zase jedeme
+
+  if (!st.mode) { st.mode = inst; st.candMode = null; st.candCount = 0; return st.mode; } // první zařazení hned
+  if (inst === st.mode) { st.candMode = null; st.candCount = 0; return st.mode; }          // potvrzení stávajícího
+
+  // jiný prostředek než držíme → kandidát na změnu, musí se opakovat
+  if (st.candMode === inst) st.candCount++; else { st.candMode = inst; st.candCount = 1; }
+  if (st.candCount >= MOTION_CHANGE_CONFIRM) {
+    st.mode = inst; st.candMode = null; st.candCount = 0;
+    return st.mode;                            // potvrzená změna
+  }
+  return st.mode;                              // jednotlivý odlišný bod → ignoruj, drž stávající
+}
+
 function getTracker(member) {
   if (!trackers[member]) trackers[member] = { cluster: null, lastPoint: null };
   return trackers[member];
@@ -923,30 +963,9 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   // MQTT a live zdroje vždy zapisují do live Redis bez ohledu na mód
   const activeRedis = (forceLive || currentMode === 'live') ? redisLive : redis;
   let status = resolveStatus(member, lat, lon, vel, motionActivities, simTs || Date.now());
-  // Pohyb má přednost před geofence — kromě doma
-  let motion = resolveMotion(motionActivities, vel);
-
-  // Pokud motionActivities explicitně říká automotive → vždy auto bez ohledu na vel
-  if (motionActivities.includes('automotive')) {
-    motion = 'auto';
-  } else if (motionActivities.includes('cycling')) {
-    motion = motion || 'kolo';
-  }
-
-  // Pokud je pohyb nejasný (kolo při nízkých rychlostech), zkus použít poslední známý pohyb
-  // — aby rozjezd autem neskočil na kolo
-  const MOTION_MEMORY_MS = 5 * 60 * 1000; // 5 minut
-  if (motion && motion !== 'auto' && motion !== 'pěšky' && motion !== 'běh') {
-    const last = lastMotion[member];
-    if (last && last.motion === 'auto' && (ts - last.ts) < MOTION_MEMORY_MS) {
-      motion = 'auto';
-    }
-  }
-
-  // Ulož poslední pohyb do paměti (jen smysluplné hodnoty)
-  if (motion) {
-    lastMotion[member] = { motion, ts };
-  }
+  // Pohyb má přednost před geofence (kromě doma). Lepkavý automat: prostředek
+  // se drží a mění až po MOTION_CHANGE_CONFIRM bodech; krátká zastávka ho nemaže.
+  let motion = resolveMotionSticky(member, motionActivities, vel, ts);
 
   // Motion přepisuje status pouze pokud jsme na cestě (ne uvnitř geofence)
   if (motion) {
