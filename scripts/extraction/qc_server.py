@@ -393,10 +393,26 @@ class Handler(BaseHTTPRequestHandler):
         pass  # ticho v konzoli
 
 
+def lan_ip():
+    """Zjisti lokalni IP NASky (na kterou se pripojit v prohlizeci)."""
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))   # nic se neodesle, jen zjisti vychozi rozhrani
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "IP_NASKY"
+
+
 def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
     srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
-    print("✓ QC server bezi: http://0.0.0.0:%d  (Ctrl+C ukonci)" % port)
+    ip = lan_ip()
+    print("✓ QC server bezi (posloucha na vsech rozhranich, port %d)" % port)
+    print("  → otevri v prohlizeci:  http://%s:%d" % (ip, port))
+    print("    (nebo http://localhost:%d primo na NASce)" % port)
     print("  dataset: %s" % os.path.abspath(DATASET))
     try:
         srv.serve_forever()
