@@ -131,33 +131,39 @@ async function getNearbyPlaces(lat, lon, radius = 300) {
   }
 }
 
-// ─── Historie návštěv ─────────────────────────────────────────────────────────
-async function countNearbyHistory(member, lat, lon, radiusM = 100) {
+// ─── Historie skutečných návštěv ───────────────────────────────────────────────
+// Dedikovaný trvalý log návštěv per člen (visits:<member>) — JEDEN záznam = JEDNA
+// návštěva, nezávisle na počtu GPS bodů a nezávisle na rolovacím history logu.
+// Návštěvy téhož místa oddělené < VISIT_GAP_MS se považují za jednu (dlouhé stání = 1×).
+const VISIT_GAP_MS = 6 * 60 * 60 * 1000;   // 6 h — odstup pro NOVOU návštěvu
+const VISIT_RADIUS_M = 120;                // okruh pro "stejné místo"
+const VISIT_LOG_MAX = 500;                 // strop záznamů na člena
+
+// Spočítá DŘÍVĚJŠÍ samostatné návštěvy téhož místa (oddělené od času ts ≥ 6 h)
+async function countNearbyVisits(member, lat, lon, ts, radiusM = VISIT_RADIUS_M) {
   try {
-    const raw = await redis.lRange('history:' + member, 0, 999);
-    // Skupinuj body do návštěv — mezera > 30 minut = nová návštěva
-    const VISIT_GAP = 30 * 60 * 1000;
-    let visits = 0;
-    let inVisit = false;
-    let lastTs = null;
-    // History je seřazena od nejnovějšího — obratime
-    const points = raw.map(r => JSON.parse(r)).reverse();
-    for (const p of points) {
-      const nearby = distance(lat, lon, p.lat, p.lon) <= radiusM;
-      if (nearby) {
-        if (!inVisit || (lastTs && p.ts - lastTs > VISIT_GAP)) {
-          visits++;
-          inVisit = true;
-        }
-        lastTs = p.ts;
-      } else {
-        if (inVisit && lastTs && p.ts - lastTs > VISIT_GAP) {
-          inVisit = false;
-        }
-      }
+    const raw = await redis.lRange('visits:' + member, 0, VISIT_LOG_MAX);
+    let n = 0;
+    for (const r of raw) {
+      const v = JSON.parse(r);
+      if (distance(lat, lon, v.lat, v.lon) <= radiusM && Math.abs(ts - v.ts) >= VISIT_GAP_MS) n++;
     }
-    return visits;
+    return n;
   } catch(e) { return 0; }
+}
+
+// Zaznamená návštěvu. Pokud na stejném místě (<120 m) existuje záznam mladší než
+// VISIT_GAP_MS, patří k téže návštěvě → neukládá se znovu (dlouhé stání = 1 návštěva).
+async function recordVisit(member, lat, lon, ts) {
+  try {
+    const raw = await redis.lRange('visits:' + member, 0, VISIT_LOG_MAX);
+    const same = raw.map(r => JSON.parse(r)).find(v =>
+      distance(lat, lon, v.lat, v.lon) <= VISIT_RADIUS_M && Math.abs(ts - v.ts) < VISIT_GAP_MS);
+    if (same) return false;   // patří k téže návštěvě
+    await redis.lPush('visits:' + member, JSON.stringify({ lat, lon, ts }));
+    await redis.lTrim('visits:' + member, 0, VISIT_LOG_MAX - 1);
+    return true;
+  } catch(e) { return false; }
 }
 
 // ─── Kdo jiný z rodiny byl nedávno na stejném místě ──────────────────────────
@@ -483,7 +489,11 @@ async function recordAiAsked(lat, lon) {
   } catch(e) {}
 }
 
-async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat = false, forceLong = false) {
+async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat = false, forceLong = false, ts = Date.now()) {
+  // Zaznamenej návštěvu hned (dedup 6 h zajistí, že dlouhé stání = 1 návštěva,
+  // a že early(5 min)+long(30 min) vyhodnocení téhož stání se nezapíše dvakrát)
+  await recordVisit(member, lat, lon, ts);
+
 
   // Známé místo — uvnitř existující geofence, nepřidávat znovu
   const alreadyKnown = dynamicFences.some(f => distance(lat, lon, f.lat, f.lon) < Math.max(f.radius, CLUSTER_RADIUS));
@@ -534,7 +544,7 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
   // Kontext pro AI
   await recordAiAsked(lat, lon);   // zaznamenej cooldown PŘED drahými voláními (Google + Claude)
   const placesNearby = await getNearbyPlaces(lat, lon, 300);
-  const historyVisits = await countNearbyHistory(member, lat, lon, 100);
+  const historyVisits = await countNearbyVisits(member, lat, lon, ts, VISIT_RADIUS_M);
   const nearbyMembers = await getRecentNearbyMembers(member, lat, lon);
 
   const now = new Date();
@@ -644,7 +654,7 @@ async function detectSilentStop(member, prevPoint, newLat, newLon, newTs) {
   const gapMinutes = Math.round(timeDiff / 60000);
   console.log(`[SILENCE] [${member}] mezera ${gapMinutes}min, vzdálenost ${Math.round(spaceDiff)}m, ${Math.round(speedKmh)}km/h`);
 
-  await processStopCandidate(member, prevPoint.lat, prevPoint.lon, gapMinutes, 'silence');
+  await processStopCandidate(member, prevPoint.lat, prevPoint.lon, gapMinutes, 'silence', false, false, prevPoint.ts);
 }
 
 // ─── Cluster tracking ─────────────────────────────────────────────────────────
@@ -656,7 +666,7 @@ async function evaluateCluster(member, cluster, repeat = false, forceLong = fals
   const duration = lastTs - cluster.startTs;
   if (duration < MIN_STOP_DURATION) return;
   const center = clusterCenter(cluster.points);
-  await processStopCandidate(member, center.lat, center.lon, Math.round(duration / 60000), 'cluster', repeat, forceLong);
+  await processStopCandidate(member, center.lat, center.lon, Math.round(duration / 60000), 'cluster', repeat, forceLong, lastTs);
 }
 
 // ─── Hlavní tracker ───────────────────────────────────────────────────────────
