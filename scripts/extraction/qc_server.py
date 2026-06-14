@@ -143,6 +143,21 @@ def apply_action(action, payload):
                 save_ds(ds)
                 return True, "Overeno " + pid
         return False, "ID nenalezeno: " + str(pid)
+    if action == "move":
+        pid = payload.get("id")
+        try:
+            lat = float(payload.get("lat"))
+            lon = float(payload.get("lon"))
+        except (TypeError, ValueError):
+            return False, "Neplatne souradnice"
+        for p in places:
+            if p["id"] == pid:
+                p["lat"] = round(lat, 6)
+                p["lon"] = round(lon, 6)
+                p["sources"] = sorted(set(p.get("sources", []) + ["manual_move"]))
+                save_ds(ds)
+                return True, "Posunuto " + pid
+        return False, "ID nenalezeno: " + str(pid)
     if action == "keep_both":
         st = load_state()
         pair = sorted([payload.get("idA"), payload.get("idB")])
@@ -210,9 +225,71 @@ def render():
             '</td></tr>'
             % (p["id"], place_cell(p), p["lat"], p["lon"], links(p), p["id"], p["id"]))
 
-    return """<!DOCTYPE html><html lang="cs"><head><meta charset="utf-8">
+    map_places = json.dumps([
+        {"id": p["id"], "name": p["name"], "cat": p["category"],
+         "lat": p["lat"], "lon": p["lon"], "tier": p.get("tier", "?")}
+        for p in places
+    ], ensure_ascii=False)
+    cats_sorted = sorted(counts.keys())
+    cat_checks = "".join(
+        '<label class="catf"><input type="checkbox" checked data-cat="' + c + '" '
+        'onchange="toggleCat(this)"> ' + CAT_LABELS.get(c, c) + ' (' + str(counts[c]) + ')</label>'
+        for c in cats_sorted)
+
+    map_section = (
+        '<h2>📍 Mapa všech bodů (' + str(len(places)) + ')</h2>'
+        '<p class="meta">Táhni špendlík myší pro posun bodu (uloží se hned). '
+        'Klikni na špendlík pro detail / ověření / smazání. Filtruj kategorie, hledej podle názvu.</p>'
+        '<div class="mapbar">'
+        '<input id="mapSearch" placeholder="Hledat název… (Enter)" onkeydown="if(event.key===\'Enter\')mapFind()">'
+        '<button onclick="mapFind()">Najít</button>'
+        '<span class="catfilters">' + cat_checks + '</span>'
+        '</div>'
+        '<div id="qcmap"></div>'
+        '<script>'
+        'var PLACES=' + map_places + ';'
+        'var CATCOLOR={skola:"#1f77b4",skolka:"#ff7f0e",lekar:"#d62728",zubar:"#e377c2",'
+        'lekarna:"#9467bd",obchod:"#2ca02c",kultura:"#8c564b",sport:"#17becf",zus:"#bcbd22",'
+        'krouzky:"#7f7f7f",logoped:"#aec7e8"};'
+        'var qcmap=L.map("qcmap").setView([50.7700,15.0600],12);'
+        'L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(qcmap);'
+        'var layers={},markers={};'
+        'function mIcon(col,tier){var ring=tier==="A"?"#222":"#d33";'
+        'return L.divIcon({className:"",html:"<div style=\\"width:14px;height:14px;border-radius:50%;background:"+col+";border:2px solid "+ring+";box-shadow:0 1px 3px rgba(0,0,0,.4)\\"></div>",iconSize:[14,14],iconAnchor:[7,7]});}'
+        'function popHtml(p){return "<b>"+p.name+"</b><br><small>"+(p.cat)+" · tier "+p.tier+"</small><br>"'
+        '+"<small>"+p.lat.toFixed(5)+", "+p.lon.toFixed(5)+"</small><br>"'
+        '+"<button onclick=\\"mapVerify(\'"+p.id+"\')\\">✓ Ověřit</button> "'
+        '+"<button onclick=\\"mapDelete(\'"+p.id+"\')\\" style=\\"color:#d33\\">Smazat</button>";}'
+        'PLACES.forEach(function(p){'
+        ' var col=CATCOLOR[p.cat]||"#555";'
+        ' var mk=L.marker([p.lat,p.lon],{icon:mIcon(col,p.tier),draggable:true,title:p.name});'
+        ' mk.bindPopup(popHtml(p));'
+        ' mk.on("dragend",function(e){var ll=e.target.getLatLng();'
+        '   fetch("/api/move",{method:"POST",headers:{"Content-Type":"application/json"},'
+        '   body:JSON.stringify({id:p.id,lat:ll.lat,lon:ll.lng})}).then(function(r){return r.json()})'
+        '   .then(function(res){toast(res.ok?("Posunuto: "+p.name):("Chyba: "+res.msg));'
+        '     if(res.ok){p.lat=ll.lat;p.lon=ll.lng;mk.setPopupContent(popHtml(p));}});});'
+        ' if(!layers[p.cat])layers[p.cat]=L.layerGroup().addTo(qcmap);'
+        ' layers[p.cat].addLayer(mk); markers[p.id]=mk;'
+        '});'
+        'function toggleCat(cb){var c=cb.getAttribute("data-cat");if(!layers[c])return;'
+        ' if(cb.checked)qcmap.addLayer(layers[c]);else qcmap.removeLayer(layers[c]);}'
+        'function mapFind(){var q=document.getElementById("mapSearch").value.toLowerCase().trim();if(!q)return;'
+        ' var hit=PLACES.find(function(p){return p.name.toLowerCase().indexOf(q)>-1;});'
+        ' if(hit){qcmap.setView([hit.lat,hit.lon],17);markers[hit.id].openPopup();}else toast("Nenalezeno");}'
+        'function mapVerify(id){fetch("/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},'
+        ' body:JSON.stringify({id:id})}).then(function(r){return r.json()}).then(function(res){toast(res.msg);});}'
+        'function mapDelete(id){if(!confirm("Smazat tento bod?"))return;'
+        ' fetch("/api/delete",{method:"POST",headers:{"Content-Type":"application/json"},'
+        ' body:JSON.stringify({id:id})}).then(function(r){return r.json()}).then(function(res){toast(res.msg);'
+        '   if(res.ok&&markers[id]){qcmap.removeLayer(markers[id]);}});}'
+        '</script>')
+
+    html = """<!DOCTYPE html><html lang="cs"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>QC — golden dataset Liberec</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
  body{font-family:system-ui,sans-serif;margin:16px;color:#222;max-width:1250px}
  h1{font-size:19px} h2{font-size:15px;margin-top:26px}
@@ -228,11 +305,18 @@ def render():
  button.del{border-color:#d33;color:#d33} button.del:hover{background:#fff5f5}
  button.ok{border-color:#2a7a2a;color:#2a7a2a} button.ok:hover{background:#f3fff3}
  tr.done{opacity:0.35} tr.done button{display:none}
+ #qcmap{height:520px;border:1px solid #ccc;border-radius:6px;margin-top:8px}
+ .mapbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+ .mapbar input#mapSearch{font-size:13px;padding:5px 9px;border:1px solid #ccc;border-radius:5px;min-width:200px}
+ .catfilters{display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:#555}
+ .catf{white-space:nowrap;cursor:pointer}
  #toast{position:fixed;bottom:14px;right:14px;background:#222;color:#fff;padding:8px 14px;
         border-radius:6px;font-size:13px;display:none}
 </style></head><body>
 <h1>QC — golden dataset Liberec</h1>
 <p class="meta">%d míst · %s<br>Každá akce se ihned ukládá do %s (záloha: %s)</p>
+
+<!--MAP_SECTION-->
 
 <h2>1. Podezřelé duplicity (<span id="dupCount">%d</span>)</h2>
 <p class="meta">Otevři letecký snímek, nech bod blíž skutečnému vchodu, druhý smaž.</p>
@@ -254,7 +338,6 @@ function act(btn,action,payload){
  .then(function(res){
    if(!res.ok){toast('Chyba: '+res.msg);return;}
    var tr=btn.closest('tr');tr.classList.add('done');
-   // smazane ID muze figurovat i v jinych radcich duplicit -> oznac je taky
    if(action==='delete'){
      var pid=payload.id;
      document.querySelectorAll('tr[id]').forEach(function(r){
@@ -270,6 +353,7 @@ function act(btn,action,payload){
         len(places), summary, DATASET, BACKUP,
         len(dups), "\n".join(dup_rows),
         len(tier_b), "\n".join(b_rows))
+    return html.replace("<!--MAP_SECTION-->", map_section)
 
 
 # ─── HTTP ─────────────────────────────────────────────────────────────────────
@@ -292,7 +376,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "404")
 
     def do_POST(self):
-        m = re.match(r"^/api/(delete|verify|keep_both)$", self.path)
+        m = re.match(r"^/api/(delete|verify|keep_both|move)$", self.path)
         if not m:
             self._send(404, json.dumps({"ok": False, "msg": "404"}), "application/json")
             return
