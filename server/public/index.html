@@ -2150,6 +2150,12 @@ function scFamilyStops(s) {
   }).join('');
 }
 
+const DOW_NAMES = ['neděle', 'pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota'];
+function scSetDay(id, v) {
+  const s = SC_SCENARIOS.find(x => x.id === id);
+  if (s) { s._dayOverride = parseInt(v); renderScenarios(); }
+}
+
 function renderScCard(s) {
   const isExp = scExpanded === s.id;
   const isFamily = s.type === 'family';
@@ -2187,6 +2193,7 @@ function renderScCard(s) {
       </div>
       <div class="sc-card-meta">
         ${tagHtml}
+        ${isFamily ? `<span style="font-size:11px;color:#7c9">📅 ${DOW_NAMES[(typeof s._dayOverride==='number'?s._dayOverride:s.dayOfWeek) ?? 1]}</span>` : ''}
         <span style="font-size:11px;color:#bbb">${isFamily ? (s.members ? s.members.length : Object.keys(s.tracks||{}).length) + ' členů' : s.steps.length + ' zastávek'}</span>
       </div>
       <div class="sc-card-chevron${isExp?' open':''}">›</div>
@@ -2196,6 +2203,7 @@ function renderScCard(s) {
       <div class="sc-stops">${stopsHtml}</div>
       <div class="sc-run-row">
         <button class="sc-btn primary" onclick="${isFamily ? `scRunFamily('${s.id}')` : `scRun('${s.id}')`}" ${scRunning?'disabled':''}>▶ Spustit${isFamily ? ' (celá rodina)' : ''}</button>
+        ${isFamily ? `<span style="font-size:12px;color:#888">📅 Den:</span><select onclick="event.stopPropagation()" onchange="scSetDay('${s.id}',this.value)" style="font-size:12px;padding:2px 6px">${DOW_NAMES.map((n,i)=>`<option value="${i}" ${((typeof s._dayOverride==='number'?s._dayOverride:s.dayOfWeek)??1)===i?'selected':''}>${n}</option>`).join('')}</select>` : ''}
         <button class="sc-btn" onclick="scToggleQueue('${s.id}')" id="sc-qbtn-${s.id}">${scQueue.includes(s.id) ? '✓ Ve frontě' : '+ Fronta'}</button>
         <span style="font-size:12px;color:#aaa">${isFamily ? 'všichni 4 členové paralelně' : 'člena: <b id="sc-run-member-label">'+(document.getElementById('sc-member')?.value||'?')+'</b>'} · rychlost: <b id="sc-run-speed-label">${document.getElementById('sc-speed')?.value||'?'}×</b></span>
       </div>
@@ -2375,10 +2383,17 @@ async function scRunFamily(scenarioId) {
     ).join('');
 
     const realStart = Date.now();
-    // Kotva simulovaného dne: 07:00 dnešního dne. Každý segment dostane absolutní
-    // simulovaný čas (kotva + startMin), takže GPS body nesou simulovaný čas dne
-    // a AI při testu vidí správnou dobu (ráno/odpoledne), ne reálný čas serveru.
-    const famDayStart = (() => { const d = new Date(); d.setHours(7, 0, 0, 0); return d.getTime(); })();
+    // Kotva simulovaného dne: 07:00 dne platnosti scénáře (dayOfWeek, lze přepsat
+    // v kartě). Najde nejbližší takový den, aby GPS body nesly správný den v týdnu
+    // a AI při testu viděla správnou dobu (ráno/odpoledne + den), ne reálný čas.
+    const targetDow = (typeof sc._dayOverride === 'number') ? sc._dayOverride
+                    : (typeof sc.dayOfWeek === 'number' ? sc.dayOfWeek : new Date().getDay());
+    const famDayStart = (() => {
+      const d = new Date(); d.setHours(7, 0, 0, 0);
+      let guard = 0;
+      while (d.getDay() !== targetDow && guard < 7) { d.setDate(d.getDate() + 1); guard++; }
+      return d.getTime();
+    })();
     const segSimTime = (startMin) => famDayStart + startMin * 60000;
     const simNowMs = () => (Date.now() - realStart) * speed;
     const sleepUntilSim = async (simMs) => {

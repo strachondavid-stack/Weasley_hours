@@ -62,6 +62,7 @@ def pick_near(places, category, rng, near, n=1, exclude_ids=None):
 DAY_PLANS = {
     "klasicky_den": {
         "title": "Klasický všední den",
+        "dayOfWeek": 1,  # pondělí — typický školní/pracovní den
         "desc": "Táta veze Kubíka do školky a jede do práce, máma veze Mišáka do školy "
                 "a na nákup; odpoledne předávka — máma vyzvedne Kubíka, táta Mišáka z kroužku.",
         "trips": [
@@ -80,6 +81,7 @@ DAY_PLANS = {
     },
     "den_s_doktorem": {
         "title": "Den s návštěvou lékaře",
+        "dayOfWeek": 2,  # úterý — běžný den na objednání k lékaři
         "desc": "Máma vezme Kubíka k pediatrovi a do lékárny, táta odveze Mišáka do školy "
                 "a jede do práce; odpoledne táta vyzvedne obě děti.",
         "trips": [
@@ -95,6 +97,7 @@ DAY_PLANS = {
     },
     "krouzkovy_den": {
         "title": "Nabitý kroužkový den",
+        "dayOfWeek": 3,  # středa — den nabitý odpoledními kroužky
         "desc": "Obě děti mají odpoledne kroužky na různých místech, oba rodiče se střídají "
                 "v odvozech a vyzvedávání, mezitím nákup.",
         "trips": [
@@ -208,6 +211,7 @@ def build_family(profile, places):
             "id": "%s-%s" % (profile["id"], plan_id),
             "title": "%s — %s" % (profile["title"], plan["title"]),
             "icon": "👨‍👩‍👧‍👦", "type": "family",
+            "dayOfWeek": plan.get("dayOfWeek", 1),  # 0=ne,1=po,...,6=so — platnost scénáře
             "tags": ["rodina", profile["id"], plan_id],
             "desc": plan["desc"], "members": sorted(tracks.keys()),
             "tracks": tracks, "_stats": {"stays": n_stays},
