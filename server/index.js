@@ -1064,27 +1064,19 @@ async function runSimStay(member, lat, lon, minutes, onDone, jitterM) {
   sim.stayStep = 0;
   sim.stayTotal = totalPoints;
 
-  // Jednorázový posun parkoviště (kde reálně zastavím vůči POI) — zvolen JEDNOU
-  // na celé stání. Dřív se losoval každý bod zvlášť → body skákaly po velkém
-  // čtverci (nereálný drift + rozbíjelo to potvrzení geofence, protože body
-  // padaly střídavě dovnitř/ven a hystereze se resetovala). Teď: stálé
-  // parkoviště + drobný GPS šum.
-  const parkMax = (typeof jitterM === 'number' && jitterM > 0) ? jitterM : 25;
-  const _ang = Math.random() * 2 * Math.PI;
-  const _r = Math.random() * parkMax;          // 0..parkMax m, jeden směr
-  const parkLatM = _r * Math.cos(_ang);
-  const parkLonM = _r * Math.sin(_ang);
-  const GPS_NOISE_M = 12;                       // drobný šum GPS při stání
+  // Body stání jsou vždy vycentrované na POI — zajímá nás pohyb v objektu,
+  // ne kde se zaparkovalo. Každý bod = POI + drobný kruhový GPS šum. Rozptyl je
+  // menší než radius geofence i CLUSTER_RADIUS, takže potvrzení příchodu i
+  // shlukování zůstávají stabilní (žádné skákání přes hranici plotu).
+  const moveR = (typeof jitterM === 'number' && jitterM > 0) ? Math.min(jitterM, 40) : 15;
 
   const doStep = async () => {
     if (!sim.stayActive || !activeSimulations[member]) return;
-    // Rozptyl mista zastaveni (parkoviste/vchod): jitterM v metrech -> stupne.
-    // 1 stupen lat ~111320m; lon koriguj cos(lat). Fallback ~28m (puvodni chovani).
-    // Stálé parkoviště (parkLatM/parkLonM zvoleno jednou) + drobný GPS šum (±12 m)
-    const _latM = parkLatM + (Math.random() - 0.5) * 2 * GPS_NOISE_M;
-    const _lonM = parkLonM + (Math.random() - 0.5) * 2 * GPS_NOISE_M;
-    const dLat = _latM / 111320;
-    const dLon = _lonM / (111320 * Math.cos(lat * Math.PI / 180));
+    // Rovnoměrný kruhový šum kolem POI (sqrt pro rovnoměrnost v ploše).
+    const _ang = Math.random() * 2 * Math.PI;
+    const _r = Math.sqrt(Math.random()) * moveR;
+    const dLat = (_r * Math.cos(_ang)) / 111320;
+    const dLon = (_r * Math.sin(_ang)) / (111320 * Math.cos(lat * Math.PI / 180));
     sim.simTime += 30000;
     if (sim.stayStep === 0) console.log(`[SIM] Stay start simTime=${sim.simTime}`);
     await simSendGPSServer(member, lat + dLat, lon + dLon, 0, ['stationary'], sim.simTime);
