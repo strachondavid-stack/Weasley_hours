@@ -505,6 +505,18 @@
         <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">log</span><span class="cmd-text">cd /volume1/docker/weasley && git log --oneline -10</span><button class="copy-btn">⧉</button></div>
       </div>
     </div>
+    <div class="card">
+      <div class="card-header"><span class="card-icon">🧪</span><span class="card-title">Scénáře — přegenerování</span></div>
+      <div class="card-body">
+        <div class="cmd-row full" onclick="adminCopy(this)"><div class="row-top"><span class="cmd-label">vše naráz (generátor → přegenerovat → sloučit)</span><button class="copy-btn">⧉</button></div><span class="cmd-text">cd /volume1/docker/weasley && git fetch origin && git show origin/master:scripts/extraction/gen_scenarios.py > scripts/extraction/gen_scenarios.py && cd scripts/extraction && python3 gen_scenarios.py && python3 merge_scenarios.py /volume1/docker/weasley/server/public/scenarios_data.json scenarios_generated.json</span></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">1. aktualizovat generátor</span><span class="cmd-text">cd /volume1/docker/weasley && git fetch origin && git show origin/master:scripts/extraction/gen_scenarios.py > scripts/extraction/gen_scenarios.py</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">2. přegenerovat</span><span class="cmd-text">cd /volume1/docker/weasley/scripts/extraction && python3 gen_scenarios.py</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">3. sloučit do dat</span><span class="cmd-text">cd /volume1/docker/weasley/scripts/extraction && python3 merge_scenarios.py /volume1/docker/weasley/server/public/scenarios_data.json scenarios_generated.json</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">kontrola (10 rodin + dayOfWeek)</span><span class="cmd-text">grep -c '"type": "family"' /volume1/docker/weasley/server/public/scenarios_data.json; grep -c '"dayOfWeek"' /volume1/docker/weasley/server/public/scenarios_data.json</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">co server servíruje</span><span class="cmd-text">curl -s http://192.168.0.228:3000/scenarios | python3 -c "import sys,json;d=json.load(sys.stdin);r=[c for c in d['categories'] if c['id']=='rodiny'][0];[print(s['title'][:40],'-> den',s.get('dayOfWeek')) for s in r['scenarios']]"</span><button class="copy-btn">⧉</button></div>
+        <div class="cmd-row" onclick="adminCopy(this)"><span class="cmd-label">QC zlatých bodů (úprava)</span><span class="cmd-text">cd /volume1/docker/weasley && git fetch origin && git show origin/master:scripts/extraction/qc_server.py > scripts/extraction/qc_server.py && cd scripts/extraction && python3 qc_server.py</span><button class="copy-btn">⧉</button></div>
+      </div>
+    </div>
   </div>
 </div>
 
