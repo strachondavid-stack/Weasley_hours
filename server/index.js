@@ -121,6 +121,7 @@ async function getNearbyPlaces(lat, lon, radius = 300) {
         types: (p.types || []).slice(0, 5),
         dist: Math.round(distance(lat, lon, p.geometry.location.lat, p.geometry.location.lng)),
         rating: p.rating || null,
+        vicinity: p.vicinity || '',
       }))
       .filter(p => !SKIP_PLACE_TYPES.includes(p.primaryType) && p.name)
       .sort((a, b) => a.dist - b.dist)
@@ -129,6 +130,64 @@ async function getNearbyPlaces(lat, lon, radius = 300) {
     console.error('[PLACES] Chyba:', e.message);
     return [];
   }
+}
+
+// ─── Reverse geocoding + porovnání adres ───────────────────────────────────────
+// Ze souřadnic vrátí adresu (ulice + číslo). Porovnáním s adresou POI (vicinity)
+// poznáme, KTERÉ z okolních míst je to pravé — silnější než pouhá vzdálenost.
+const GEOCODE_CACHE_TTL = 30 * 24 * 3600;   // adresa bodu je stálá → cache na 30 dní
+const ADDR_MATCH_BONUS = 0.15;              // bonus k confidence při shodě ulice (ne přímo číslo)
+
+async function reverseGeocode(lat, lon) {
+  if (!GOOGLE_API_KEY) return null;
+  const cacheKey = 'geocode:' + lat.toFixed(5) + ',' + lon.toFixed(5);
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached !== null) return JSON.parse(cached);
+  } catch(e) {}
+  try {
+    const url = `/maps/api/geocode/json?latlng=${lat},${lon}&language=cs&key=${GOOGLE_API_KEY}`;
+    const data = await new Promise((resolve, reject) => {
+      https.get({ hostname: 'maps.googleapis.com', path: url }, (res) => {
+        let d = '';
+        res.on('data', chunk => d += chunk);
+        res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
+      }).on('error', reject);
+    });
+    const r = (data.results || [])[0];
+    let out = null;
+    if (r) {
+      const comp = (type) => (r.address_components || []).find(c => (c.types || []).includes(type))?.long_name || null;
+      out = { formatted: r.formatted_address || null, route: comp('route'), streetNumber: comp('street_number') };
+    }
+    try { await redis.set(cacheKey, JSON.stringify(out), { EX: GEOCODE_CACHE_TTL }); } catch(e) {}
+    return out;
+  } catch(e) {
+    console.error('[GEOCODE] Chyba:', e.message);
+    return null;
+  }
+}
+
+function normAddr(s) {
+  return (s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')   // odstraň diakritiku
+    .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function houseNumbers(s) { return ((s || '').match(/\d+/g) || []); }
+
+// 0 = nic, 1 = sedí ulice, 2 = sedí ulice i číslo popisné/orientační
+function addrMatchScore(geo, vicinity) {
+  if (!geo || !vicinity) return 0;
+  const vNorm = normAddr(vicinity);
+  const route = normAddr(geo.route);
+  let score = 0;
+  if (route && route.length >= 3 && vNorm.includes(route)) score = 1;
+  if (score === 1 && geo.streetNumber) {
+    const want = houseNumbers(geo.streetNumber);
+    const have = houseNumbers(vNorm);
+    if (want.some(n => have.includes(n))) score = 2;
+  }
+  return score;
 }
 
 // ─── Historie skutečných návštěv ───────────────────────────────────────────────
@@ -194,7 +253,7 @@ async function askClaude(member, lat, lon, context) {
     return null;
   }
 
-  const { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source } = context;
+  const { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source, geo, strongMatch } = context;
 
   // Zvýrazni nejbližší místo — pokud je výrazně blíž než ostatní, je to pravděpodobný cíl
   let placesStr = '  Žádná místa nenalezena';
@@ -204,10 +263,16 @@ async function askClaude(member, lat, lon, context) {
     const nearestIsClose = nearest.dist < 50;
     const nearestIsMuchCloser = second && nearest.dist < second.dist * 0.4;
     placesStr = placesNearby.map((p, i) => {
-      const highlight = '';  // neoznačujeme nejbližší — typ místa je důležitější než vzdálenost
-      return `  - ${p.name} (${p.primaryType || 'neznámý typ'}, ${p.dist}m${p.rating ? ', ★' + p.rating : ''})${highlight}`;
+      const addr = p.vicinity ? `, ${p.vicinity}` : '';
+      const am = p.addrScore === 2 ? ' [ADRESA SEDÍ]' : (p.addrScore === 1 ? ' [ulice sedí]' : '');
+      return `  - ${p.name} (${p.primaryType || 'neznámý typ'}, ${p.dist}m${p.rating ? ', ★' + p.rating : ''}${addr})${am}`;
     }).join('\n');
   }
+
+  const addrStr = (geo && geo.formatted)
+    ? '\nAdresa zastávky (reverse geocoding): ' + geo.formatted
+      + (strongMatch ? '\n→ Adresa PŘESNĚ odpovídá POI "' + strongMatch.name + '" — to je velmi pravděpodobně to pravé místo, použij jeho název.' : '')
+    : '';
 
   const nearbyStr = nearbyMembers.length > 0
     ? '\nDalší členové rodiny na tomto místě:\n' + nearbyMembers.map(m => `  - ${m.member} byl zde před ${m.minutesAgo} min`).join('\n')
@@ -220,7 +285,7 @@ async function askClaude(member, lat, lon, context) {
 Zdroj: ${source === 'silence' ? 'Significant mode (GPS bod před odjezdem, mezera ' + gapMinutes + ' min)' : 'cluster bodů v Move mode, délka minimálně ' + gapMinutes + ' min (člen je pravděpodobně stále na místě — skutečná délka bude delší)'}
 Souřadnice: ${lat.toFixed(5)}, ${lon.toFixed(5)}
 Předchozí návštěvy tohoto místa: ${historyVisits}×${historyVisits >= 3 ? ' — PRAVIDELNĚ navštěvované místo. Opakovaná návštěva je SILNÝ důkaz, že místo je pro rodinu důležité (i bez klasického POI, např. práce, návštěva, kroužek) — silně zvaž uložení a vyšší confidence.' : (historyVisits >= 1 ? ' — místo už bylo navštíveno dříve, zvaž to jako signál.' : '')}
-${nearbyStr}
+${nearbyStr}${addrStr}
 Nejbližší místa z Google Places:
 ${placesStr}
 
@@ -594,6 +659,16 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
   const historyVisits = await countNearbyVisits(member, lat, lon, ts, VISIT_RADIUS_M);
   const nearbyMembers = await getRecentNearbyMembers(member, lat, lon);
 
+  // Reverse geocoding bodu + porovnání adresy s POI (které z míst je to pravé)
+  const geo = await reverseGeocode(lat, lon);
+  let strongMatch = null;
+  if (geo) {
+    for (const p of placesNearby) p.addrScore = addrMatchScore(geo, p.vicinity);
+    const strong = placesNearby.filter(p => p.addrScore === 2);
+    if (strong.length === 1) strongMatch = strong[0];   // jediná jednoznačná shoda ulice+číslo
+    if (geo.formatted) console.log(`[ADDR] Adresa zastávky: ${geo.formatted}${strongMatch ? ' → shoda s "' + strongMatch.name + '"' : ''}`);
+  }
+
   const now = new Date(ts);   // čas datového bodu (v simulaci = simulovaný čas, ne reálný)
   const days = ['neděle', 'pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota'];
   const dayOfWeek = days[now.getDay()];
@@ -602,7 +677,7 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
   await logEvent('stop_candidate', { member, lat, lon, gapMinutes, historyVisits, nearbyMembers, placesCount: placesNearby.length, dayOfWeek, timeStr, source });
   console.log(`[STOP] Kandidát [${member}] ${gapMinutes}min @ ${lat.toFixed(5)},${lon.toFixed(5)} | ${placesNearby.length} POI | ${historyVisits}x navštíveno`);
 
-  const aiResult = await askClaude(member, lat, lon, { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source });
+  const aiResult = await askClaude(member, lat, lon, { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source, geo, strongMatch });
 
   // Tvrdý bonus k confidence za opakované návštěvy — opakování je silný signál,
   // který nenecháváme jen na uvážení AI. +0,07 za každou návštěvu nad první, strop +0,30.
@@ -616,7 +691,38 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
     }
   }
 
+  // Shoda adresy (reverse geocoding vs adresa POI) — silný signál identity místa.
+  // Jednoznačná shoda ulice+číslo → vyber a ulož přímo to POI (auto-výběr).
+  if (aiResult && geo) {
+    if (strongMatch) {
+      if (aiResult.name !== strongMatch.name || !aiResult.should_save) {
+        console.log(`[ADDR] Auto-výběr dle shody adresy: "${aiResult.name || '—'}" → "${strongMatch.name}" (${geo.formatted})`);
+        await logEvent('addr_match', { member, lat, lon, from: aiResult.name || null, to: strongMatch.name, address: geo.formatted, vicinity: strongMatch.vicinity });
+      }
+      aiResult.should_save = true;
+      aiResult.name = strongMatch.name;
+      aiResult.confidence = Math.max(aiResult.confidence || 0, AI_AUTOSAVE_THRESHOLD);
+      aiResult.reason = `Shoda adresy (${geo.formatted}) → ${strongMatch.name}. ` + (aiResult.reason || '');
+    } else if (typeof aiResult.confidence === 'number') {
+      // Slabší shoda jen ulice u vybraného názvu → mírný bonus
+      const sel = placesNearby.find(p => p.name === aiResult.name && p.addrScore >= 1);
+      if (sel) {
+        const before = aiResult.confidence;
+        aiResult.confidence = Math.min(1, aiResult.confidence + ADDR_MATCH_BONUS);
+        if (aiResult.confidence !== before) {
+          await logEvent('addr_bonus', { member, lat, lon, name: aiResult.name, address: geo.formatted, confidenceBefore: before, confidenceAfter: aiResult.confidence });
+        }
+      }
+    }
+  }
+
   if (!aiResult) {
+    // Bez AI: jednoznačná shoda adresy stačí na auto-uložení
+    if (strongMatch) {
+      console.log(`[ADDR] AI nedostupné, ale adresa jednoznačně sedí → ukládám "${strongMatch.name}"`);
+      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, strongMatch.name, AI_AUTOSAVE_THRESHOLD, 'shoda adresy: ' + (geo.formatted || ''), source, geo && geo.formatted);
+      return;
+    }
     // Fallback — jen pokud je místo opakované a má POI
     if (placesNearby.length > 0 && historyVisits >= 3) {
       await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, null, 0, 'fallback', source);
@@ -643,10 +749,10 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
     return;
   }
 
-  await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, aiResult.name, aiResult.confidence, aiResult.reason, source);
+  await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, aiResult.name, aiResult.confidence, aiResult.reason, source, geo && geo.formatted);
 }
 
-async function savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, aiName, aiConfidence, aiReason, source) {
+async function savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, aiName, aiConfidence, aiReason, source, address) {
   const placeId = 'place_' + Date.now();
   const autoSave = aiConfidence >= AI_AUTOSAVE_THRESHOLD && aiName;
 
@@ -657,6 +763,7 @@ async function savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, ai
     name: autoSave ? aiName : null,
     suggestedName: aiName,
     aiConfidence, aiReason,
+    ...(address ? { address } : {}),
     candidates: placesNearby,
   };
 
