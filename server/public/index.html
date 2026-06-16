@@ -745,7 +745,7 @@ function showPage(p){
   if(p==='places')    { loadPlaces().then(renderPlaces); }
   if(p==='geofences') { loadGeofences(); }
   if(p==='clock')     { renderClock(); }
-  if(p==='scenarios') { if(typeof renderScenarios==='function') renderScenarios(); }
+  if(p==='scenarios') { if(typeof renderScenarios==='function') renderScenarios(); if(typeof famSyncFromServer==='function') famSyncFromServer(); }
   if(p==='admin')     { loadMode(); }
   if(p==='log')       { logInitListeners(); loadLog(); }
   if(p==='map')       { setTimeout(()=>map.invalidateSize(),50); fetch('/mode').then(r=>r.json()).then(d=>{ if(d.mode==='test' && !simState.active) simSetupListeners(); }); }
@@ -1691,13 +1691,14 @@ reloadPlacesOnMap();
 
 // ─── WebSocket ─────────────────────────────────────────────────────────
 const ws=new WebSocket('ws://'+window.location.hostname+':3000');
-ws.onopen=()=>{document.getElementById('wsDot').classList.add('live');document.getElementById('wsText').textContent='živě'};
+ws.onopen=()=>{document.getElementById('wsDot').classList.add('live');document.getElementById('wsText').textContent='živě';famSyncFromServer();};
 ws.onclose=()=>{document.getElementById('wsDot').classList.remove('live');document.getElementById('wsText').textContent='odpojeno'};
 ws.onmessage=(e)=>{
   try{
     const msg=JSON.parse(e.data);
     if(msg.type==='update'){updateMember(msg.member,msg);renderChips();}
     if(msg.type==='sim_arrived'){
+      if(famActive) return; // rodinný scénář řídí server — žádné dialogy na klientu
       simState.active = false;
       simSetDisplay('simStopBtn', 'none');
       if(scRunning) return; // scénář si řídí tok sám — dialog nechceme
@@ -1710,6 +1711,9 @@ ws.onmessage=(e)=>{
         simArrived();
       }
     }
+    if(msg.type==='family_state'){ applyFamilyState(msg); }
+    if(msg.type==='family_finished'){ applyFamilyFinished(); }
+    if(msg.type==='family_stopped'){ famActive=false; const h=document.getElementById('sim-hud'); /* HUD nech viset kvůli tlačítku mazání */ }
     if(msg.type==='sim_progress'){
       simSetStatus(`▶ krok ${msg.step}/${msg.total} · ${msg.vel} km/h`);
     }
@@ -2332,162 +2336,144 @@ async function scRun(scenarioId) {
 // Přehraje VŠECHNY členy paralelně na sdílených simulovaných hodinách.
 // Spolujízda = členové mají shodné travel segmenty ve stejném startMin → jedou spolu.
 // Předávka = dítě má stay segment mezi odvozem a vyzvednutím.
+// ── Rodinný scénář teď řídí SERVER ──────────────────────────────────────────
+// Klient scénář jen spustí (POST /simulate/family s celými tracky) a dál jen
+// vykresluje stav, který server rozesílá přes WebSocket (family_state). Díky
+// tomu start z mobilu přežije odpojení a každý připojený klient (mobil i PC)
+// vidí identický průběh. HUD se vykresluje z applyFamilyState().
+const FAM_NAMES = { tatka:'TÁTA', mamka:'MÁMA', misak:'MIŠÁK', kubik:'KUBÍK' };
+function famFmtClock(simMs) {
+  const t = 7 * 60 + Math.floor(simMs / 60000);
+  return (Math.floor(t / 60) % 24) + ':' + String(t % 60).padStart(2, '0');
+}
+function famFmtDur(simMs) {
+  const min = Math.floor(simMs / 60000);
+  if (min < 60) return min + ' min';
+  return Math.floor(min / 60) + 'h ' + (min % 60) + 'min';
+}
+
 async function scRunFamily(scenarioId) {
-  if (scRunning) return;
   const sc = SC_SCENARIOS.find(s => s.id === scenarioId);
   if (!sc || !sc.tracks) return;
   const speed = parseInt(document.getElementById('sc-speed').value) || 30;
+  console.log('[FAM] start (server-side)', scenarioId, 'speed', speed);
 
-  scRunning = true; scAbort = false;
-  console.log('[FAM] start', scenarioId, 'speed', speed);
-  let progTimer = null;
-  const fmtClock = (simMs) => {
-    const t = 7 * 60 + Math.floor(simMs / 60000);
-    return (Math.floor(t / 60) % 24) + ':' + String(t % 60).padStart(2, '0');
-  };
-  const memNames = { tatka:'TÁTA', mamka:'MÁMA', misak:'MIŠÁK', kubik:'KUBÍK' };
-  // Stav každého člena: text statusu + simulovaný čas začátku aktuálního segmentu
-  const memState = {};   // m -> { txt, since (simMs) | null }
-  const fmtDur = (simMs) => {
-    const min = Math.floor(simMs / 60000);
-    if (min < 60) return min + ' min';
-    return Math.floor(min / 60) + 'h ' + (min % 60) + 'min';
-  };
-  const setMemberStatus = (m, txt, sinceSimMs) => {
-    memState[m] = { txt, since: (typeof sinceSimMs === 'number' ? sinceSimMs : null) };
-  };
-  const renderMemberChip = (m, nowSimMs) => {
-    const st = memState[m];
-    if (!st) return (memNames[m]||m) + ': start';
-    const dur = st.since != null ? ' (' + fmtDur(Math.max(0, nowSimMs - st.since)) + ')' : '';
-    return (memNames[m]||m) + ': ' + st.txt + dur;
-  };
+  // Kotva simulovaného dne (server posune o týden za každý běh → samostatné návštěvy)
+  const targetDow = (typeof sc._dayOverride === 'number') ? sc._dayOverride
+                  : (typeof sc.dayOfWeek === 'number' ? sc.dayOfWeek : new Date().getDay());
+  let famDayStart, dateLabel = '';
   try {
-    scStartReport(scenarioId, 'rodina');
-    renderScenarios();
-
-    const members = sc.members || Object.keys(sc.tracks);
-
-    // ── Globální HUD (viditelný na všech záložkách) ──
-    const hud = document.getElementById('sim-hud');
-    const hudClock = document.getElementById('hud-simclock');
-    const hudReal = document.getElementById('hud-realrun');
-    const hudBar = document.getElementById('hud-bar');
-    const hudMembers = document.getElementById('hud-members');
-    hudMembers.innerHTML = members.map(m =>
-      `<span id="hud-chip-${m}" style="font-size:11px;background:#1c1f2b;border:1px solid #2a2d3a;border-radius:10px;padding:2px 8px;white-space:nowrap">${memNames[m]||m}: start</span>`
-    ).join('');
-    hud.style.display = 'flex';
-    hudClock.textContent = '07:00';
-
-    // progress lišta na záložce Scénáře (zůstává)
-    const progWrap = document.getElementById('sc-progress');
-    const progTitle = document.getElementById('sc-prog-title');
-    const progStatus = document.getElementById('sc-prog-status');
-    const progBar = document.getElementById('sc-prog-bar');
-    const stepsList = document.getElementById('sc-steps-list');
-    const stopBtn = document.getElementById('sc-stop-btn');
-    progWrap.classList.add('visible');
-    stopBtn.style.display = '';
-    progTitle.textContent = sc.icon + ' ' + sc.title + ' — celá rodina';
-    progStatus.textContent = '🕐 07:00 — spouštím rodinu...';
-    stepsList.innerHTML = members.map(m =>
-      `<span class="sc-step-chip" id="fam-chip-${m}">${memNames[m]||m}: start</span>`
-    ).join('');
-
-    const realStart = Date.now();
-    // Kotva simulovaného dne: 07:00 dne platnosti scénáře (dayOfWeek). Server posune
-    // datum o týden za každý běh (test_run_index), takže opakované testy téhož scénáře
-    // jsou samostatné návštěvy (≥7 dní od sebe) a návštěvy narůstají i bez mazání.
-    const targetDow = (typeof sc._dayOverride === 'number') ? sc._dayOverride
-                    : (typeof sc.dayOfWeek === 'number' ? sc.dayOfWeek : new Date().getDay());
-    let famDayStart, runDateLabel = '';
-    try {
-      const r = await fetch('/simulate/test-day', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dayOfWeek: targetDow }) });
-      const j = await r.json();
-      famDayStart = j.famDayStart;
-      runDateLabel = j.dateLabel || '';
-    } catch(e) {
-      const d = new Date(); d.setHours(7, 0, 0, 0);
-      let guard = 0; while (d.getDay() !== targetDow && guard < 7) { d.setDate(d.getDate() + 1); guard++; }
-      famDayStart = d.getTime();
-    }
-    const segSimTime = (startMin) => famDayStart + startMin * 60000;
-    { const hd = document.getElementById('hud-date'); if (hd) hd.textContent = runDateLabel ? '📅 ' + runDateLabel : ''; }
-    const simNowMs = () => (Date.now() - realStart) * speed;
-    const sleepUntilSim = async (simMs) => {
-      while (!scAbort) {
-        const remainingReal = (simMs - simNowMs()) / speed;
-        if (remainingReal <= 0) break;
-        await new Promise(r => setTimeout(r, Math.min(remainingReal, 400)));
-      }
-    };
-
-    const runMember = async (m) => {
-      const segs = sc.tracks[m] || [];
-      for (const seg of segs) {
-        if (scAbort) break;
-        await sleepUntilSim(seg.startMin * 60000);
-        if (scAbort) break;
-        if (seg.type === 'travel') {
-          setMemberStatus(m, '🚗 → ' + seg.name, seg.startMin * 60000);
-          await scDoRoute(m, { lat: seg.fromLat, lon: seg.fromLon },
-                          { lat: seg.lat, lon: seg.lon }, seg.mode, speed, segSimTime(seg.startMin), () => {});
-        } else if (seg.type === 'stay') {
-          setMemberStatus(m, '⏱ ' + seg.name, seg.startMin * 60000);
-          await scDoStay(m, seg.lat, seg.lon, seg.durMin, speed, segSimTime(seg.startMin), () => {}, seg.stopJitterM);
-        }
-      }
-      if (!scAbort) setMemberStatus(m, '✓ doma', null);
-    };
-
-    const maxSim = Math.max(...members.flatMap(m =>
-      (sc.tracks[m]||[]).map(s => (s.startMin + (s.durMin||0)) * 60000)), 60000);
-    progTimer = setInterval(() => {
-      if (scAbort) return;
-      const sm = simNowMs();
-      const pct = Math.min(100, Math.round(sm / maxSim * 100));
-      const realSec = Math.floor((Date.now() - realStart) / 1000);
-      const clk = fmtClock(sm);
-      hudClock.textContent = clk;
-      hudReal.textContent = 'běh ' + Math.floor(realSec/60) + ':' + String(realSec%60).padStart(2,'0') + ' · ' + speed + '×';
-      hudBar.style.width = pct + '%';
-      progBar.style.width = pct + '%';
-      progStatus.textContent = '🕐 ' + clk + ' — běží ' + members.length + ' členů paralelně';
-      // per-člen chip s běžící dobou v aktuálním segmentu
-      for (const m of members) {
-        const txt = renderMemberChip(m, sm);
-        const h = document.getElementById('hud-chip-' + m);
-        if (h) h.textContent = txt;
-        const c = document.getElementById('fam-chip-' + m);
-        if (c) c.textContent = txt;
-      }
-    }, 500);
-
-    await Promise.all(members.map(runMember));
-
-    progBar.style.width = scAbort ? progBar.style.width : '100%';
-    hudBar.style.width = scAbort ? hudBar.style.width : '100%';
-    progStatus.textContent = scAbort ? '⏸ Přerušeno' : '✅ Hotovo';
-    if (hudClock) hudClock.textContent = scAbort ? hudClock.textContent : fmtClock(maxSim);
-    stopBtn.style.display = 'none';
-    if (scCurrentReport) { await scLoadReportLogs(scCurrentReport); scFinishReport(); }
-  } catch (e) {
-    console.error('[FAM] chyba:', e);
-    const ps = document.getElementById('sc-prog-status');
-    if (ps) ps.textContent = '❌ Chyba: ' + e.message;
-    const hr = document.getElementById('hud-realrun');
-    if (hr) hr.textContent = 'chyba: ' + e.message;
-  } finally {
-    if (progTimer) clearInterval(progTimer);
-    scRunning = false;
-    // Po normálním dokončení schovej HUD za 3s. Po STOPu nech HUD viset —
-    // je v něm tlačítko 'Vymazat testovací data', které HUD schová samo.
-    if (!scAbort) {
-      setTimeout(() => { const h = document.getElementById('sim-hud'); if (h && !scRunning) h.style.display = 'none'; }, 3000);
-    }
-    renderScenarios();
+    const r = await fetch('/simulate/test-day', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dayOfWeek: targetDow }) });
+    const j = await r.json();
+    famDayStart = j.famDayStart; dateLabel = j.dateLabel || '';
+  } catch(e) {
+    const d = new Date(); d.setHours(7, 0, 0, 0);
+    let guard = 0; while (d.getDay() !== targetDow && guard < 7) { d.setDate(d.getDate() + 1); guard++; }
+    famDayStart = d.getTime();
   }
+
+  // Report (běží na klientovi, který spustil — volitelné, čte logy z Redis)
+  try { scStartReport(scenarioId, 'rodina'); } catch(e) {}
+
+  // Pošli celý scénář serveru — ten ho odteď řídí sám
+  try {
+    await fetch('/simulate/family', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scenarioId, title: sc.title, icon: sc.icon, speed, famDayStart, dateLabel, tracks: sc.tracks
+      })
+    });
+  } catch(e) {
+    const ps = document.getElementById('sc-prog-status');
+    if (ps) ps.textContent = '❌ Chyba startu: ' + e.message;
+    return;
+  }
+  // HUD a progres se dál plní z family_state (viz applyFamilyState). Pro report
+  // si zapamatuj, že tento klient běh spustil.
+  famStartedHere = true;
+  renderScenarios();
+}
+
+// Vykreslení stavu rodinného scénáře ze serveru (volá se z WS i z GET při připojení)
+let famActive = false;
+let famStartedHere = false;
+function applyFamilyState(st) {
+  const hud = document.getElementById('sim-hud');
+  if (!st || st.active === false) {
+    famActive = false;
+    return;
+  }
+  famActive = true;
+  const members = Object.keys(st.members || {});
+  const sm = st.simNowMs || 0;
+
+  // HUD lišta (na všech záložkách)
+  const hudClock = document.getElementById('hud-simclock');
+  const hudDate = document.getElementById('hud-date');
+  const hudReal = document.getElementById('hud-realrun');
+  const hudBar = document.getElementById('hud-bar');
+  const hudMembers = document.getElementById('hud-members');
+  if (hud) hud.style.display = 'flex';
+  if (hudClock) hudClock.textContent = famFmtClock(sm);
+  if (hudDate) hudDate.textContent = st.dateLabel ? '📅 ' + st.dateLabel : '';
+  if (hudReal) {
+    const realSec = st.realStart ? Math.floor((Date.now() - st.realStart) / 1000) : 0;
+    hudReal.textContent = 'běh ' + Math.floor(realSec/60) + ':' + String(realSec%60).padStart(2,'0') + ' · ' + (st.speed||'') + '×';
+  }
+  if (hudBar) hudBar.style.width = (st.pct || 0) + '%';
+  if (hudMembers) {
+    hudMembers.innerHTML = members.map(m => {
+      const ms = st.members[m];
+      const dur = (!ms.done && ms.sinceSimMs != null) ? ' (' + famFmtDur(Math.max(0, sm - ms.sinceSimMs)) + ')' : '';
+      return '<span style="font-size:11px;background:#1c1f2b;border:1px solid #2a2d3a;border-radius:10px;padding:2px 8px;white-space:nowrap">'
+        + (FAM_NAMES[m]||m) + ': ' + (ms.statusText || 'start') + dur + '</span>';
+    }).join('');
+  }
+
+  // Progres na záložce Scénáře
+  const progWrap = document.getElementById('sc-progress');
+  const progTitle = document.getElementById('sc-prog-title');
+  const progStatus = document.getElementById('sc-prog-status');
+  const progBar = document.getElementById('sc-prog-bar');
+  const stepsList = document.getElementById('sc-steps-list');
+  const stopBtn = document.getElementById('sc-stop-btn');
+  if (progWrap) progWrap.classList.add('visible');
+  if (stopBtn) stopBtn.style.display = '';
+  if (progTitle) progTitle.textContent = (st.icon ? st.icon + ' ' : '') + (st.title || '') + ' — celá rodina';
+  if (progBar) progBar.style.width = (st.pct || 0) + '%';
+  if (progStatus) progStatus.textContent = '🕐 ' + famFmtClock(sm) + ' — běží ' + members.length + ' členů (server)';
+  if (stepsList) stepsList.innerHTML = members.map(m => {
+    const ms = st.members[m];
+    const dur = (!ms.done && ms.sinceSimMs != null) ? ' (' + famFmtDur(Math.max(0, sm - ms.sinceSimMs)) + ')' : '';
+    return '<span class="sc-step-chip">' + (FAM_NAMES[m]||m) + ': ' + (ms.statusText || 'start') + dur + '</span>';
+  }).join('');
+}
+
+function applyFamilyFinished() {
+  famActive = false;
+  const progStatus = document.getElementById('sc-prog-status');
+  if (progStatus) progStatus.textContent = '✅ Hotovo';
+  const progBar = document.getElementById('sc-prog-bar');
+  if (progBar) progBar.style.width = '100%';
+  const hudBar = document.getElementById('hud-bar');
+  if (hudBar) hudBar.style.width = '100%';
+  const stopBtn = document.getElementById('sc-stop-btn');
+  if (stopBtn) stopBtn.style.display = 'none';
+  // Report dokonči jen klient, který běh spustil (má scCurrentReport)
+  if (famStartedHere && scCurrentReport) {
+    scLoadReportLogs(scCurrentReport).then(() => scFinishReport()).catch(()=>{});
+  }
+  famStartedHere = false;
+  setTimeout(() => { const h = document.getElementById('sim-hud'); if (h && !famActive) h.style.display = 'none'; }, 3000);
+  renderScenarios();
+}
+
+// Při připojení/obnovení stránky zjisti, jestli na serveru neběží rodinný scénář
+async function famSyncFromServer() {
+  try {
+    const st = await fetch('/simulate/family').then(r => r.json());
+    if (st && st.active) applyFamilyState(st);
+  } catch(e) {}
 }
 
 // Stání přes /simulate/stay + čekání na sim_arrived
@@ -2862,9 +2848,10 @@ function scShowOnMap(lat, lon, name) {
 
 function scStopAll() {
   scAbort = true;
-  // zastav VŠECHNY běžící simulace na serveru (rodina = 4 členové), ne jen jednoho
-  fetch('/simulate/stop-all', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' })
-    .catch(()=>{});
+  // zastav rodinný scénář na serveru (orchestraci i všechny členy)
+  fetch('/simulate/family/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' }).catch(()=>{});
+  fetch('/simulate/stop-all', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' }).catch(()=>{});
+  famActive = false;
   const gs = document.getElementById('sc-global-status');
   if (gs) gs.textContent = '⏹ Zastaveno';
   // v HUD pruhu nabídni vymazání testovacích dat

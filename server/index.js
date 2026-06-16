@@ -1011,6 +1011,14 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
 // ─── Server-side simulace ────────────────────────────────────────────────────
 const activeSimulations = {}; // { member: { timer, step, coords, simTime, stayTimer } }
 
+// Serverová orchestrace rodinného scénáře — běží nezávisle na prohlížeči.
+// Klient scénář jen spustí; server sám plánuje segmenty a rozesílá stav přes
+// WebSocket, takže start z mobilu přežije odpojení a kterýkoli klient (mobil
+// i PC) vidí identický průběh. Stav se zálohuje do redisLive (přežije restart).
+let familyRun = null;
+let familyBroadcastTimer = null;
+let familyPersistThrottle = 0;
+
 function simCalcVel(lat1, lon1, lat2, lon2, intervalMs) {
   const d = distance(lat1, lon1, lat2, lon2);
   return (d / (intervalMs / 1000)) * 3.6;
@@ -1030,6 +1038,7 @@ async function runSimStep(member) {
     // Dorazili jsme — spustí callback
     sim.active = false;
     broadcast({ type: 'sim_arrived', member, lat: coords[coords.length-1][0], lon: coords[coords.length-1][1] });
+    if (sim.onArrive) { const cb = sim.onArrive; sim.onArrive = null; cb(); }
     return;
   }
 
@@ -1300,6 +1309,229 @@ app.post('/simulate/stop-all', (req, res) => {
   console.log('[SIM] Stop-all: zastaveno ' + stopped.length + ' simulaci (' + stopped.join(', ') + ')');
   res.json({ ok: true, stopped });
 });
+
+// ─── Serverová orchestrace rodinného scénáře ───────────────────────────────────
+function familySimNowMs() {
+  if (!familyRun) return 0;
+  return Math.round((Date.now() - familyRun.realStart) * familyRun.speed);
+}
+
+// Promisifikovaná jízda po trase (OSRM, s fallbackem na přímku když OSRM selže)
+function simRouteInternal(member, fromLat, fromLon, toLat, toLon, profile, speed, startSimTime) {
+  return new Promise(async (resolve) => {
+    let coords;
+    try {
+      coords = await fetchOSRMRoute(parseFloat(fromLat), parseFloat(fromLon), parseFloat(toLat), parseFloat(toLon), profile);
+    } catch(e) { coords = null; }
+    if (!coords || !coords.length) coords = [[parseFloat(fromLat), parseFloat(fromLon)], [parseFloat(toLat), parseFloat(toLon)]];
+    if (activeSimulations[member]) {
+      activeSimulations[member].active = false;
+      activeSimulations[member].stayActive = false;
+      if (activeSimulations[member].timer) clearTimeout(activeSimulations[member].timer);
+    }
+    activeSimulations[member] = {
+      active: true, stayActive: false, coords, step: 0, profile, speed,
+      simTime: startSimTime || Date.now(), timer: null, onArrive: () => resolve()
+    };
+    memberFenceHyst[member] = null;
+    runSimStep(member);
+  });
+}
+
+// Promisifikované stání (vč. vyhodnocení clusteru po dokončení, jako /simulate/stay)
+function simStayInternal(member, lat, lon, minutes, speed, startSimTime, jitterM) {
+  return new Promise(async (resolve) => {
+    if (activeSimulations[member]) {
+      activeSimulations[member].active = false;
+      activeSimulations[member].stayActive = false;
+      if (activeSimulations[member].timer) clearTimeout(activeSimulations[member].timer);
+    }
+    activeSimulations[member] = {
+      active: false, stayActive: false, coords: [], step: 0, speed,
+      simTime: startSimTime || Date.now(), timer: null
+    };
+    const tracker = getTracker(member);
+    tracker.cluster = null;
+    await saveTracker(member);
+    runSimStay(member, lat, lon, minutes, async () => {
+      const tracker2 = getTracker(member);
+      broadcast({ type: 'sim_arrived', member, lat, lon, afterStay: true });
+      delete activeSimulations[member];
+      if (tracker2.cluster && tracker2.cluster.points.length >= MIN_STOP_POINTS) {
+        evaluateCluster(member, tracker2.cluster).then(() => { tracker2.cluster = null; saveTracker(member); });
+      }
+      resolve();
+    }, jitterM);
+  });
+}
+
+const FAM_SLEEP_TICK = 300;
+function familySleepUntilSim(targetSimMs) {
+  return new Promise((resolve) => {
+    const check = () => {
+      if (!familyRun || !familyRun.active) return resolve();
+      const remainingReal = (targetSimMs - familySimNowMs()) / familyRun.speed;
+      if (remainingReal <= 0) return resolve();
+      setTimeout(check, Math.min(remainingReal, FAM_SLEEP_TICK));
+    };
+    check();
+  });
+}
+
+async function runFamilyMember(member) {
+  const mst = familyRun.members[member];
+  if (!mst) return;
+  const segs = mst.segs || [];
+  for (let i = 0; i < segs.length; i++) {
+    if (!familyRun || !familyRun.active) return;
+    const seg = segs[i];
+    // Přeskoč segmenty, které už byly hotové (resume po restartu)
+    if (i < mst.idx) continue;
+    mst.idx = i;
+    await familySleepUntilSim(seg.startMin * 60000);
+    if (!familyRun || !familyRun.active) return;
+    const segStart = familyRun.famDayStart + seg.startMin * 60000;
+    if (seg.type === 'travel') {
+      mst.statusText = '🚗 → ' + (seg.name || '');
+      mst.sinceSimMs = seg.startMin * 60000;
+      familyPersist();
+      await simRouteInternal(member, seg.fromLat, seg.fromLon, seg.lat, seg.lon, seg.mode || 'driving-car', familyRun.speed, segStart);
+    } else if (seg.type === 'stay') {
+      mst.statusText = '⏱ ' + (seg.name || '');
+      mst.sinceSimMs = seg.startMin * 60000;
+      familyPersist();
+      await simStayInternal(member, seg.lat, seg.lon, seg.durMin, familyRun.speed, segStart, seg.stopJitterM);
+    }
+  }
+  if (familyRun && familyRun.members[member]) {
+    familyRun.members[member].statusText = '✓ doma';
+    familyRun.members[member].done = true;
+    familyPersist();
+  }
+}
+
+function familyStatePayload() {
+  if (!familyRun) return { type: 'family_state', active: false };
+  const sm = Math.min(familySimNowMs(), familyRun.maxSimMs);
+  const members = {};
+  for (const [m, st] of Object.entries(familyRun.members)) {
+    members[m] = { statusText: st.statusText || '', sinceSimMs: st.sinceSimMs || 0, done: !!st.done };
+  }
+  const allDone = Object.values(familyRun.members).every(s => s.done);
+  return {
+    type: 'family_state', active: familyRun.active, scenarioId: familyRun.scenarioId,
+    title: familyRun.title, icon: familyRun.icon, dateLabel: familyRun.dateLabel,
+    speed: familyRun.speed, realStart: familyRun.realStart,
+    simNowMs: sm, maxSimMs: familyRun.maxSimMs,
+    pct: Math.min(100, Math.round(sm / familyRun.maxSimMs * 100)),
+    members, allDone
+  };
+}
+
+function startFamilyBroadcast() {
+  if (familyBroadcastTimer) clearInterval(familyBroadcastTimer);
+  familyBroadcastTimer = setInterval(() => {
+    if (!familyRun) { clearInterval(familyBroadcastTimer); familyBroadcastTimer = null; return; }
+    broadcast(familyStatePayload());
+    // občasná záloha simulačního času (kvůli resume po restartu)
+    if (Date.now() - familyPersistThrottle > 4000) { familyPersist(); }
+    if (familyRun.active && Object.values(familyRun.members).every(s => s.done)) finishFamilyRun();
+  }, 500);
+}
+
+async function familyPersist() {
+  familyPersistThrottle = Date.now();
+  if (!familyRun) return;
+  try {
+    await redisLive.set('family_run', JSON.stringify({
+      scenarioId: familyRun.scenarioId, title: familyRun.title, icon: familyRun.icon,
+      speed: familyRun.speed, famDayStart: familyRun.famDayStart, dateLabel: familyRun.dateLabel,
+      realStart: familyRun.realStart, maxSimMs: familyRun.maxSimMs, mode: familyRun.mode,
+      lastSimMs: familySimNowMs(),
+      members: Object.fromEntries(Object.entries(familyRun.members).map(([m, s]) =>
+        [m, { segs: s.segs, idx: s.idx, statusText: s.statusText, sinceSimMs: s.sinceSimMs, done: s.done }]))
+    }));
+  } catch(e) {}
+}
+async function familyClearPersist() { try { await redisLive.del('family_run'); } catch(e) {} }
+
+function finishFamilyRun() {
+  if (!familyRun) return;
+  familyRun.active = false;
+  broadcast({ type: 'family_state', active: false, finished: true, ...{} });
+  broadcast({ type: 'family_finished', scenarioId: familyRun.scenarioId });
+  if (familyBroadcastTimer) { clearInterval(familyBroadcastTimer); familyBroadcastTimer = null; }
+  familyClearPersist();
+  setTimeout(() => { if (familyRun && !familyRun.active) familyRun = null; }, 8000);
+  console.log('[FAM] Scénář dokončen');
+}
+
+function stopFamilyRun() {
+  for (const member of Object.keys(activeSimulations)) {
+    const sim = activeSimulations[member];
+    sim.active = false; sim.stayActive = false;
+    if (sim.timer) clearTimeout(sim.timer);
+    delete activeSimulations[member];
+    broadcast({ type: 'sim_stopped', member });
+  }
+  if (familyRun) familyRun.active = false;
+  if (familyBroadcastTimer) { clearInterval(familyBroadcastTimer); familyBroadcastTimer = null; }
+  broadcast({ type: 'family_stopped' });
+  familyClearPersist();
+  familyRun = null;
+  console.log('[FAM] Scénář zastaven');
+}
+
+async function launchFamily(plan, resume = false) {
+  const speed = plan.speed || 30;
+  const members = {};
+  let maxSim = 60000;
+  for (const m of Object.keys(plan.tracks || plan.members || {})) {
+    const src = plan.tracks ? plan.tracks[m] : plan.members[m].segs;
+    const segs = src || [];
+    members[m] = resume && plan.members && plan.members[m]
+      ? { segs, idx: plan.members[m].idx || 0, statusText: plan.members[m].statusText || '', sinceSimMs: plan.members[m].sinceSimMs || 0, done: !!plan.members[m].done }
+      : { segs, idx: 0, statusText: '', sinceSimMs: 0, done: false };
+    for (const s of segs) maxSim = Math.max(maxSim, (s.startMin + (s.durMin || 0)) * 60000);
+  }
+  familyRun = {
+    active: true, scenarioId: plan.scenarioId, title: plan.title || '', icon: plan.icon || '',
+    speed, famDayStart: plan.famDayStart, dateLabel: plan.dateLabel || '',
+    mode: plan.mode || currentMode,
+    realStart: resume ? (Date.now() - (plan.lastSimMs || 0) / speed) : Date.now(),
+    members, maxSimMs: plan.maxSimMs || maxSim
+  };
+  await familyPersist();
+  broadcast({ type: 'family_started', scenarioId: familyRun.scenarioId, title: familyRun.title });
+  startFamilyBroadcast();
+  for (const m of Object.keys(familyRun.members)) {
+    if (familyRun.members[m].done) continue;
+    runFamilyMember(m).catch(e => console.error('[FAM] člen ' + m + ':', e.message));
+  }
+}
+
+// POST /simulate/family — spustí rodinný scénář na serveru
+app.post('/simulate/family', async (req, res) => {
+  const { scenarioId, title, icon, speed, famDayStart, dateLabel, tracks } = req.body;
+  if (!tracks || typeof tracks !== 'object') return res.status(400).json({ error: 'tracks required' });
+  if (!famDayStart) return res.status(400).json({ error: 'famDayStart required' });
+  stopFamilyRun();  // zruš případný předchozí běh
+  await launchFamily({ scenarioId, title, icon, speed: parseInt(speed) || 30, famDayStart, dateLabel, tracks, mode: currentMode });
+  console.log('[FAM] Spuštěn scénář "' + (title || scenarioId) + '" pro ' + Object.keys(tracks).length + ' členů, ' + (parseInt(speed) || 30) + '×');
+  res.json({ ok: true, scenarioId, members: Object.keys(tracks), maxSimMs: familyRun.maxSimMs });
+});
+
+// GET /simulate/family — aktuální stav (pro klienta, který se připojí později)
+app.get('/simulate/family', (req, res) => {
+  res.json(familyStatePayload());
+});
+
+// POST /simulate/family/stop — zastaví rodinný scénář
+app.post('/simulate/family/stop', (req, res) => {
+  stopFamilyRun();
+  res.json({ ok: true });
+});
+
 
 // Simulace — stav
 app.get('/simulate/status', (req, res) => {
@@ -1705,6 +1937,36 @@ async function startMqtt() {
 }
 
 // ─── Start ────────────────────────────────────────────────────────────────────
+async function resumeFamilyOnBoot() {
+  let raw;
+  try { raw = await redisLive.get('family_run'); } catch(e) { return; }
+  if (!raw) return;
+  try {
+    const plan = JSON.parse(raw);
+    const lastSim = plan.lastSimMs || 0;
+    const allDone = plan.members && Object.values(plan.members).every(s => s.done);
+    if (allDone || lastSim >= (plan.maxSimMs || 0)) { await redisLive.del('family_run'); return; }
+    // Obnov režim (sim běží v test módu) a navaž na simulační čas, kde běh skončil
+    if (plan.mode && plan.mode !== currentMode) { try { await setMode(plan.mode); } catch(e) {} }
+    // U členů přeskoč segmenty, které už podle simulačního času skončily
+    for (const m of Object.keys(plan.members || {})) {
+      const segs = plan.members[m].segs || [];
+      let idx = 0;
+      for (let i = 0; i < segs.length; i++) {
+        const end = (segs[i].startMin + (segs[i].durMin || 0)) * 60000;
+        if (end <= lastSim) { idx = i + 1; } else break;
+      }
+      plan.members[m].idx = idx;
+      plan.members[m].done = idx >= segs.length;
+    }
+    console.log('[FAM] Obnovuji rozdělaný scénář po restartu (sim ' + Math.round(lastSim / 60000) + ' min)');
+    await launchFamily(plan, true);
+  } catch(e) {
+    console.error('[FAM] Resume selhal:', e.message);
+    try { await redisLive.del('family_run'); } catch(_) {}
+  }
+}
+
 async function main() {
   await redisLive.connect();
   await redisTest.connect();
@@ -1713,6 +1975,7 @@ async function main() {
   await loadFences();
   await loadTrackers();
   await startMqtt();
+  await resumeFamilyOnBoot();
   httpServer.listen(PORT, () => {
     console.log('✓ Server běží na portu ' + PORT);
     if (GOOGLE_API_KEY) console.log('✓ Google Places API klíč načten');
