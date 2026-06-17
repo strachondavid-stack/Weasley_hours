@@ -103,7 +103,7 @@ const SKIP_PLACE_TYPES = [
   'atm', 'bank', 'gas_station', 'car_wash', 'car_repair'
 ];
 
-async function getNearbyPlaces(lat, lon, radius = 300) {
+async function getNearbyPlaces(lat, lon, radius = 300, points = null) {
   if (!GOOGLE_API_KEY) return [];
   try {
     const url = `/maps/api/place/nearbysearch/json?location=${lat},${lon}&radius=${radius}&language=cs&key=${GOOGLE_API_KEY}`;
@@ -115,15 +115,24 @@ async function getNearbyPlaces(lat, lon, radius = 300) {
       }).on('error', reject);
     });
     if (!data.results) return [];
+    // Vzdálenost = jak BLÍZKO se člen k POI dostal (nejbližší bod pobytu), ne od středu.
+    // U velkého objektu (procházení) tak POI kdekoli podél trasy dostane malou vzdálenost.
+    const pts = (Array.isArray(points) && points.length) ? points : [{ lat, lon }];
     return data.results
-      .map(p => ({
-        name: p.name || '',
-        primaryType: p.types?.[0] || '',
-        types: (p.types || []).slice(0, 5),
-        dist: Math.round(distance(lat, lon, p.geometry.location.lat, p.geometry.location.lng)),
-        rating: p.rating || null,
-        vicinity: p.vicinity || '',
-      }))
+      .map(p => {
+        const plat = p.geometry.location.lat, plon = p.geometry.location.lng;
+        let minD = Infinity;
+        for (const q of pts) { const d = distance(q.lat, q.lon, plat, plon); if (d < minD) minD = d; }
+        return {
+          name: p.name || '',
+          primaryType: p.types?.[0] || '',
+          types: (p.types || []).slice(0, 5),
+          dist: Math.round(minD),                                   // od nejbližšího bodu pobytu
+          distCenter: Math.round(distance(lat, lon, plat, plon)),   // od středu (info)
+          rating: p.rating || null,
+          vicinity: p.vicinity || '',
+        };
+      })
       .filter(p => !SKIP_PLACE_TYPES.includes(p.primaryType) && p.name)
       .sort((a, b) => a.dist - b.dist)
       .slice(0, 10);
@@ -609,7 +618,7 @@ async function recordAiAsked(lat, lon) {
   } catch(e) {}
 }
 
-async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat = false, forceLong = false, ts = Date.now()) {
+async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat = false, forceLong = false, ts = Date.now(), points = null) {
   // Zaznamenej návštěvu hned (dedup 6 h zajistí, že dlouhé stání = 1 návštěva,
   // a že early(5 min)+long(30 min) vyhodnocení téhož stání se nezapíše dvakrát).
   // isNewVisit = true jen u SAMOSTATNÉ návštěvy (≥6 h od minulé), ne u driftu.
@@ -670,7 +679,19 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
 
   // Kontext pro AI
   await recordAiAsked(lat, lon);   // zaznamenej cooldown PŘED drahými voláními (Google + Claude)
-  const placesNearby = await getNearbyPlaces(lat, lon, 300);
+
+  // Rozprostření pobytu rozhoduje, jak daleko hledat POI:
+  //  - malý objekt (těsné body) → úzký radius, ať nechytáme vzdálené nesouvisející POI
+  //  - velký objekt (člen se prochází → body rozeseté) → širší radius, ať chytneme i
+  //    POI na okraji; vzdálenost se pak měří od nejbližšího bodu (kde člen reálně byl)
+  const hasSpread = Array.isArray(points) && points.length >= 3;
+  let spread = 0;
+  if (hasSpread) for (const p of points) { const d = distance(lat, lon, p.lat, p.lon); if (d > spread) spread = d; }
+  const searchRadius = hasSpread
+    ? Math.round(Math.min(700, Math.max(70, spread * 1.4 + 70)))   // známe rozprostření → adaptuj
+    : 200;                                                          // jen 1 bod (silence) → střední default
+  const placesNearby = await getNearbyPlaces(lat, lon, searchRadius, hasSpread ? points : null);
+  console.log(`[STOP] Rozprostření ${Math.round(spread)}m → radius ${searchRadius}m (${hasSpread ? points.length + ' bodů' : '1 bod'})`);
   const historyVisits = await countNearbyVisits(member, lat, lon, ts, VISIT_RADIUS_M);
   const nearbyMembers = await getRecentNearbyMembers(member, lat, lon);
 
@@ -689,7 +710,7 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
   const dayOfWeek = days[now.getDay()];
   const timeStr = now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0');
 
-  await logEvent('stop_candidate', { member, lat, lon, gapMinutes, historyVisits, nearbyMembers, placesCount: placesNearby.length, dayOfWeek, timeStr, source });
+  await logEvent('stop_candidate', { member, lat, lon, gapMinutes, historyVisits, nearbyMembers, placesCount: placesNearby.length, spread: Math.round(spread), searchRadius, dayOfWeek, timeStr, source });
   console.log(`[STOP] Kandidát [${member}] ${gapMinutes}min @ ${lat.toFixed(5)},${lon.toFixed(5)} | ${placesNearby.length} POI | ${historyVisits}x navštíveno`);
 
   const aiResult = await askClaude(member, lat, lon, { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source, geo, strongMatch });
@@ -887,7 +908,7 @@ async function evaluateCluster(member, cluster, repeat = false, forceLong = fals
   const duration = lastTs - cluster.startTs;
   if (duration < MIN_STOP_DURATION) return;
   const center = clusterCenter(cluster.points);
-  await processStopCandidate(member, center.lat, center.lon, Math.round(duration / 60000), 'cluster', repeat, forceLong, lastTs);
+  await processStopCandidate(member, center.lat, center.lon, Math.round(duration / 60000), 'cluster', repeat, forceLong, lastTs, cluster.points);
 }
 
 // ─── Hlavní tracker ───────────────────────────────────────────────────────────
