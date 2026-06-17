@@ -79,7 +79,8 @@ function httpPost(hostname, path, headers, body) {
 
 // ─── Logging ──────────────────────────────────────────────────────────────────
 // Typy: gps_received, stop_candidate, ai_request, ai_response, ai_error,
-//       place_saved, place_rejected, fence_added
+//       place_saved, place_rejected, fence_added, img_selected,
+//       geocode, geocode_error, addr_match, addr_bonus, visit_bonus
 
 const LOG_TTL = 30 * 24 * 3600;
 
@@ -138,13 +139,18 @@ async function getNearbyPlaces(lat, lon, radius = 300) {
 const GEOCODE_CACHE_TTL = 30 * 24 * 3600;   // adresa bodu je stálá → cache na 30 dní
 const ADDR_MATCH_BONUS = 0.15;              // bonus k confidence při shodě ulice (ne přímo číslo)
 
-async function reverseGeocode(lat, lon) {
+async function reverseGeocode(lat, lon, member = null) {
   if (!GOOGLE_API_KEY) return null;
   const cacheKey = 'geocode:' + lat.toFixed(5) + ',' + lon.toFixed(5);
   try {
     const cached = await redis.get(cacheKey);
-    if (cached !== null) return JSON.parse(cached);
+    if (cached !== null) {
+      const out = JSON.parse(cached);
+      await logEvent('geocode', { member, lat, lon, cached: true, formatted: out?.formatted || null, route: out?.route || null, streetNumber: out?.streetNumber || null });
+      return out;
+    }
   } catch(e) {}
+  const startTs = Date.now();
   try {
     const url = `/maps/api/geocode/json?latlng=${lat},${lon}&language=cs&key=${GOOGLE_API_KEY}`;
     const data = await new Promise((resolve, reject) => {
@@ -154,6 +160,7 @@ async function reverseGeocode(lat, lon) {
         res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
       }).on('error', reject);
     });
+    const durationMs = Date.now() - startTs;
     const r = (data.results || [])[0];
     let out = null;
     if (r) {
@@ -161,9 +168,18 @@ async function reverseGeocode(lat, lon) {
       out = { formatted: r.formatted_address || null, route: comp('route'), streetNumber: comp('street_number') };
     }
     try { await redis.set(cacheKey, JSON.stringify(out), { EX: GEOCODE_CACHE_TTL }); } catch(e) {}
+    // Google status: OK / ZERO_RESULTS / REQUEST_DENIED (API nepovoleno) / OVER_QUERY_LIMIT ...
+    console.log(`[GEOCODE] ${lat.toFixed(5)},${lon.toFixed(5)} → ${data.status}${out?.formatted ? ' | ' + out.formatted : ''} (${durationMs}ms)`);
+    await logEvent('geocode', {
+      member, lat, lon, cached: false, googleStatus: data.status || null,
+      formatted: out?.formatted || null, route: out?.route || null, streetNumber: out?.streetNumber || null,
+      errorMessage: data.error_message || null, durationMs
+    });
     return out;
   } catch(e) {
+    const durationMs = Date.now() - startTs;
     console.error('[GEOCODE] Chyba:', e.message);
+    await logEvent('geocode_error', { member, lat, lon, error: e.message, durationMs });
     return null;
   }
 }
@@ -659,7 +675,7 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
   const nearbyMembers = await getRecentNearbyMembers(member, lat, lon);
 
   // Reverse geocoding bodu + porovnání adresy s POI (které z míst je to pravé)
-  const geo = await reverseGeocode(lat, lon);
+  const geo = await reverseGeocode(lat, lon, member);
   let strongMatch = null;
   if (geo) {
     for (const p of placesNearby) p.addrScore = addrMatchScore(geo, p.vicinity);
