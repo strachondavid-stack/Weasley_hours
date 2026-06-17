@@ -503,10 +503,6 @@ const lastMotion = {};  // member → { motion, ts }
 const MOTION_CHANGE_CONFIRM = 5;             // bodů po sobě pro ZMĚNU prostředku
 const MOTION_STOP_FORGET_MS = 5 * 60 * 1000; // stání → po 5 min zapomeň prostředek
 const motionState = {};  // member → { mode, candMode, candCount, stoppedSince }
-// Detekované místo, u kterého člen právě stojí — drží jeho status na názvu místa
-// po celou dobu pobytu (i u nepotvrzeného návrhu a během 2min potvrzení geofence),
-// aby se člen s místem identifikoval hned, ne až bude místo naučená geofence.
-const memberAtPlace = {};  // member → { name, lat, lon, radius }
 
 function resolveMotionSticky(member, motionActivities, vel, ts) {
   const inst = resolveMotion(motionActivities, vel);   // okamžité zařazení (rychlost+motion)
@@ -769,12 +765,6 @@ async function savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, ai
     ...(address ? { address } : {}),
     candidates: placesNearby,
   };
-
-  // Hned identifikuj člena s místem (i u návrhu) — drží se, dokud neodejde
-  if (aiName) {
-    memberAtPlace[member] = { name: aiName, lat, lon, radius: 150 };
-    console.log(`[PLACE] ${member} identifikován s místem "${aiName}" (drží do odchodu)`);
-  }
 
   if (autoSave) {
     console.log(`[STOP] Auto-uloženo: "${aiName}" (confidence=${aiConfidence})`);
@@ -1105,23 +1095,9 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
     // Pokud jsme doma a pohybujeme se — necháme doma
   }
 
-  // Override: člen stojí u detekovaného místa → drž status na názvu místa
-  // (i návrh bez geofence, i během potvrzování geofence). Přepisuje jen pohyb/cestu,
-  // potvrzenou geofenci (vč. domova) nechává být. Mizí, jakmile člen odejde.
-  const ap = memberAtPlace[member];
-  if (ap) {
-    const inside = distance(lat, lon, ap.lat, ap.lon) <= ap.radius;
-    const movingFast = ((motionActivities.includes('automotive') || motionActivities.includes('cycling')) && vel > 5) || vel > 15;
-    if (inside && !movingFast) {
-      ap.miss = 0;
-      if (status === 'cesta' || isMotionStatus(status)) status = ap.name;
-    } else {
-      // Nevynuluj hned kvůli jednomu zatoulanému bodu (GPS šum / jiný zdroj GPS).
-      // Smaž až při jasném pohybu, nebo po 2 po sobě jdoucích bodech mimo radius.
-      ap.miss = (ap.miss || 0) + 1;
-      if (movingFast || ap.miss >= 2) memberAtPlace[member] = null;
-    }
-  }
+  // Status = výhradně to, co systém sám rozpozná: geofence (resolveStatus) + pohyb.
+  // Žádné názvy ze scénáře ani z nepotvrzených návrhů — chceme vidět reálné chování.
+
   // memberImgCache drží obrázek po dobu jednoho pobytu — mění se jen při změně statusu
   let img;
   const mc = memberImgCache[member];
@@ -1528,17 +1504,14 @@ async function runFamilyMember(member) {
     if (seg.type === 'travel') {
       mst.statusText = '🚗 → ' + (seg.name || '');
       mst.sinceSimMs = seg.startMin * 60000;
-      memberAtPlace[member] = null;   // na cestě se neidentifikuj s místem
       familyPersist();
       await simRouteInternal(member, seg.fromLat, seg.fromLon, seg.lat, seg.lon, seg.mode || 'driving-car', familyRun.speed, segStart);
     } else if (seg.type === 'stay') {
       mst.statusText = '⏱ ' + (seg.name || '');
       mst.sinceSimMs = seg.startMin * 60000;
-      // V simulaci známe místo hned ze scénáře → identifikuj člena s místem okamžitě
-      // (domov řeší geofence 'doma'). Nezasahuje do detekce, jen do zobrazeného statusu.
-      if (seg.category !== 'home' && seg.name) {
-        memberAtPlace[member] = { name: seg.name, lat: seg.lat, lon: seg.lon, radius: 150 };
-      }
+      // POZN.: HUD (statusText) je nápověda obsluze, co scénář dělá. Živý status
+      // člena (chip/hodiny) se z názvu segmentu ZÁMĚRNĚ neplní — musí vzejít čistě
+      // ze systému (geofence + detekce + pohyb), aby šlo testovat reálné chování.
       familyPersist();
       await simStayInternal(member, seg.lat, seg.lon, seg.durMin, familyRun.speed, segStart, seg.stopJitterM);
     }
