@@ -2358,6 +2358,13 @@ async function scRunFamily(scenarioId) {
   const speed = parseInt(document.getElementById('sc-speed').value) || 30;
   console.log('[FAM] start (server-side)', scenarioId, 'speed', speed);
 
+  // Simulace běží izolovaně v TEST módu — reálná GPS z mobilů do ní nezasahuje
+  // (jinak by reálný bod přepsal polohu člena a shodil identitu s místem na "auto").
+  try {
+    const mr = await fetch('/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'test' }) }).then(r => r.json());
+    if (typeof updateModeUI === 'function') updateModeUI(mr.mode || 'test');
+  } catch(e) {}
+
   // Kotva simulovaného dne (server posune o týden za každý běh → samostatné návštěvy)
   const targetDow = (typeof sc._dayOverride === 'number') ? sc._dayOverride
                   : (typeof sc.dayOfWeek === 'number' ? sc.dayOfWeek : new Date().getDay());
