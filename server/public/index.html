@@ -1904,6 +1904,8 @@ setInterval(()=>{
 #page-log .log-fbtn.place.active{background:#065f46;color:#fff}
 #page-log .log-fbtn.err{border-color:#991b1b;color:#f87171}
 #page-log .log-fbtn.err.active{background:#991b1b;color:#fff}
+#page-log .log-fbtn.geo{border-color:#0f766e;color:#5ed6a0}
+#page-log .log-fbtn.geo.active{background:#0f766e;color:#fff}
 #page-log .log-member-btn{font-size:11px;padding:3px 9px;border-radius:12px;border:1px solid #333;background:none;color:#666;cursor:pointer;transition:all 0.12s}
 #page-log .log-member-btn.active{background:#444;color:#fff;border-color:#666}
 #page-log .log-list{flex:1;overflow-y:auto;padding:6px 8px;display:flex;flex-direction:column;gap:4px}
@@ -1931,6 +1933,10 @@ setInterval(()=>{
 .badge-ai_skipped{background:#0a1a1a;color:#5eead4}
 .badge-fence_added{background:#0c2340;color:#60a5fa}
 .badge-img_selected{background:#1a0a2e;color:#c084fc}
+.badge-geocode{background:#0a2418;color:#5ed6a0}
+.badge-geocode_error{background:#450a0a;color:#f87171}
+.badge-addr_match{background:#06281f;color:#34d399}
+.badge-addr_bonus{background:#10261a;color:#86efac}
 .badge-default{background:#1a1a1a;color:#666}
 </style>
 
@@ -1945,6 +1951,8 @@ setInterval(()=>{
   <button class="log-fbtn ai" data-type="ai_skipped">AI přeskočeno</button>
   <button class="log-fbtn err" data-type="ai_error">Chyba</button>
   <button class="log-fbtn" data-type="fence_added">Geofence</button>
+  <button class="log-fbtn geo" data-type="geocode">Adresa</button>
+  <button class="log-fbtn geo" data-type="addr_match">Shoda adr.</button>
   <button class="log-refresh" id="logRefreshBtn">↻ Obnovit</button>
 </div>
 <div class="log-toolbar" style="padding-top:4px;padding-bottom:6px" id="logMemberBar">
@@ -1990,6 +1998,10 @@ const LOG_LIMITS = {
   'place_rejected': 30,
   'fence_added': 50,
   'img_selected': 20,
+  'geocode': 30,
+  'geocode_error': 20,
+  'addr_match': 30,
+  'addr_bonus': 30,
 };
 
 async function loadLog() {
@@ -2016,7 +2028,7 @@ function logRenderEntry(l, i) {
   const t = new Date(l.ts).toLocaleTimeString('cs-CZ', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
   const d = new Date(l.ts).toLocaleDateString('cs-CZ', {day:'2-digit',month:'2-digit'});
   const type = l.type || 'unknown';
-  const badgeClass = 'badge-' + (type in {gps_received:1,ai_response:1,ai_request:1,ai_error:1,ai_skipped:1,stop_candidate:1,place_saved:1,place_rejected:1,fence_added:1,img_selected:1} ? type : 'default');
+  const badgeClass = 'badge-' + (type in {gps_received:1,ai_response:1,ai_request:1,ai_error:1,ai_skipped:1,stop_candidate:1,place_saved:1,place_rejected:1,fence_added:1,img_selected:1,geocode:1,geocode_error:1,addr_match:1,addr_bonus:1} ? type : 'default');
   
   const title = logTitle(l);
   const detail = logDetail(l);
@@ -2051,6 +2063,10 @@ function logTitle(l) {
     case 'ai_skipped': return `${l.reason || 'cooldown'} · ${l.lat?.toFixed(4)},${l.lon?.toFixed(4)}${l.gapMinutes ? ' · '+l.gapMinutes+'min' : ''}`;
     case 'fence_added': return `"${l.name}" r=${l.radius}m`;
     case 'img_selected': return `${l.status} → ${l.selectedImg || 'žádný'}`;
+    case 'geocode': return `${l.cached ? '(cache) ' : ''}${l.formatted || l.googleStatus || '–'}`;
+    case 'geocode_error': return l.error || '?';
+    case 'addr_match': return `→ "${l.to}"${l.from && l.from !== l.to ? ' (z "' + l.from + '")' : ''}`;
+    case 'addr_bonus': return `"${l.name}" +bonus`;
     default: return JSON.stringify(l).slice(0, 80);
   }
 }
@@ -2089,6 +2105,27 @@ function logDetail(l) {
       return 'lat: ' + l.lat + nl + 'lon: ' + l.lon + nl + 'status: ' + l.status + nl + 'vel: ' + l.vel + nl + 'source: ' + l.source;
     case 'fence_added':
       return 'jméno: ' + esc(l.name) + nl + 'lat: ' + l.lat + nl + 'lon: ' + l.lon + nl + 'radius: ' + l.radius + 'm';
+    case 'geocode':
+      return 'adresa: ' + esc(l.formatted || '–') + nl +
+        'ulice: ' + esc(l.route || '–') + nl +
+        'číslo: ' + esc(l.streetNumber || '–') + nl +
+        'cache: ' + (l.cached ? 'ano' : 'ne') + nl +
+        'Google status: ' + esc(l.googleStatus || '–') +
+        (l.errorMessage ? nl + 'chyba: ' + esc(l.errorMessage) : '') +
+        (l.durationMs != null ? nl + 'latence: ' + l.durationMs + 'ms' : '') + nl +
+        'lat: ' + l.lat + nl + 'lon: ' + l.lon;
+    case 'geocode_error':
+      return 'chyba: ' + esc(l.error) + nl + 'lat: ' + l.lat + nl + 'lon: ' + l.lon + (l.durationMs != null ? nl + 'latence: ' + l.durationMs + 'ms' : '');
+    case 'addr_match':
+      return 'vybráno: ' + esc(l.to) + nl +
+        'původní návrh: ' + esc(l.from || '–') + nl +
+        'adresa: ' + esc(l.address || '–') + nl +
+        'adresa POI: ' + esc(l.vicinity || '–') + nl +
+        'lat: ' + l.lat + nl + 'lon: ' + l.lon;
+    case 'addr_bonus':
+      return 'místo: ' + esc(l.name) + nl +
+        'adresa: ' + esc(l.address || '–') + nl +
+        'confidence: ' + (l.confidenceBefore != null ? l.confidenceBefore + ' → ' + l.confidenceAfter : '–');
     default:
       return '<pre style="white-space:pre-wrap;word-break:break-all">' + esc(JSON.stringify(l, null, 2)) + '</pre>';
   }
