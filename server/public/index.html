@@ -2134,6 +2134,7 @@ function logDetail(l) {
       return 'na adrese je: ' + esc(l.name) + nl +
         'typ: ' + esc(l.primaryType || '–') + nl +
         'vzdálenost: ' + l.dist + ' m' + nl +
+        'shoda adresy: ' + (l.addrScore === 2 ? 'ulice+číslo (jisté)' : l.addrScore === 1 ? 'jen ulice' : 'ne') + nl +
         'adresa zastávky: ' + esc(l.address || '–') + nl +
         'adresa POI: ' + esc(l.vicinity || '–');
     default:

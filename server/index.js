@@ -224,7 +224,10 @@ async function reverseGeocode(lat, lon, member = null) {
     let out = null;
     if (r) {
       const comp = (type) => (r.address_components || []).find(c => (c.types || []).includes(type))?.long_name || null;
-      out = { formatted: r.formatted_address || null, route: comp('route'), streetNumber: comp('street_number') };
+      const types = r.types || [];
+      const residential = !types.includes('establishment') && !types.includes('point_of_interest')
+        && (types.includes('premise') || types.includes('subpremise') || types.includes('street_address'));
+      out = { formatted: r.formatted_address || null, route: comp('route'), streetNumber: comp('street_number'), types, residential };
     }
     try { await redis.set(cacheKey, JSON.stringify(out), { EX: GEOCODE_CACHE_TTL }); } catch(e) {}
     // Google status: OK / ZERO_RESULTS / REQUEST_DENIED (API nepovoleno) / OVER_QUERY_LIMIT ...
@@ -327,7 +330,7 @@ async function askClaude(member, lat, lon, context) {
     return null;
   }
 
-  const { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source, geo, strongMatch } = context;
+  const { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source, geo, strongMatch, residential } = context;
 
   // Zvýrazni nejbližší místo — pokud je výrazně blíž než ostatní, je to pravděpodobný cíl
   let placesStr = '  Žádná místa nenalezena';
@@ -346,6 +349,7 @@ async function askClaude(member, lat, lon, context) {
   const addrStr = (geo && geo.formatted)
     ? '\nAdresa zastávky (reverse geocoding): ' + geo.formatted
       + (strongMatch ? '\n→ Adresa PŘESNĚ odpovídá POI "' + strongMatch.name + '" — to je velmi pravděpodobně to pravé místo, použij jeho název.' : '')
+      + (residential ? '\n→ POZOR: tato adresa je REZIDENČNÍ (rodinný dům) a na tomto čísle popisném NENÍ registrovaný žádný podnik. NEPOJMENOVÁVEJ místo podle okolní firmy (obchod/dílna o pár čísel dál NENÍ toto místo). Pokud je to bydliště/návštěva, vrať name: null (uživatel ho pojmenuje sám), should_save klidně true u opakované návštěvy.' : '')
     : '';
 
   const nearbyStr = nearbyMembers.length > 0
@@ -760,17 +764,20 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
   if (geo && geo.formatted) {
     atAddress = await findPlaceAtAddress(geo.formatted, lat, lon);
     if (atAddress) {
-      console.log(`[ADDR] Na adrese je: "${atAddress.name}" (${atAddress.primaryType}, ${atAddress.dist}m)`);
-      await logEvent('addr_place', { member, lat, lon, name: atAddress.name, primaryType: atAddress.primaryType, dist: atAddress.dist, address: geo.formatted, vicinity: atAddress.vicinity });
-      // přidej mezi kandidáty (pro AI i pro UI), pokud tam ještě není
-      if (!placesNearby.some(p => p.name === atAddress.name)) {
-        atAddress.addrScore = addrMatchScore(geo, atAddress.vicinity);
-        placesNearby.unshift(atAddress);
-      }
+      atAddress.addrScore = addrMatchScore(geo, atAddress.vicinity);
+      console.log(`[ADDR] Na adrese je: "${atAddress.name}" (${atAddress.primaryType}, ${atAddress.dist}m, shoda=${atAddress.addrScore})`);
+      await logEvent('addr_place', { member, lat, lon, name: atAddress.name, primaryType: atAddress.primaryType, dist: atAddress.dist, addrScore: atAddress.addrScore, address: geo.formatted, vicinity: atAddress.vicinity });
+      if (!placesNearby.some(p => p.name === atAddress.name)) placesNearby.unshift(atAddress);
     }
   }
-  // Nejsilnější jednoznačný výběr dle adresy: přímo podnik na adrese > shoda ulice+číslo
-  const addrPick = atAddress || strongMatch;
+  // Auto-výběr dle adresy POUZE při shodě ulice I čísla popisného (addrScore===2).
+  // Firma "o pár čísel dál" (na stejné ulici, jiné číslo) se NEvybere — rezidenční
+  // adresu bez podniku na tom čísle tak nepojmenujeme po sousední autodílně.
+  const atAddrConfirmed = (atAddress && atAddress.addrScore === 2) ? atAddress : null;
+  const addrPick = atAddrConfirmed || strongMatch;
+  // Rezidenční adresa (rodinný dům) a žádný podnik na tom čísle → nevymýšlet firmu
+  const residentialNoPoi = !!(geo && geo.residential && !addrPick);
+  if (residentialNoPoi) console.log(`[ADDR] Rezidenční adresa bez podniku na čísle → nebudeme pojmenovávat po okolní firmě`);
 
   const now = new Date(ts);   // čas datového bodu (v simulaci = simulovaný čas, ne reálný)
   const days = ['neděle', 'pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota'];
@@ -780,7 +787,7 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
   await logEvent('stop_candidate', { member, lat, lon, gapMinutes, historyVisits, nearbyMembers, placesCount: placesNearby.length, spread: Math.round(spread), searchRadius, dayOfWeek, timeStr, source });
   console.log(`[STOP] Kandidát [${member}] ${gapMinutes}min @ ${lat.toFixed(5)},${lon.toFixed(5)} | ${placesNearby.length} POI | ${historyVisits}x navštíveno`);
 
-  const aiResult = await askClaude(member, lat, lon, { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source, geo, strongMatch: addrPick });
+  const aiResult = await askClaude(member, lat, lon, { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source, geo, strongMatch: addrPick, residential: residentialNoPoi });
 
   // Tvrdý bonus k confidence za opakované návštěvy — opakování je silný signál,
   // který nenecháváme jen na uvážení AI. +0,07 za každou návštěvu nad první, strop +0,30.
