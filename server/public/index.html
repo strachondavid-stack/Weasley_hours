@@ -292,8 +292,7 @@
   <!-- bulk toolbar -->
   <div id="places-bulk-bar" style="display:none;align-items:center;gap:8px;padding:6px 12px;background:#fff3cd;border-bottom:1px solid #ffc107;flex-shrink:0">
     <span id="places-bulk-count" style="font-size:13px;font-weight:600;color:#856404"></span>
-    <button class="btn-action danger" onclick="placesDeleteSelected()" style="font-size:12px;padding:3px 10px">🗑 Smazat vybrané</button>
-    <button class="btn-action" onclick="placesClearSelection()" style="font-size:12px;padding:3px 10px">✕ Zrušit výběr</button>
+    <span id="places-bulk-actions" style="display:flex;gap:8px;align-items:center"></span>
   </div>
   <div class="mgmt-toolbar" style="padding:4px 12px;border-top:none;border-bottom:1px solid #eee">
     <button class="fbtn" id="places-select-all-btn" onclick="placesSelectAll()" style="font-size:12px">☑ Vybrat vše</button>
@@ -728,6 +727,8 @@ const markers={}, placeMarkers={}, memberState={};
 let allPlaces=[], allFences=[], currentPage='map';
 let placesFilter='all', expandedPlace=null;
 let placesSelected = new Set();
+let placesDeleteArmed = false;
+let deleteArmedId = null;
 let loadingCands={}, editCands={};
 let editingFence=null;
 
@@ -1078,7 +1079,7 @@ function renderPlaceCard(p){
       <button class="btn-action primary" onclick="savePlace('${p.id}')">✓ Uložit</button>
       <button class="btn-action"         onclick="goToMap('${p.id}',${p.lat},${p.lon})">🗺 Na mapě</button>
       <div class="spacer"></div>
-      <button class="btn-action danger"  onclick="deletePlace('${p.id}')">Smazat</button>
+      <button class="btn-action danger"  onclick="deletePlace('${p.id}')">${deleteArmedId===p.id?'✓ Opravdu smazat?':'Smazat'}</button>
     </div>
   </div>
 </div>`;
@@ -1122,7 +1123,9 @@ async function savePlace(id){
   if(res.ok){p.name=name;p._editName=null;expandedPlace=null;await loadPlaces();renderPlaces();reloadPlacesOnMap();}
 }
 async function deletePlace(id){
-  if(!confirm('Smazat toto místo?'))return;
+  // dvoukrokové potvrzení (nativní confirm() je v některých webview potlačený)
+  if(deleteArmedId!==id){ deleteArmedId=id; renderPlaces(); return; }
+  deleteArmedId=null;
   await fetch('/places/'+id,{method:'DELETE'});
   allPlaces=allPlaces.filter(x=>x.id!==id);
   placesSelected.delete(id);
@@ -1171,20 +1174,52 @@ function placesGetVisible() {
 function placesUpdateBulkBar() {
   const bar = document.getElementById('places-bulk-bar');
   const count = document.getElementById('places-bulk-count');
+  const actions = document.getElementById('places-bulk-actions');
   if (!bar) return;
   if (placesSelected.size === 0) {
     bar.style.display = 'none';
+    placesDeleteArmed = false;
+    return;
+  }
+  bar.style.display = 'flex';
+  if (placesDeleteArmed) {
+    count.textContent = 'Opravdu smazat ' + placesSelected.size + ' míst?';
+    actions.innerHTML =
+      '<button class="btn-action danger" onclick="placesDeleteSelected()" style="font-size:12px;padding:3px 10px">✓ Ano, smazat</button>' +
+      '<button class="btn-action" onclick="placesDeleteCancel()" style="font-size:12px;padding:3px 10px">✕ Ne</button>';
   } else {
-    bar.style.display = 'flex';
     count.textContent = placesSelected.size + ' vybráno';
+    actions.innerHTML =
+      '<button class="btn-action danger" onclick="placesDeleteSelected()" style="font-size:12px;padding:3px 10px">🗑 Smazat vybrané</button>' +
+      '<button class="btn-action" onclick="placesClearSelection()" style="font-size:12px;padding:3px 10px">✕ Zrušit výběr</button>';
   }
 }
 
+function placesDeleteCancel() {
+  placesDeleteArmed = false;
+  placesUpdateBulkBar();
+}
+
 async function placesDeleteSelected() {
-  if (!confirm(`Smazat ${placesSelected.size} míst?`)) return;
+  if (placesSelected.size === 0) return;
+  // dvoukrokové potvrzení v liště (nativní confirm() je v některých webview potlačený)
+  if (!placesDeleteArmed) {
+    placesDeleteArmed = true;
+    placesUpdateBulkBar();
+    return;
+  }
+  placesDeleteArmed = false;
   const ids = [...placesSelected];
+  const count = document.getElementById('places-bulk-count');
+  const actions = document.getElementById('places-bulk-actions');
+  if (count) count.textContent = 'Mažu ' + ids.length + '...';
+  if (actions) actions.innerHTML = '';
+  let ok = 0, fail = 0;
   for (const id of ids) {
-    await fetch('/places/' + id, { method: 'DELETE' });
+    try {
+      const res = await fetch('/places/' + id, { method: 'DELETE' });
+      if (res.ok) ok++; else fail++;
+    } catch(e) { fail++; }
   }
   allPlaces = allPlaces.filter(p => !ids.includes(p.id));
   placesSelected.clear();
@@ -1192,6 +1227,7 @@ async function placesDeleteSelected() {
   renderPlaces();
   reloadPlacesOnMap();
   placesUpdateBulkBar();
+  console.log('[PLACES] Smazáno ' + ok + (fail ? ', selhalo ' + fail : ''));
 }
 function goToMap(id,lat,lon){
   showPage('map');
