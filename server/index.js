@@ -770,14 +770,17 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
       if (!placesNearby.some(p => p.name === atAddress.name)) placesNearby.unshift(atAddress);
     }
   }
-  // Auto-výběr dle adresy POUZE při shodě ulice I čísla popisného (addrScore===2).
-  // Firma "o pár čísel dál" (na stejné ulici, jiné číslo) se NEvybere — rezidenční
-  // adresu bez podniku na tom čísle tak nepojmenujeme po sousední autodílně.
-  const atAddrConfirmed = (atAddress && atAddress.addrScore === 2) ? atAddress : null;
-  const addrPick = atAddrConfirmed || strongMatch;
-  // Rezidenční adresa (rodinný dům) a žádný podnik na tom čísle → nevymýšlet firmu
+  // Auto-výběr dle adresy: vezmi podnik na adrese (searchText) nebo shodu ulice+číslo.
+  // Tohle je to "podívej se na adresu a vezmi nejbližší POI k ní" — funguje pro běžná
+  // komerční místa, kde první nabídnutý je ten správný.
+  let addrPick = atAddress || strongMatch;
+  // JEDINÁ výjimka: rezidenční adresa (rodinný dům) a žádný podnik přímo na tom čísle
+  // popisném (addrScore<2) → nepojmenovávej po okolní firmě (autodílna o pár čísel dál).
+  if (geo && geo.residential && !(addrPick && addrPick.addrScore === 2)) {
+    if (addrPick) console.log(`[ADDR] Rezidenční adresa → nepřiřazuji okolní "${addrPick.name}" (shoda jen ${addrPick.addrScore || 0})`);
+    addrPick = null;
+  }
   const residentialNoPoi = !!(geo && geo.residential && !addrPick);
-  if (residentialNoPoi) console.log(`[ADDR] Rezidenční adresa bez podniku na čísle → nebudeme pojmenovávat po okolní firmě`);
 
   const now = new Date(ts);   // čas datového bodu (v simulaci = simulovaný čas, ne reálný)
   const days = ['neděle', 'pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota'];
