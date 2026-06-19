@@ -177,6 +177,11 @@ async function findPlaceAtAddress(address, lat, lon) {
       })
     );
     if (data.error) { console.error('[PLACES] searchText chyba:', data.error.status, data.error.message); return null; }
+    // Adresní typy — searchText na adresu vrací i "premise"/"street_address" jako
+    // pseudo-místo s názvem = adresa. Ty musíme vyřadit, jinak by se místo uložilo
+    // s adresou místo skutečného POI (např. "Na Pískovně 761/3" místo "MŠ Beruška").
+    const ADDR_LIKE_TYPES = ['premise','subpremise','street_address','route','postal_code','postal_code_prefix','plus_code','political','locality','sublocality','neighborhood','intersection','administrative_area_level_1','administrative_area_level_2','administrative_area_level_3'];
+    const addrNorm = normAddr(address);
     const near = (data.places || [])
       .filter(p => p.location)
       .map(p => ({
@@ -187,7 +192,15 @@ async function findPlaceAtAddress(address, lat, lon) {
         rating: p.rating || null,
         vicinity: p.shortFormattedAddress || '',
       }))
-      .filter(p => p.name && !SKIP_PLACE_TYPES.includes(p.primaryType) && p.dist <= 80)
+      .filter(p => {
+        if (!p.name || p.dist > 80) return false;
+        if (SKIP_PLACE_TYPES.includes(p.primaryType)) return false;
+        // adresní/premise typ, nebo žádný typ POI
+        if (ADDR_LIKE_TYPES.includes(p.primaryType) || p.types.some(t => ADDR_LIKE_TYPES.includes(t))) return false;
+        // název je vlastně jen adresa (premise vrácený jako místo)
+        if (addrNorm.includes(normAddr(p.name))) return false;
+        return true;
+      })
       .sort((a, b) => a.dist - b.dist);
     return near[0] || null;
   } catch(e) {
@@ -774,6 +787,12 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
   // Tohle je to "podívej se na adresu a vezmi nejbližší POI k ní" — funguje pro běžná
   // komerční místa, kde první nabídnutý je ten správný.
   let addrPick = atAddress || strongMatch;
+  // Pojistka: addrPick nesmí být jen adresa (premise vrácený jako "místo") — jinak by
+  // se název přepsal adresou ("Na Pískovně 761/3") místo dobrého názvu POI z AI.
+  if (addrPick && geo && geo.formatted && normAddr(geo.formatted).includes(normAddr(addrPick.name))) {
+    console.log(`[ADDR] Ignoruji adresní pseudo-POI "${addrPick.name}"`);
+    addrPick = null;
+  }
   // JEDINÁ výjimka: rezidenční adresa (rodinný dům) a žádný podnik přímo na tom čísle
   // popisném (addrScore<2) → nepojmenovávej po okolní firmě (autodílna o pár čísel dál).
   if (geo && geo.residential && !(addrPick && addrPick.addrScore === 2)) {
