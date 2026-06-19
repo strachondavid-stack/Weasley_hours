@@ -155,9 +155,46 @@ async function getNearbyPlaces(lat, lon, radius = 300, points = null) {
   }
 }
 
-// ─── Reverse geocoding + porovnání adres ───────────────────────────────────────
-// Ze souřadnic vrátí adresu (ulice + číslo). Porovnáním s adresou POI (vicinity)
-// poznáme, KTERÉ z okolních míst je to pravé — silnější než pouhá vzdálenost.
+// "Co je přesně na této adrese" — Text Search (New) dotázaný adresou z reverse
+// geocodingu. Vrátí konkrétní podnik registrovaný na adrese (přesnější než radius
+// hledání). Bereme jen výsledek reálně blízko zastávky (ne stejnojmenný jinde).
+async function findPlaceAtAddress(address, lat, lon) {
+  if (!GOOGLE_API_KEY || !address) return null;
+  try {
+    const data = await httpPost(
+      'places.googleapis.com',
+      '/v1/places:searchText',
+      {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': GOOGLE_API_KEY,
+        'X-Goog-FieldMask': 'places.displayName,places.primaryType,places.types,places.location,places.rating,places.shortFormattedAddress',
+      },
+      JSON.stringify({
+        textQuery: address,
+        locationBias: { circle: { center: { latitude: lat, longitude: lon }, radius: 120 } },
+        maxResultCount: 5,
+        languageCode: 'cs',
+      })
+    );
+    if (data.error) { console.error('[PLACES] searchText chyba:', data.error.status, data.error.message); return null; }
+    const near = (data.places || [])
+      .filter(p => p.location)
+      .map(p => ({
+        name: p.displayName?.text || '',
+        primaryType: p.primaryType || (p.types && p.types[0]) || '',
+        types: (p.types || []).slice(0, 5),
+        dist: Math.round(distance(lat, lon, p.location.latitude, p.location.longitude)),
+        rating: p.rating || null,
+        vicinity: p.shortFormattedAddress || '',
+      }))
+      .filter(p => p.name && !SKIP_PLACE_TYPES.includes(p.primaryType) && p.dist <= 80)
+      .sort((a, b) => a.dist - b.dist);
+    return near[0] || null;
+  } catch(e) {
+    console.error('[PLACES] searchText chyba:', e.message);
+    return null;
+  }
+}
 const GEOCODE_CACHE_TTL = 30 * 24 * 3600;   // adresa bodu je stálá → cache na 30 dní
 const ADDR_MATCH_BONUS = 0.15;              // bonus k confidence při shodě ulice (ne přímo číslo)
 
@@ -718,6 +755,23 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
     if (geo.formatted) console.log(`[ADDR] Adresa zastávky: ${geo.formatted}${strongMatch ? ' → shoda s "' + strongMatch.name + '"' : ''}`);
   }
 
+  // "Co je přesně na adrese" — nejpřesnější signál: Text Search dotázaný adresou.
+  let atAddress = null;
+  if (geo && geo.formatted) {
+    atAddress = await findPlaceAtAddress(geo.formatted, lat, lon);
+    if (atAddress) {
+      console.log(`[ADDR] Na adrese je: "${atAddress.name}" (${atAddress.primaryType}, ${atAddress.dist}m)`);
+      await logEvent('addr_place', { member, lat, lon, name: atAddress.name, primaryType: atAddress.primaryType, dist: atAddress.dist, address: geo.formatted, vicinity: atAddress.vicinity });
+      // přidej mezi kandidáty (pro AI i pro UI), pokud tam ještě není
+      if (!placesNearby.some(p => p.name === atAddress.name)) {
+        atAddress.addrScore = addrMatchScore(geo, atAddress.vicinity);
+        placesNearby.unshift(atAddress);
+      }
+    }
+  }
+  // Nejsilnější jednoznačný výběr dle adresy: přímo podnik na adrese > shoda ulice+číslo
+  const addrPick = atAddress || strongMatch;
+
   const now = new Date(ts);   // čas datového bodu (v simulaci = simulovaný čas, ne reálný)
   const days = ['neděle', 'pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota'];
   const dayOfWeek = days[now.getDay()];
@@ -726,7 +780,7 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
   await logEvent('stop_candidate', { member, lat, lon, gapMinutes, historyVisits, nearbyMembers, placesCount: placesNearby.length, spread: Math.round(spread), searchRadius, dayOfWeek, timeStr, source });
   console.log(`[STOP] Kandidát [${member}] ${gapMinutes}min @ ${lat.toFixed(5)},${lon.toFixed(5)} | ${placesNearby.length} POI | ${historyVisits}x navštíveno`);
 
-  const aiResult = await askClaude(member, lat, lon, { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source, geo, strongMatch });
+  const aiResult = await askClaude(member, lat, lon, { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source, geo, strongMatch: addrPick });
 
   // Tvrdý bonus k confidence za opakované návštěvy — opakování je silný signál,
   // který nenecháváme jen na uvážení AI. +0,07 za každou návštěvu nad první, strop +0,30.
@@ -743,15 +797,15 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
   // Shoda adresy (reverse geocoding vs adresa POI) — silný signál identity místa.
   // Jednoznačná shoda ulice+číslo → vyber a ulož přímo to POI (auto-výběr).
   if (aiResult && geo) {
-    if (strongMatch) {
-      if (aiResult.name !== strongMatch.name || !aiResult.should_save) {
-        console.log(`[ADDR] Auto-výběr dle shody adresy: "${aiResult.name || '—'}" → "${strongMatch.name}" (${geo.formatted})`);
-        await logEvent('addr_match', { member, lat, lon, from: aiResult.name || null, to: strongMatch.name, address: geo.formatted, vicinity: strongMatch.vicinity });
+    if (addrPick) {
+      if (aiResult.name !== addrPick.name || !aiResult.should_save) {
+        console.log(`[ADDR] Auto-výběr dle adresy: "${aiResult.name || '—'}" → "${addrPick.name}" (${geo.formatted})`);
+        await logEvent('addr_match', { member, lat, lon, from: aiResult.name || null, to: addrPick.name, address: geo.formatted, vicinity: addrPick.vicinity, via: atAddress ? 'searchText' : 'vicinity' });
       }
       aiResult.should_save = true;
-      aiResult.name = strongMatch.name;
+      aiResult.name = addrPick.name;
       aiResult.confidence = Math.max(aiResult.confidence || 0, AI_AUTOSAVE_THRESHOLD);
-      aiResult.reason = `Shoda adresy (${geo.formatted}) → ${strongMatch.name}. ` + (aiResult.reason || '');
+      aiResult.reason = `Adresa (${geo.formatted}) → ${addrPick.name}. ` + (aiResult.reason || '');
     } else if (typeof aiResult.confidence === 'number') {
       // Slabší shoda jen ulice u vybraného názvu → mírný bonus
       const sel = placesNearby.find(p => p.name === aiResult.name && p.addrScore >= 1);
@@ -767,9 +821,9 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
 
   if (!aiResult) {
     // Bez AI: jednoznačná shoda adresy stačí na auto-uložení
-    if (strongMatch) {
-      console.log(`[ADDR] AI nedostupné, ale adresa jednoznačně sedí → ukládám "${strongMatch.name}"`);
-      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, strongMatch.name, AI_AUTOSAVE_THRESHOLD, 'shoda adresy: ' + (geo.formatted || ''), source, geo && geo.formatted);
+    if (addrPick) {
+      console.log(`[ADDR] AI nedostupné, ale adresa jednoznačně sedí → ukládám "${addrPick.name}"`);
+      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, addrPick.name, AI_AUTOSAVE_THRESHOLD, 'adresa: ' + (geo.formatted || ''), source, geo && geo.formatted);
       return;
     }
     // Fallback — jen pokud je místo opakované a má POI
