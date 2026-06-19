@@ -106,31 +106,44 @@ const SKIP_PLACE_TYPES = [
 async function getNearbyPlaces(lat, lon, radius = 300, points = null) {
   if (!GOOGLE_API_KEY) return [];
   try {
-    const url = `/maps/api/place/nearbysearch/json?location=${lat},${lon}&radius=${radius}&language=cs&key=${GOOGLE_API_KEY}`;
-    const data = await new Promise((resolve, reject) => {
-      https.get({ hostname: 'maps.googleapis.com', path: url }, (res) => {
-        let d = '';
-        res.on('data', chunk => d += chunk);
-        res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
-      }).on('error', reject);
-    });
-    if (!data.results) return [];
+    // Places API (New): POST places.googleapis.com/v1/places:searchNearby
+    const data = await httpPost(
+      'places.googleapis.com',
+      '/v1/places:searchNearby',
+      {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': GOOGLE_API_KEY,
+        'X-Goog-FieldMask': 'places.displayName,places.primaryType,places.types,places.location,places.rating,places.shortFormattedAddress',
+      },
+      JSON.stringify({
+        locationRestriction: { circle: { center: { latitude: lat, longitude: lon }, radius: Math.round(radius) } },
+        maxResultCount: 20,
+        rankPreference: 'DISTANCE',
+        languageCode: 'cs',
+      })
+    );
+    if (data.error) {
+      console.error('[PLACES] API chyba:', data.error.status, data.error.message);
+      return [];
+    }
+    const results = data.places || [];
     // Vzdálenost = jak BLÍZKO se člen k POI dostal (nejbližší bod pobytu), ne od středu.
     // U velkého objektu (procházení) tak POI kdekoli podél trasy dostane malou vzdálenost.
     const pts = (Array.isArray(points) && points.length) ? points : [{ lat, lon }];
-    return data.results
+    return results
+      .filter(p => p.location)
       .map(p => {
-        const plat = p.geometry.location.lat, plon = p.geometry.location.lng;
+        const plat = p.location.latitude, plon = p.location.longitude;
         let minD = Infinity;
         for (const q of pts) { const d = distance(q.lat, q.lon, plat, plon); if (d < minD) minD = d; }
         return {
-          name: p.name || '',
-          primaryType: p.types?.[0] || '',
+          name: p.displayName?.text || '',
+          primaryType: p.primaryType || (p.types && p.types[0]) || '',
           types: (p.types || []).slice(0, 5),
           dist: Math.round(minD),                                   // od nejbližšího bodu pobytu
           distCenter: Math.round(distance(lat, lon, plat, plon)),   // od středu (info)
           rating: p.rating || null,
-          vicinity: p.vicinity || '',
+          vicinity: p.shortFormattedAddress || '',
         };
       })
       .filter(p => !SKIP_PLACE_TYPES.includes(p.primaryType) && p.name)
