@@ -1938,6 +1938,7 @@ setInterval(()=>{
 .badge-addr_match{background:#06281f;color:#34d399}
 .badge-addr_bonus{background:#10261a;color:#86efac}
 .badge-addr_place{background:#062a22;color:#2dd4bf}
+.badge-osm_place{background:#0a2a10;color:#86efac}
 .badge-default{background:#1a1a1a;color:#666}
 </style>
 
@@ -1955,6 +1956,7 @@ setInterval(()=>{
   <button class="log-fbtn geo" data-type="geocode">Adresa</button>
   <button class="log-fbtn geo" data-type="addr_match">Shoda adr.</button>
   <button class="log-fbtn geo" data-type="addr_place">Na adrese</button>
+  <button class="log-fbtn geo" data-type="osm_place">OSM</button>
   <button class="log-refresh" id="logRefreshBtn">↻ Obnovit</button>
 </div>
 <div class="log-toolbar" style="padding-top:4px;padding-bottom:6px" id="logMemberBar">
@@ -2005,6 +2007,7 @@ const LOG_LIMITS = {
   'addr_match': 30,
   'addr_bonus': 30,
   'addr_place': 30,
+  'osm_place': 30,
 };
 
 async function loadLog() {
@@ -2031,7 +2034,7 @@ function logRenderEntry(l, i) {
   const t = new Date(l.ts).toLocaleTimeString('cs-CZ', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
   const d = new Date(l.ts).toLocaleDateString('cs-CZ', {day:'2-digit',month:'2-digit'});
   const type = l.type || 'unknown';
-  const badgeClass = 'badge-' + (type in {gps_received:1,ai_response:1,ai_request:1,ai_error:1,ai_skipped:1,stop_candidate:1,place_saved:1,place_rejected:1,fence_added:1,img_selected:1,geocode:1,geocode_error:1,addr_match:1,addr_bonus:1,addr_place:1} ? type : 'default');
+  const badgeClass = 'badge-' + (type in {gps_received:1,ai_response:1,ai_request:1,ai_error:1,ai_skipped:1,stop_candidate:1,place_saved:1,place_rejected:1,fence_added:1,img_selected:1,geocode:1,geocode_error:1,addr_match:1,addr_bonus:1,addr_place:1,osm_place:1} ? type : 'default');
   
   const title = logTitle(l);
   const detail = logDetail(l);
@@ -2070,6 +2073,7 @@ function logTitle(l) {
     case 'geocode_error': return l.error || '?';
     case 'addr_match': return `→ "${l.to}"${l.from && l.from !== l.to ? ' (z "' + l.from + '")' : ''}`;
     case 'addr_place': return `"${l.name}" (${l.primaryType || '?'}, ${l.dist}m)`;
+    case 'osm_place': return `OSM: "${l.name}" (${l.kind}, ${l.dist}m)`;
     case 'addr_bonus': return `"${l.name}" +bonus`;
     default: return JSON.stringify(l).slice(0, 80);
   }
@@ -2137,6 +2141,11 @@ function logDetail(l) {
         'shoda adresy: ' + (l.addrScore === 2 ? 'ulice+číslo (jisté)' : l.addrScore === 1 ? 'jen ulice' : 'ne') + nl +
         'adresa zastávky: ' + esc(l.address || '–') + nl +
         'adresa POI: ' + esc(l.vicinity || '–');
+    case 'osm_place':
+      return 'OSM objekt: ' + esc(l.name) + nl +
+        'typ (kind): ' + esc(l.kind || '–') + nl +
+        'vzdálenost: ' + l.dist + ' m' + nl +
+        'zdroj: OpenStreetMap (Google to nezná)';
     default:
       return '<pre style="white-space:pre-wrap;word-break:break-all">' + esc(JSON.stringify(l, null, 2)) + '</pre>';
   }
