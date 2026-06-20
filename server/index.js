@@ -2066,6 +2066,85 @@ app.delete('/logs', async (req, res) => {
   res.json({ ok: true, deleted: keys.length });
 });
 
+// ─── Náhled rozpoznání (dry-run) ────────────────────────────────────────────────
+// Pustí stejný řetězec jako reálná detekce (reverseGeocode → POI → co je na adrese
+// → AI → rozhodnutí), ale NIC neukládá / nevytváří geofence / nebroadcastuje.
+// Slouží QC nástroji k rychlému testu "jak by se tento bod rozpoznal".
+// POZN: drží krok s processStopCandidate — při změně logiky tam aktualizuj i zde.
+async function previewDetection(member, lat, lon, gapMinutes = 15) {
+  const placesNearby = await getNearbyPlaces(lat, lon, 200, null);   // 1 bod → default radius
+  const geo = await reverseGeocode(lat, lon, member);
+  let strongMatch = null;
+  if (geo) {
+    for (const p of placesNearby) p.addrScore = addrMatchScore(geo, p.vicinity);
+    const strong = placesNearby.filter(p => p.addrScore === 2);
+    if (strong.length === 1) strongMatch = strong[0];
+  }
+  let atAddress = null;
+  if (geo && geo.formatted) {
+    atAddress = await findPlaceAtAddress(geo.formatted, lat, lon);
+    if (atAddress) {
+      atAddress.addrScore = addrMatchScore(geo, atAddress.vicinity);
+      if (!placesNearby.some(p => p.name === atAddress.name)) placesNearby.unshift(atAddress);
+    }
+  }
+  let addrPick = atAddress || strongMatch;
+  if (addrPick && geo && geo.formatted && normAddr(geo.formatted).includes(normAddr(addrPick.name))) addrPick = null;
+  if (geo && geo.residential && !(addrPick && addrPick.addrScore === 2)) addrPick = null;
+  const residentialNoPoi = !!(geo && geo.residential && !addrPick);
+
+  const historyVisits = await countNearbyVisits(member, lat, lon, Date.now(), VISIT_RADIUS_M);
+  const now = new Date();
+  const days = ['neděle', 'pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota'];
+  const aiResult = await askClaude(member, lat, lon, {
+    gapMinutes, placesNearby, historyVisits, nearbyMembers: [],
+    dayOfWeek: days[now.getDay()], timeStr: now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0'),
+    source: 'preview', geo, strongMatch: addrPick, residential: residentialNoPoi
+  });
+
+  // stejné post-AI úpravy jako v reálu (bez logování)
+  if (aiResult && typeof aiResult.confidence === 'number' && historyVisits > 1) {
+    aiResult.confidence = Math.min(1, aiResult.confidence + Math.min(VISIT_BONUS_MAX, (historyVisits - 1) * VISIT_BONUS_PER));
+  }
+  if (aiResult && geo) {
+    if (addrPick) {
+      aiResult.should_save = true;
+      aiResult.name = addrPick.name;
+      aiResult.confidence = Math.max(aiResult.confidence || 0, AI_AUTOSAVE_THRESHOLD);
+    } else if (typeof aiResult.confidence === 'number') {
+      const sel = placesNearby.find(p => p.name === aiResult.name && p.addrScore >= 1);
+      if (sel) aiResult.confidence = Math.min(1, aiResult.confidence + ADDR_MATCH_BONUS);
+    }
+  }
+
+  // jaké by bylo rozhodnutí
+  let decision, finalName = null;
+  if (!aiResult) {
+    if (addrPick) { decision = 'auto_save'; finalName = addrPick.name; }
+    else if (placesNearby.length > 0 && historyVisits >= 3) { decision = 'suggest'; finalName = null; }
+    else decision = 'reject';
+  } else if (!aiResult.should_save || aiResult.confidence < AI_SUGGEST_THRESHOLD) {
+    decision = 'reject';
+  } else if (aiResult.confidence >= AI_AUTOSAVE_THRESHOLD && aiResult.name) {
+    decision = 'auto_save'; finalName = aiResult.name;
+  } else {
+    decision = 'suggest'; finalName = aiResult.name;
+  }
+
+  return {
+    input: { member, lat, lon, gapMinutes },
+    geocode: geo,
+    residential: residentialNoPoi,
+    nearby: placesNearby.map(p => ({ name: p.name, primaryType: p.primaryType, dist: p.dist, addrScore: p.addrScore || 0, vicinity: p.vicinity, rating: p.rating })),
+    atAddress: atAddress ? { name: atAddress.name, primaryType: atAddress.primaryType, dist: atAddress.dist, addrScore: atAddress.addrScore } : null,
+    addrPick: addrPick ? addrPick.name : null,
+    historyVisits,
+    ai: aiResult,
+    decision,    // auto_save | suggest | reject
+    finalName,
+  };
+}
+
 app.get('/nearby', async (req, res) => {
   const lat = parseFloat(req.query.lat);
   const lon = parseFloat(req.query.lon);
@@ -2073,6 +2152,23 @@ app.get('/nearby', async (req, res) => {
   if (isNaN(lat) || isNaN(lon)) return res.status(400).json({ error: 'lat and lon required' });
   const places = await getNearbyPlaces(lat, lon, radius);
   res.json({ count: places.length, radius, places });
+});
+
+// Náhled rozpoznání pro QC nástroj (běží na jiném portu → CORS).
+app.get('/detect/preview', async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  const lat = parseFloat(req.query.lat);
+  const lon = parseFloat(req.query.lon);
+  const member = MEMBERS.includes(req.query.member) ? req.query.member : MEMBERS[0];
+  const gap = parseInt(req.query.gap) || 15;
+  if (isNaN(lat) || isNaN(lon)) return res.status(400).json({ error: 'lat and lon required' });
+  try {
+    const result = await previewDetection(member, lat, lon, gap);
+    res.json(result);
+  } catch(e) {
+    console.error('[PREVIEW] Chyba:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/img-list', (req, res) => {
