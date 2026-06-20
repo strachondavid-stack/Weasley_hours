@@ -1317,10 +1317,10 @@ async function runSimStay(member, lat, lon, minutes, onDone, jitterM) {
   sim.stayTotal = totalPoints;
 
   // Body stání jsou vždy vycentrované na POI — zajímá nás pohyb v objektu,
-  // ne kde se zaparkovalo. Každý bod = POI + drobný kruhový GPS šum. Rozptyl je
-  // menší než radius geofence i CLUSTER_RADIUS, takže potvrzení příchodu i
-  // shlukování zůstávají stabilní (žádné skákání přes hranici plotu).
-  const moveR = (typeof jitterM === 'number' && jitterM > 0) ? Math.min(jitterM, 40) : 15;
+  // ne kde se zaparkovalo. Každý bod = POI + drobný kruhový GPS šum ~15 m
+  // (vždy, nezávisle na scénáři). Rozptyl je menší než radius geofence i
+  // CLUSTER_RADIUS, takže potvrzení příchodu i shlukování zůstávají stabilní.
+  const moveR = 15;
 
   const doStep = async () => {
     if (!sim.stayActive || !activeSimulations[member]) return;
