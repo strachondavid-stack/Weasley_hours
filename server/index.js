@@ -250,6 +250,39 @@ async function findOsmPlace(lat, lon, radiusM = 80) {
   }
 }
 const GEOCODE_CACHE_TTL = 30 * 24 * 3600;   // adresa bodu je stálá → cache na 30 dní
+
+// Široký dotaz na VŠECHNY pojmenované objekty z OSM kolem bodu (i škola, hřiště,
+// budova...). Na rozdíl od findOsmPlace nefiltruje na přírodní/kulturní — vrací vše
+// pojmenované s "místotvorným" tagem, ať to lze porovnat s požadovaným názvem.
+async function osmNamedAround(lat, lon, radiusM = 150) {
+  const cacheKey = 'osmnamed:' + lat.toFixed(5) + ',' + lon.toFixed(5) + ':' + radiusM;
+  try { const c = await redis.get(cacheKey); if (c !== null) return JSON.parse(c); } catch(e) {}
+  const KEEP = ['amenity','leisure','tourism','natural','historic','building','shop','office','man_made','water','place','sport','landuse','craft','healthcare','club'];
+  const q = `[out:json][timeout:12];nwr(around:${radiusM},${lat},${lon})[name];out center 80;`;
+  try {
+    const data = await httpPost('overpass-api.de', '/api/interpreter',
+      { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'weasley-hours/1.0' },
+      'data=' + encodeURIComponent(q));
+    const out = [];
+    for (const el of (data.elements || [])) {
+      const t = el.tags; if (!t || !t.name) continue;
+      const kindKey = KEEP.find(k => t[k]);
+      if (!kindKey) continue;                       // vynech ulice/cesty/hranice (bez místotvorného tagu)
+      const elat = el.lat != null ? el.lat : (el.center && el.center.lat);
+      const elon = el.lon != null ? el.lon : (el.center && el.center.lon);
+      if (elat == null || elon == null) continue;
+      const kind = kindKey === 'building' ? 'building:' + t.building : (t[kindKey] === 'yes' ? kindKey : t[kindKey]);
+      out.push({ name: t.name, kind, dist: Math.round(distance(lat, lon, elat, elon)) });
+    }
+    out.sort((a, b) => a.dist - b.dist);
+    const top = out.slice(0, 40);
+    try { await redis.set(cacheKey, JSON.stringify(top), { EX: OSM_CACHE_TTL }); } catch(e) {}
+    return top;
+  } catch(e) {
+    console.error('[OSM] named chyba:', e.message);
+    return [];
+  }
+}
 const ADDR_MATCH_BONUS = 0.15;              // bonus k confidence při shodě ulice (ne přímo číslo)
 
 async function reverseGeocode(lat, lon, member = null) {
@@ -304,6 +337,29 @@ function normAddr(s) {
   return (s || '').toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')   // odstraň diakritiku
     .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Podobnost dvou názvů 0..1 (po normalizaci): max z bigramového Dice a tokenového
+// překrytí, s bonusem za obsažení (jeden název je podřetězec druhého). Slouží k
+// porovnání "co chci" vs názvy objektů z mapy (OSM) — škola vs hřiště za školou.
+function nameSim(a, b) {
+  const x = normAddr(a), y = normAddr(b);
+  if (!x || !y) return 0;
+  if (x === y) return 1;
+  const contain = (x.length >= 3 && y.includes(x)) || (y.length >= 3 && x.includes(y));
+  const bg = s => { const m = new Map(); for (let i = 0; i < s.length - 1; i++) { const g = s.substr(i, 2); m.set(g, (m.get(g) || 0) + 1); } return m; };
+  const bx = bg(x), by = bg(y);
+  let inter = 0, total = 0;
+  for (const [g, c] of bx) { total += c; if (by.has(g)) inter += Math.min(c, by.get(g)); }
+  for (const c of by.values()) total += c;
+  const dice = total ? (2 * inter) / total : 0;
+  const tx = new Set(x.split(' ').filter(w => w.length >= 3));
+  const ty = new Set(y.split(' ').filter(w => w.length >= 3));
+  let shared = 0; for (const w of tx) if (ty.has(w)) shared++;
+  const tok = (tx.size && ty.size) ? shared / Math.min(tx.size, ty.size) : 0;
+  let sim = Math.max(dice, tok);
+  if (contain) sim = Math.max(sim, 0.65);
+  return Math.round(sim * 100) / 100;
 }
 function houseNumbers(s) { return ((s || '').match(/\d+/g) || []); }
 
@@ -2248,6 +2304,27 @@ app.get('/detect/preview', async (req, res) => {
     res.json(result);
   } catch(e) {
     console.error('[PREVIEW] Chyba:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Najdi v OSM pojmenovaný objekt, jehož název nejvíc odpovídá zadanému (?name=).
+// Řeší případy "Google vybral hřiště, ale chci školu, a škola je vidět v mapě".
+app.get('/osm/match', async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  const lat = parseFloat(req.query.lat);
+  const lon = parseFloat(req.query.lon);
+  const radius = parseFloat(req.query.radius) || 150;
+  const name = req.query.name || '';
+  if (isNaN(lat) || isNaN(lon)) return res.status(400).json({ error: 'lat and lon required' });
+  try {
+    const named = await osmNamedAround(lat, lon, radius);
+    const scored = named.map(o => ({ name: o.name, kind: o.kind, dist: o.dist, sim: name ? nameSim(name, o.name) : 0 }));
+    if (name) scored.sort((a, b) => b.sim - a.sim || a.dist - b.dist);
+    const best = (name && scored.length && scored[0].sim > 0) ? scored[0] : null;
+    res.json({ count: scored.length, query: name, radius, best, candidates: scored.slice(0, 12) });
+  } catch(e) {
+    console.error('[OSM-MATCH] Chyba:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
