@@ -22,6 +22,7 @@ import math
 import os
 import re
 import shutil
+import subprocess
 import sys
 import unicodedata
 from datetime import datetime
@@ -151,6 +152,26 @@ def apply_action(action, payload):
     if action == "detect_clear":
         save_detect({})
         return True, "Vysledky smazany"
+    if action == "regen":
+        base = os.path.dirname(os.path.abspath(__file__))
+        prod = os.path.normpath(os.path.join(base, "..", "..", "server", "public", "scenarios_data.json"))
+        try:
+            g = subprocess.run([sys.executable, "gen_scenarios.py", "golden_dataset_v2.json", "scenarios_generated.json"],
+                               cwd=base, capture_output=True, text=True, timeout=180)
+            if g.returncode != 0:
+                return False, "gen_scenarios selhal: " + ((g.stderr or g.stdout or "")[-300:])
+            mrg = subprocess.run([sys.executable, "merge_scenarios.py", prod, "scenarios_generated.json"],
+                                 cwd=base, capture_output=True, text=True, timeout=120)
+            if mrg.returncode != 0:
+                return False, "merge_scenarios selhal: " + ((mrg.stderr or mrg.stdout or "")[-300:])
+            out = (g.stdout or "") + "\n" + (mrg.stdout or "")
+            tail = " | ".join([ln.strip() for ln in out.splitlines()
+                               if any(k in ln.lower() for k in ("scenar", "nahrazena", "pridana", "scenaru"))][-3:])
+            return True, "Nasazeno do appky. " + (tail or "hotovo") + " — v prohlizeci appky dej Ctrl+Shift+R."
+        except subprocess.TimeoutExpired:
+            return False, "Pregenerovani trvalo prilis dlouho (timeout)"
+        except Exception as e:
+            return False, "Chyba pregenerovani: " + str(e)
     if action == "delete":
         pid = payload.get("id")
         before = len(places)
@@ -297,6 +318,7 @@ def render():
         '<button onclick="toggleAllChk()" class="meta">\u2611 ozn./odzn. v\u0161e</button>'
         '<button onclick="clearDetect()" class="meta">\u2715 v\u00fdsledky</button>'
         '<span class="meta" id="idProg"></span>'
+        '<button onclick="regenScenarios()" id="regenBtn" style="margin-left:auto;border-color:#2a7a2a;color:#2a7a2a">\U0001F680 Nasadit do appky</button>'
         '</div>'
         '<div class="catfilters" id="listCatFilter">' + list_checks + '</div>'
         '<div id="listContainer"></div>')
@@ -352,6 +374,7 @@ function storeDet(id,decision,finalName,osm){DETECT[id]={decision:decision,final
 function processOne(id,p){var url="http://"+location.hostname+":3000/detect/preview?lat="+p.lat+"&lon="+p.lon+"&gap=15";return fetch(url).then(function(r){return r.json();}).then(function(d){var fn=d.finalName||null;if(p.name&&nameSim(p.name,fn||"")<0.5){var mu="http://"+location.hostname+":3000/osm/match?lat="+p.lat+"&lon="+p.lon+"&radius=150&name="+encodeURIComponent(p.name);return fetch(mu).then(function(r){return r.json();}).then(function(m){if(m.best&&m.best.sim>=0.5)storeDet(id,d.decision,m.best.name,true);else storeDet(id,d.decision,fn,false);}).catch(function(){storeDet(id,d.decision,fn,false);});}storeDet(id,d.decision,fn,false);}).catch(function(){storeDet(id,"error",null,false);});}
 function runIdentify(){if(identifyRunning)return;var ids=selectedIds();if(!ids.length)return;identifyRunning=true;identifyStop=false;var prog=document.getElementById("idProg");var btn=document.getElementById("idBtn");var stop=document.getElementById("idStop");if(btn)btn.disabled=true;if(stop)stop.style.display="";var i=0;function fin(msg){identifyRunning=false;if(btn)btn.disabled=false;if(stop)stop.style.display="none";if(prog)prog.textContent=msg;}function step(){if(identifyStop){fin("zastaveno ("+i+"/"+ids.length+")");return;}if(i>=ids.length){fin("hotovo ("+ids.length+")");return;}var id=ids[i];var p=PLACES.find(function(x){return x.id===id;});if(prog)prog.textContent="identifikuji "+(i+1)+"/"+ids.length+"\u2026";processOne(id,p).then(function(){i++;setTimeout(step,1100);});}step();}
 function clearDetect(){if(!confirm("Smazat v\u0161echny ulo\u017een\u00e9 v\u00fdsledky identifikace?"))return;DETECT={};qpost("detect_clear",{});renderList();}
+function regenScenarios(){if(!confirm("Pregenerovat sc\u00e9n\u00e1\u0159e z golden datasetu a nasadit do aplikace?\n(P\u0159ep\u00ed\u0161e rodinnou kategorii v scenarios_data.json, z\u00e1loha se vytvo\u0159\u00ed.)"))return;var b=document.getElementById("regenBtn");if(b){b.disabled=true;b.textContent="\u23f3 Generuji\u2026";}fetch("/api/regen",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}).then(function(r){return r.json();}).then(function(res){alert(res.msg||(res.ok?"Hotovo":"Chyba"));}).catch(function(e){alert("Nedostupn\u00e9: "+e);}).then(function(){if(b){b.disabled=false;b.textContent="\ud83d\ude80 Nasadit do appky";}});}
 function renderList(){var q=(document.getElementById("listSearch").value||"").toLowerCase().trim();var checked=[].slice.call(document.querySelectorAll("#listCatFilter input:checked")).map(function(c){return c.getAttribute("data-cat");});var allc=document.querySelectorAll("#listCatFilter input").length;var arr=PLACES.filter(function(p){if(checked.length<allc&&checked.indexOf(p.cat)<0)return false;if(q&&p.name.toLowerCase().indexOf(q)<0)return false;return true;});var sort=document.getElementById("listSort").value;if(sort==="tier")arr.sort(function(a,b){if(a.tier!==b.tier)return (a.tier==="A")?1:-1;return a.name.localeCompare(b.name);});else if(sort==="name")arr.sort(function(a,b){return a.name.localeCompare(b.name);});else arr.sort(function(a,b){if(a.cat!==b.cat)return a.cat.localeCompare(b.cat);return a.name.localeCompare(b.name);});document.getElementById("listContainer").innerHTML=arr.map(rowHtml).join("")||'<p class="meta">Nic nenalezeno</p>';document.getElementById("listCount").textContent=arr.length;expandedId=null;miniMap=null;miniMarker=null;}
 function closeRow(){if(miniMap){miniMap.remove();miniMap=null;miniMarker=null;}if(expandedId){var ed=document.querySelector('[data-edit="'+expandedId+'"]');if(ed){ed.innerHTML="";ed.classList.remove("open");}var row=document.querySelector('.lrow[data-id="'+expandedId+'"]');if(row)row.classList.remove("open");}expandedId=null;}
 function openRow(id){closeRow();expandedId=id;var p=PLACES.find(function(x){return x.id===id;});var ed=document.querySelector('[data-edit="'+id+'"]');ed.innerHTML=editHtml(p);var _db=document.getElementById("detect-"+id);if(_db&&DETECT[id]){var _d=DETECT[id];var _DC={auto_save:["#1a7f37","AUTO-ULO\u017dENO"],suggest:["#b8860b","N\u00c1VRH (?)"],reject:["#999","ZAHOZENO"],error:["#d33","CHYBA"]};var _c=_DC[_d.decision]||["#999",_d.decision||"?"];_db.innerHTML='<div style="border-top:1px solid #ddd;margin-top:8px;padding-top:8px;font-size:13px"><b style="color:'+_c[0]+'">'+_c[1]+'</b>'+(_d.finalName?' \u2192 "'+escH(_d.finalName)+'"':'')+' <span class="meta">(posledn\u00ed v\u00fdsledek \u2014 Test rozpozn\u00e1n\u00ed pro aktu\u00e1ln\u00ed detail)</span></div>';}ed.classList.add("open");var row=document.querySelector('.lrow[data-id="'+id+'"]');if(row)row.classList.add("open");setTimeout(function(){miniMap=L.map("mini-"+id).setView([p.lat,p.lon],16);L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"\u00a9 OSM"}).addTo(miniMap);miniMarker=L.marker([p.lat,p.lon],{draggable:true}).addTo(miniMap);miniMarker.on("drag",function(e){var ll=e.target.getLatLng();document.getElementById("e-lat-"+id).value=ll.lat.toFixed(6);document.getElementById("e-lon-"+id).value=ll.lng.toFixed(6);});miniMap.invalidateSize();},60);}
@@ -476,7 +499,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "404")
 
     def do_POST(self):
-        m = re.match(r"^/api/(delete|verify|keep_both|move|update|detect_save|detect_clear)$", self.path)
+        m = re.match(r"^/api/(delete|verify|keep_both|move|update|detect_save|detect_clear|regen)$", self.path)
         if not m:
             self._send(404, json.dumps({"ok": False, "msg": "404"}), "application/json")
             return
