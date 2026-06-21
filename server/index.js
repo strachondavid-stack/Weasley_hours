@@ -227,7 +227,18 @@ async function findPlaceAtAddress(address, lat, lon) {
 // koupaliště, park, rozhledna...). Vrátí nejbližší pojmenovaný objekt s relevantním
 // tagem do daného okruhu. Cache 30 dní (mapová data se mění zřídka).
 const OSM_CACHE_TTL = 30 * 24 * 3600;
-async function findOsmPlace(lat, lon, radiusM = 80) {
+// Žebříček "místotvornosti" OSM objektu — instituce/kultura > rekreace/příroda > drobné.
+// Škola (tier 3) tak vyhraje nad hřištěm (tier 1), i když je hřiště o kus blíž.
+const OSM_TIER3 = ['school','kindergarten','college','university','library','hospital','clinic','doctors','dentist','theatre','cinema','arts_centre','museum','gallery','attraction','townhall','courthouse','place_of_worship','community_centre','public','civic','sports_centre','stadium'];
+const OSM_TIER2 = ['swimming_pool','water_park','sports_hall','pitch','track','park','garden','dog_park','nature_reserve','marketplace','fountain','public_bath','events_venue','festival_grounds','viewpoint','memorial','monument','castle','ruins','zoo','theme_park','beach','peak','spring','water','reservoir','wood','forest'];
+const OSM_SKIP_KINDS = ['parking','parking_space','parking_entrance','bench','waste_basket','vending_machine','bicycle_parking','motorcycle_parking','recycling','drinking_water','toilets','atm','post_box','telephone','clock','hunting_stand','charging_station','bicycle_rental','shelter','street_lamp','surveillance'];
+function osmTier(kind) {
+  const k = (kind || '').replace(/^building:/, '');
+  if (OSM_TIER3.includes(k)) return 3;
+  if (OSM_TIER2.includes(k)) return 2;
+  return 1;
+}
+async function findOsmPlace(lat, lon, radiusM = 90) {
   const cacheKey = 'osm:' + lat.toFixed(5) + ',' + lon.toFixed(5) + ':' + radiusM;
   try { const c = await redis.get(cacheKey); if (c !== null) return JSON.parse(c); } catch(e) {}
   const around = `(around:${radiusM},${lat},${lon})`;
@@ -237,8 +248,9 @@ async function findOsmPlace(lat, lon, radiusM = 80) {
     + `nwr${around}[name][natural];`
     + `nwr${around}[name][historic];`
     + `nwr${around}[name][water];`
-    + `nwr${around}[name][amenity~"^(theatre|cinema|arts_centre|community_centre|events_venue|marketplace|fountain|public_bath|festival_grounds)$"];`
-    + `);out center 40;`;
+    + `nwr${around}[name][amenity];`
+    + `nwr${around}[name][building~"^(school|kindergarten|university|college|public|civic|hospital|train_station|sports_hall|chapel|church|cathedral)$"];`
+    + `);out center 60;`;
   try {
     const data = await httpPost('overpass-api.de', '/api/interpreter',
       { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'weasley-hours/1.0' },
@@ -247,15 +259,22 @@ async function findOsmPlace(lat, lon, radiusM = 80) {
     for (const el of (data.elements || [])) {
       const elat = el.lat != null ? el.lat : (el.center && el.center.lat);
       const elon = el.lon != null ? el.lon : (el.center && el.center.lon);
-      const name = el.tags && el.tags.name;
-      if (elat == null || elon == null || !name) continue;
-      const d = Math.round(distance(lat, lon, elat, elon));
       const t = el.tags;
-      const kind = t.leisure || t.tourism || t.natural || t.historic || t.amenity || t.water || 'osm';
-      if (!best || d < best.dist) best = { name, kind, dist: d, source: 'osm' };
+      const name = t && t.name;
+      if (elat == null || elon == null || !name) continue;
+      const kind = t.amenity || t.leisure || t.tourism || t.natural || t.historic || t.water || (t.building ? 'building:' + t.building : 'osm');
+      if (OSM_SKIP_KINDS.includes(kind.replace(/^building:/, ''))) continue;
+      const dist = Math.round(distance(lat, lon, elat, elon));
+      const tier = osmTier(kind);
+      // instituce/kultura akceptuj dál, rekreaci středně, drobné jen těsně u bodu
+      const maxD = tier >= 3 ? 90 : tier === 2 ? 70 : 40;
+      if (dist > maxD) continue;
+      const score = tier * 1000 - dist;   // vyšší tier vyhraje, při shodě bližší
+      if (!best || score > best.score) best = { name, kind, dist, tier, score, source: 'osm' };
     }
+    if (best) delete best.score;
     try { await redis.set(cacheKey, JSON.stringify(best), { EX: OSM_CACHE_TTL }); } catch(e) {}
-    if (best) console.log(`[OSM] Pojmenovaný objekt: "${best.name}" (${best.kind}, ${best.dist}m)`);
+    if (best) console.log(`[OSM] Pojmenovaný objekt: "${best.name}" (${best.kind}, ${best.dist}m, tier${best.tier})`);
     return best;
   } catch(e) {
     console.error('[OSM] Chyba:', e.message);
@@ -958,11 +977,11 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
     }
     // Overpass záloha — pojmenovaný objekt blízko, který Nominatim reverse nezachytil
     if (!addrPick) {
-      osmPlace = await findOsmPlace(lat, lon, 80);
-      if (osmPlace && osmPlace.dist <= 60) {
-        console.log(`[OSM] Použiji "${osmPlace.name}" (${osmPlace.kind}, ${osmPlace.dist}m)`);
-        await logEvent('osm_place', { member, lat, lon, name: osmPlace.name, kind: osmPlace.kind, dist: osmPlace.dist });
-      } else osmPlace = null;
+      osmPlace = await findOsmPlace(lat, lon, 90);
+      if (osmPlace) {
+        console.log(`[OSM] Použiji "${osmPlace.name}" (${osmPlace.kind}, ${osmPlace.dist}m, tier${osmPlace.tier})`);
+        await logEvent('osm_place', { member, lat, lon, name: osmPlace.name, kind: osmPlace.kind, dist: osmPlace.dist, tier: osmPlace.tier });
+      }
     }
   }
 
@@ -2312,8 +2331,7 @@ async function previewDetection(member, lat, lon, gapMinutes = 15) {
     if (addrPick && geo && geo.formatted && normAddr(geo.formatted).includes(normAddr(addrPick.name))) addrPick = null;
     if (geo && geo.residential && !(addrPick && addrPick.addrScore === 2)) addrPick = null;
     if (!addrPick) {
-      osmPlace = await findOsmPlace(lat, lon, 80);
-      if (!(osmPlace && osmPlace.dist <= 60)) osmPlace = null;
+      osmPlace = await findOsmPlace(lat, lon, 90);
     }
   }
   const residentialNoPoi = !!(geo && geo.residential && !mapName && !addrPick && !osmPlace);
