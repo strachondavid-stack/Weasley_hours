@@ -1308,7 +1308,15 @@ async function updateTracker(member, lat, lon, ts, motionActivities = []) {
     }
     tracker.cluster = { points: [{ lat, lon, ts, stationary: !isAutomotive }], startTs: ts };
   } else {
-    console.log(`[TRACK] [${member}] přechodná zóna dist=${Math.round(dist)}m`);
+    // Přechodná zóna (80–150 m od středu). Pokud je cluster malý (1–2 body,
+    // typicky z jízdy), nahraď ho — člen přijel a zastavil kousek vedle.
+    // Velký cluster (reálná zastávka) zůstává chráněn hysterezí.
+    if (tracker.cluster.points.length <= 2) {
+      console.log(`[TRACK] [${member}] přechodná zóna dist=${Math.round(dist)}m → nahrazuji malý cluster (${tracker.cluster.points.length} bodů)`);
+      tracker.cluster = { points: [{ lat, lon, ts, stationary: !isAutomotive }], startTs: ts };
+    } else {
+      console.log(`[TRACK] [${member}] přechodná zóna dist=${Math.round(dist)}m`);
+    }
   }
 
   tracker.lastPoint = { lat, lon, ts };
