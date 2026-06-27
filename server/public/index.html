@@ -2981,44 +2981,78 @@ document.getElementById('sc-speed')?.addEventListener('change', () => {
 });
 
 // ─── Wake Lock (displej stále svítí) ───────────────────────────────────
-let wakeLock = null;
+// Wake Lock API vyžaduje HTTPS; na HTTP/LAN použijeme tichý video trik
+// (Safari neuspí displej, když hraje video).
+let wakeLockActive = false;
+let wakeLockVideo = null;
+function getWakeLockVideo() {
+  if (wakeLockVideo) return wakeLockVideo;
+  const v = document.createElement('video');
+  v.setAttribute('playsinline', '');
+  v.setAttribute('muted', '');
+  v.muted = true;
+  v.loop = true;
+  v.style.position = 'fixed';
+  v.style.left = '-9999px';
+  v.style.width = '1px';
+  v.style.height = '1px';
+  v.style.opacity = '0.01';
+  // Tiché 1s mp4 video (Safari neuspí displej při přehrávání)
+  v.src = '/silence.mp4';
+  v.load();
+  document.body.appendChild(v);
+  wakeLockVideo = v;
+  return v;
+}
 async function toggleWakeLock() {
   const btn = document.getElementById('wakeLockBtn');
-  if (wakeLock) {
-    await wakeLock.release();
-    wakeLock = null;
+  if (wakeLockActive) {
+    const v = getWakeLockVideo();
+    v.pause();
+    wakeLockActive = false;
     btn.textContent = '\ud83d\udca4 Displej';
     btn.style.background = '#fafafa';
     btn.style.color = '#888';
     btn.style.borderColor = '#ddd';
   } else {
+    // Zkus nejdřív nativní Wake Lock API (funguje na HTTPS)
+    if ('wakeLock' in navigator) {
+      try {
+        const wl = await navigator.wakeLock.request('screen');
+        wakeLockActive = true;
+        btn.textContent = '\u2600\ufe0f Sv\u00edt\u00ed';
+        btn.style.background = '#222';
+        btn.style.color = '#fff';
+        btn.style.borderColor = '#222';
+        wl.addEventListener('release', () => {
+          wakeLockActive = false;
+          btn.textContent = '\ud83d\udca4 Displej';
+          btn.style.background = '#fafafa';
+          btn.style.color = '#888';
+          btn.style.borderColor = '#ddd';
+        });
+        return;
+      } catch(e) {}
+    }
+    // Fallback: tiché video (HTTP / starší Safari)
+    const v = getWakeLockVideo();
     try {
-      wakeLock = await navigator.wakeLock.request('screen');
+      await v.play();
+      wakeLockActive = true;
       btn.textContent = '\u2600\ufe0f Sv\u00edt\u00ed';
       btn.style.background = '#222';
       btn.style.color = '#fff';
       btn.style.borderColor = '#222';
-      wakeLock.addEventListener('release', () => {
-        wakeLock = null;
-        btn.textContent = '\ud83d\udca4 Displej';
-        btn.style.background = '#fafafa';
-        btn.style.color = '#888';
-        btn.style.borderColor = '#ddd';
-      });
-    } catch (e) {
+    } catch(e) {
       btn.textContent = '\u26a0\ufe0f Nelze';
       setTimeout(() => { btn.textContent = '\ud83d\udca4 Displej'; }, 2000);
     }
   }
 }
 document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState === 'visible' && wakeLock === null
-      && document.getElementById('wakeLockBtn')?.style?.borderColor === 'rgb(34, 34, 34)') {
-    try {
-      wakeLock = await navigator.wakeLock.request('screen');
-      const btn = document.getElementById('wakeLockBtn');
-      if (btn) { btn.textContent = '\u2600\ufe0f Sv\u00edt\u00ed'; btn.style.background='#222'; btn.style.color='#fff'; btn.style.borderColor='#222'; }
-    } catch(e) {}
+  if (document.visibilityState === 'visible' && wakeLockActive) {
+    if ('wakeLock' in navigator) { try { await navigator.wakeLock.request('screen'); } catch(e) {} }
+    else { const v = getWakeLockVideo(); try { await v.play(); } catch(e) {} }
   }
 });
 </script>
