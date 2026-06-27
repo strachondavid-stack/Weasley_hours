@@ -201,6 +201,7 @@
 <header>
   <h1>Rodinka Strachoňovic</h1>
   <div id="ws-status"><div class="dot" id="wsDot"></div><span id="wsText">připojuji...</span></div>
+  <button id="wakeLockBtn" onclick="toggleWakeLock()" style="font-size:12px;padding:3px 8px;border:1px solid #ddd;border-radius:12px;background:#fafafa;color:#888;cursor:pointer;white-space:nowrap;flex-shrink:0" title="Displej stále svítí">💤 Displej</button>
 </header>
 
 <div id="mode-banner" style="display:none;background:#dc2626;color:#fff;text-align:center;font-size:13px;font-weight:600;padding:6px;letter-spacing:0.05em">
@@ -2976,6 +2977,48 @@ document.getElementById('sc-speed')?.addEventListener('change', () => {
     const member = document.getElementById('sc-member')?.value;
     const speed  = document.getElementById('sc-speed')?.value;
     fetch('/simulate/speed', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ member, speed }) });
+  }
+});
+
+// ─── Wake Lock (displej stále svítí) ───────────────────────────────────
+let wakeLock = null;
+async function toggleWakeLock() {
+  const btn = document.getElementById('wakeLockBtn');
+  if (wakeLock) {
+    await wakeLock.release();
+    wakeLock = null;
+    btn.textContent = '\ud83d\udca4 Displej';
+    btn.style.background = '#fafafa';
+    btn.style.color = '#888';
+    btn.style.borderColor = '#ddd';
+  } else {
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      btn.textContent = '\u2600\ufe0f Sv\u00edt\u00ed';
+      btn.style.background = '#222';
+      btn.style.color = '#fff';
+      btn.style.borderColor = '#222';
+      wakeLock.addEventListener('release', () => {
+        wakeLock = null;
+        btn.textContent = '\ud83d\udca4 Displej';
+        btn.style.background = '#fafafa';
+        btn.style.color = '#888';
+        btn.style.borderColor = '#ddd';
+      });
+    } catch (e) {
+      btn.textContent = '\u26a0\ufe0f Nelze';
+      setTimeout(() => { btn.textContent = '\ud83d\udca4 Displej'; }, 2000);
+    }
+  }
+}
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && wakeLock === null
+      && document.getElementById('wakeLockBtn')?.style?.borderColor === 'rgb(34, 34, 34)') {
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      const btn = document.getElementById('wakeLockBtn');
+      if (btn) { btn.textContent = '\u2600\ufe0f Sv\u00edt\u00ed'; btn.style.background='#222'; btn.style.color='#fff'; btn.style.borderColor='#222'; }
+    } catch(e) {}
   }
 });
 </script>
