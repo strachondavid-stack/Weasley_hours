@@ -2056,6 +2056,59 @@ app.post('/gps/:member', async (req, res) => {
   res.json({ ok: true, member, status });
 });
 
+// ─── OwnTracks HTTP endpoint ──────────────────────────────────────────────────
+// V OwnTracks: Settings → Connection → Mode: HTTP
+// URL: http://<NAS_IP>:3000/pub?u=tatka   (nebo mamka/misak/kubik)
+// Identifikace: Topic field v payloadu NEBO ?u= parametr NEBO X-Limit-U header
+// OwnTracks posílá stejný JSON jako přes MQTT, ale POSTem na tento endpoint.
+// Odpovídáme [] (prázdné pole) = OwnTracks ví, že doručeno.
+const OT_USER_MAP = { mamka:'mamka', tatka:'tatka', misak:'misak', kubik:'kubik',
+  m:'mamka', t:'tatka', mi:'misak', ku:'kubik' };  // zkrácené aliasy
+function otResolveMember(req) {
+  // 1) topic v payloadu: "owntracks/tatka/iphone" → tatka
+  if (req.body && req.body.topic) {
+    const parts = req.body.topic.split('/');
+    const u = parts[1] || '';
+    if (OT_USER_MAP[u]) return OT_USER_MAP[u];
+    if (MEMBERS.includes(u)) return u;
+  }
+  // 2) ?u= query parametr
+  const qu = req.query.u || req.query.user || '';
+  if (OT_USER_MAP[qu]) return OT_USER_MAP[qu];
+  if (MEMBERS.includes(qu)) return qu;
+  // 3) X-Limit-U header (OwnTracks posílá, pokud je vyplněné Identification)
+  const hu = req.headers['x-limit-u'] || '';
+  if (OT_USER_MAP[hu]) return OT_USER_MAP[hu];
+  if (MEMBERS.includes(hu)) return hu;
+  // 4) tid (2 písmena, zkratka) — ne vždy unikátní, ale lepší než nic
+  const tid = (req.body && req.body.tid) || '';
+  if (OT_USER_MAP[tid.toLowerCase()]) return OT_USER_MAP[tid.toLowerCase()];
+  return null;
+}
+app.post('/pub', async (req, res) => {
+  // Prázdný payload = smazání, ignoruj
+  if (!req.body || Object.keys(req.body).length === 0) return res.json([]);
+  // Jen location zprávy
+  if (req.body._type && req.body._type !== 'location') return res.json([]);
+  const member = otResolveMember(req);
+  if (!member) {
+    console.log('[OT-HTTP] Neznámý člen:', req.body.topic || req.query.u || req.headers['x-limit-u'] || '?');
+    return res.status(200).json([]);  // OwnTracks nesmí dostat chybu, jinak přestane posílat
+  }
+  const lat = parseFloat(req.body.lat);
+  const lon = parseFloat(req.body.lon);
+  if (isNaN(lat) || isNaN(lon)) return res.json([]);
+  if (currentMode === 'test') {
+    console.log('[TEST] ignoruji OwnTracks HTTP od ' + member);
+    return res.json([]);
+  }
+  const motionactivities = req.body.motionactivities || [];
+  const vel = parseFloat(req.body.vel) || 0;
+  await processGPS(member, lat, lon, motionactivities, vel, null, true, 'ot-http');
+  console.log(`[OT-HTTP] [${member}] ${lat.toFixed(5)},${lon.toFixed(5)} vel=${vel}`);
+  res.json([]);  // OwnTracks očekává []
+});
+
 app.post('/status/:member', async (req, res) => {
   const { member } = req.params;
   if (!MEMBERS.includes(member)) return res.status(404).json({ error: 'Unknown member' });
