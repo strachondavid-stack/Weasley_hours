@@ -653,7 +653,7 @@ const SILENCE_MIN_DIST = 200;
 const SILENCE_MIN_GAP = 20 * 60 * 1000;     // 20 minut — filtruje průjezdy
 const SILENCE_MAX_GAP = 4 * 60 * 60 * 1000;
 
-const AI_AUTOSAVE_THRESHOLD = 0.80;
+const AI_AUTOSAVE_THRESHOLD = 0.70;
 const AI_SUGGEST_THRESHOLD = 0.65;
 
 // Bonus k confidence za opakované návštěvy (deterministicky, nezávisle na AI)
