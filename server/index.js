@@ -670,47 +670,66 @@ const LONG_STAY_MS = 30 * 60 * 1000;       // 30 minut
 
 // ─── Rozlišení pohybu ─────────────────────────────────────────────────────────
 // Kombinuje motionactivities (Core Motion iPhone) a vel (GPS rychlost v km/h)
-function resolveMotion(motionActivities, vel) {
+function resolveMotion(motionActivities, vel, acc = 0, ctx = null) {
   const acts = motionActivities || [];
-  const speed = vel || 0;
+  let speed = vel || 0;
+
+  // Vlastní rychlost z časových značek je odolnější než OwnTracks "vel"
+  // (drift, stará hodnota, 0 při dávkovém HTTP). Použij medián okna, když je.
+  const medSpeed = ctx && ctx.medSpeed != null ? ctx.medSpeed : null;
+  const cogR = ctx ? ctx.cogR : null;          // 1=stálý směr (kolo), 0=chaos (pěšky)
+
+  // Špatná GPS přesnost (> 40 m) → vel i vlastní rychlost nespolehlivé, věř Core Motion
+  const poorGPS = acc > 40;
+  if (poorGPS) {
+    speed = 0;
+  } else if (medSpeed != null) {
+    // Kombinace: ber vyšší z (medián vlastní rychlosti, vel) — vel bývá podstřelená
+    speed = Math.max(medSpeed, vel || 0);
+  }
 
   // Stojí — nepřepisuj geofence status
   if (acts.includes('stationary') && speed < 3) return null;
 
-  // Automotive nebo cycling vždy vrátí auto/kolo bez ohledu na vel
-  // (GPS drift způsobuje nízké vel i při jízdě)
+  // Core Motion má přednost u jízdy (GPS drift dává nízké vel i při jízdě)
   if (acts.includes('automotive')) return 'auto';
   if (acts.includes('cycling') && speed > 1) return 'kolo';
 
-  // Velmi pomalý pohyb nebo stojí
   if (speed < 1) return null;
 
-  // ── Pěšky: 1–5 km/h ──────────────────────────────────────────────────────
-  if (speed <= 5) {
+  // ── Pěšky / pomalu: do 6 km/h ────────────────────────────────────────────
+  if (speed <= 6) {
     if (acts.includes('running')) return 'běh';
+    // I při nízké rychlosti: velmi stálý směr = nejspíš pomalé kolo (čekání/kopec)
+    if (cogR != null && cogR >= 0.85 && speed >= 4 && !acts.includes('walking')) return 'kolo';
     return 'pěšky';
   }
 
-  // ── Běh: 6–15 km/h — rozliš od kola podle motion ─────────────────────────
+  // ── Překryvové pásmo 6–15 km/h: kolo vs běh vs (rychlá) chůze ─────────────
   if (speed <= 15) {
-    if (acts.includes('running'))  return 'běh';
-    if (acts.includes('cycling'))  return 'kolo';
-    if (acts.includes('walking') && speed <= 10)  return 'pěšky';
-    if (acts.includes('automotive')) return 'auto';
-    // Bez motion: 6-10 spíš běh, 10-15 spíš kolo
-    return speed <= 10 ? 'běh' : 'kolo';
+    if (acts.includes('running')) return 'běh';
+    if (acts.includes('cycling')) return 'kolo';
+    if (acts.includes('walking') && speed <= 8) return 'pěšky';
+    // Bez jasného Core Motion → rozhodni dle směrové stability:
+    if (cogR != null) {
+      if (cogR >= 0.72) return 'kolo';            // plynulý směr → kolo
+      if (cogR <= 0.55) return speed <= 9 ? 'pěšky' : 'běh';  // chaotický → nohy
+    }
+    // Bez cog: nižší půlka spíš nohy, vyšší spíš kolo
+    return speed <= 9 ? (speed <= 7 ? 'pěšky' : 'běh') : 'kolo';
   }
 
-  // ── Kolo / pomalé auto: 15–30 km/h ───────────────────────────────────────
+  // ── 15–30 km/h: kolo / pomalé auto ───────────────────────────────────────
   if (speed <= 30) {
     if (acts.includes('cycling'))    return 'kolo';
     if (acts.includes('automotive')) return 'auto';
-    if (acts.includes('running'))    return 'běh';  // velmi rychlý běžec
-    // Bez motion: do 22 km/h spíš kolo, nad 22 spíš auto
+    if (acts.includes('running'))    return 'běh';
+    // stálý směr a vyšší rychlost → spíš auto; jinak kolo
+    if (cogR != null && cogR >= 0.85 && speed >= 24) return 'auto';
     return speed <= 22 ? 'kolo' : 'auto';
   }
 
-  // ── Auto: nad 30 km/h ─────────────────────────────────────────────────────
+  // ── Nad 30 km/h ──────────────────────────────────────────────────────────
   return 'auto';
 }
 
@@ -739,8 +758,8 @@ function confirmFence(member, fenceName, fenceId, isMovingFast, ts) {
 const MOTION_HISTORY_SIZE = 3; // počet bodů pro potvrzení změny
 const memberMotionHistory = {}; // { member: ['auto','auto','pesky'] }
 
-function resolveMotionWithHysteresis(member, motionActivities, vel) {
-  const newMotion = resolveMotion(motionActivities, vel);
+function resolveMotionWithHysteresis(member, motionActivities, vel, acc = 0) {
+  const newMotion = resolveMotion(motionActivities, vel, acc);
 
   if (!memberMotionHistory[member]) memberMotionHistory[member] = [];
   const history = memberMotionHistory[member];
@@ -774,8 +793,55 @@ const MOTION_CHANGE_CONFIRM = 5;             // bodů po sobě pro ZMĚNU prost�
 const MOTION_STOP_FORGET_MS = 5 * 60 * 1000; // stání → po 5 min zapomeň prostředek
 const motionState = {};  // member → { mode, candMode, candCount, stoppedSince }
 
-function resolveMotionSticky(member, motionActivities, vel, ts) {
-  const inst = resolveMotion(motionActivities, vel);   // okamžité zařazení (rychlost+motion)
+// ── Klouzavé okno GPS bodů pro lepší rozlišení pohybu ──────────────────────────
+// Z časových značek (tst) počítáme VLASTNÍ rychlost (nezávislou na nespolehlivém
+// OwnTracks "vel") a ze "cog" (azimut pohybu) směrovou stabilitu — chodec mění směr
+// chaoticky, cyklista drží směr. To rozlišuje kolo/pěšky v překryvovém pásmu.
+const GPS_WINDOW_SIZE = 6;
+const memberGpsWindow = {};  // member → [{lat,lon,ts,vel,cog}]
+
+function pushGpsPoint(member, lat, lon, ts, vel, cog) {
+  if (!memberGpsWindow[member]) memberGpsWindow[member] = [];
+  const w = memberGpsWindow[member];
+  // Velká časová mezera (>10 min) = nová relace → vyčisti okno
+  if (w.length && (ts - w[w.length - 1].ts) > 10 * 60 * 1000) w.length = 0;
+  w.push({ lat, lon, ts, vel, cog });
+  if (w.length > GPS_WINDOW_SIZE) w.shift();
+  return w;
+}
+
+function motionContext(member) {
+  const w = memberGpsWindow[member] || [];
+  if (w.length < 2) return { medSpeed: null, ownSpeed: null, cogR: null, n: w.length };
+  // vlastní rychlost mezi po sobě jdoucími body (km/h) — z tst a vzdálenosti
+  const speeds = [];
+  for (let i = 1; i < w.length; i++) {
+    const dt = (w[i].ts - w[i - 1].ts) / 1000;          // s
+    if (dt <= 0 || dt > 600) continue;                  // přeskoč nesmysly/velké mezery
+    const d = distance(w[i - 1].lat, w[i - 1].lon, w[i].lat, w[i].lon);  // m
+    speeds.push((d / dt) * 3.6);                         // km/h
+  }
+  const ownSpeed = speeds.length ? speeds[speeds.length - 1] : null;
+  let medSpeed = null;
+  if (speeds.length) {
+    const s = [...speeds].sort((a, b) => a - b);
+    medSpeed = s[Math.floor(s.length / 2)];
+  }
+  // směrová stabilita (kruhová koncentrace R z cog) — jen body s platným cog
+  let sumC = 0, sumS = 0, nCog = 0;
+  for (const p of w) {
+    if (p.cog == null || isNaN(p.cog) || p.cog < 0) continue;
+    sumC += Math.cos(p.cog * Math.PI / 180);
+    sumS += Math.sin(p.cog * Math.PI / 180);
+    nCog++;
+  }
+  // R blízko 1 = stálý směr (kolo/auto), blízko 0 = chaotický (pěšky)
+  const cogR = nCog >= 3 ? Math.sqrt(sumC * sumC + sumS * sumS) / nCog : null;
+  return { medSpeed, ownSpeed, cogR, n: w.length };
+}
+
+function resolveMotionSticky(member, motionActivities, vel, ts, acc = 0, ctx = null) {
+  const inst = resolveMotion(motionActivities, vel, acc, ctx);   // okamžité zařazení
   let st = motionState[member];
   if (!st) { st = { mode: null, candMode: null, candCount: 0, stoppedSince: null }; motionState[member] = st; }
 
@@ -1436,14 +1502,19 @@ Odpověz POUZE názvy souborů oddělené čárkou, nebo prázdným stringem. Be
   }
 }
 
-async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simTs = null, forceLive = false, source = 'unknown') {
+async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simTs = null, forceLive = false, source = 'unknown', acc = 0, cog = null, tst = null) {
   const ts = simTs || Date.now();
+  // Časová značka bodu pro výpočet vlastní rychlosti: GPS tst (s) má přednost před
+  // časem doručení — důležité u dávkového HTTP (fronta po výpadku signálu).
+  const pointTs = (tst && !simTs) ? tst * 1000 : ts;
+  pushGpsPoint(member, lat, lon, pointTs, vel, cog);
+  const mctx = motionContext(member);
   // MQTT a live zdroje vždy zapisují do live Redis bez ohledu na mód
   const activeRedis = (forceLive || currentMode === 'live') ? redisLive : redis;
   let status = resolveStatus(member, lat, lon, vel, motionActivities, simTs || Date.now());
   // Pohyb má přednost před geofence (kromě doma). Lepkavý automat: prostředek
   // se drží a mění až po MOTION_CHANGE_CONFIRM bodech; krátká zastávka ho nemaže.
-  let motion = resolveMotionSticky(member, motionActivities, vel, ts);
+  let motion = resolveMotionSticky(member, motionActivities, vel, ts, acc, mctx);
 
   // Motion přepisuje status pouze pokud jsme na cestě (ne uvnitř geofence)
   if (motion) {
@@ -1484,8 +1555,11 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   await activeRedis.lPush('history:' + member, JSON.stringify({ lat, lon, ts, status }));
   await activeRedis.lTrim('history:' + member, 0, 999);
   broadcast({ type: 'update', member, ...data });
-  await logEvent('gps_received', { member, lat, lon, status, vel, motionActivities, source });
-  console.log(`[GPS] [${member}] ${status} (${lat.toFixed(5)}, ${lon.toFixed(5)}) vel=${vel} motion=${(motionActivities||[]).join(",")}`);
+  await logEvent('gps_received', { member, lat, lon, status, vel, acc, cog, motionActivities, source,
+    ownSpeed: mctx.ownSpeed != null ? Math.round(mctx.ownSpeed * 10) / 10 : null,
+    medSpeed: mctx.medSpeed != null ? Math.round(mctx.medSpeed * 10) / 10 : null,
+    cogR: mctx.cogR != null ? Math.round(mctx.cogR * 100) / 100 : null });
+  console.log(`[GPS] [${member}] ${status} (${lat.toFixed(5)}, ${lon.toFixed(5)}) vel=${vel} med=${mctx.medSpeed != null ? mctx.medSpeed.toFixed(1) : '-'} cogR=${mctx.cogR != null ? mctx.cogR.toFixed(2) : '-'} acc=${acc} motion=${(motionActivities || []).join(",")}`);
   await updateTracker(member, lat, lon, ts, motionActivities);
   return status;
 }
@@ -2104,7 +2178,7 @@ app.post('/pub', async (req, res) => {
   }
   const motionactivities = req.body.motionactivities || [];
   const vel = parseFloat(req.body.vel) || 0;
-  await processGPS(member, lat, lon, motionactivities, vel, null, true, 'ot-http');
+  await processGPS(member, lat, lon, motionactivities, vel, null, true, 'ot-http', parseFloat(req.body.acc) || 0, req.body.cog != null ? parseFloat(req.body.cog) : null, req.body.tst || null);
   console.log(`[OT-HTTP] [${member}] ${lat.toFixed(5)},${lon.toFixed(5)} vel=${vel}`);
   res.json([]);  // OwnTracks očekává []
 });
@@ -2608,7 +2682,7 @@ async function startMqtt() {
         console.log('[TEST] ignoruji reálnou MQTT GPS od ' + member);
         return;
       }
-      await processGPS(member, lat, lon, msg.motionactivities || [], msg.vel || 0, null, true);
+      await processGPS(member, lat, lon, msg.motionactivities || [], msg.vel || 0, null, true, 'mqtt', msg.acc || 0, msg.cog != null ? parseFloat(msg.cog) : null, msg.tst || null);
     } catch(e) { console.error('MQTT error:', e.message); }
   });
   client.on('error', e => console.error('MQTT error:', e));
