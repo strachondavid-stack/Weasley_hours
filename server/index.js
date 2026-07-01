@@ -813,13 +813,15 @@ function pushGpsPoint(member, lat, lon, ts, vel, cog) {
 function motionContext(member) {
   const w = memberGpsWindow[member] || [];
   if (w.length < 2) return { medSpeed: null, ownSpeed: null, cogR: null, n: w.length };
-  // vlastní rychlost mezi po sobě jdoucími body (km/h) — z tst a vzdálenosti
+  // vlastní rychlost jen z POSLEDNÍCH ~4 bodů (max 3 vzorky) → rychlá reakce na
+  // zpomalení (jízda→chůze), medián pořád odfiltruje jeden GPS výkyv nahoru.
+  const recent = w.slice(-4);
   const speeds = [];
-  for (let i = 1; i < w.length; i++) {
-    const dt = (w[i].ts - w[i - 1].ts) / 1000;          // s
-    if (dt <= 0 || dt > 600) continue;                  // přeskoč nesmysly/velké mezery
-    const d = distance(w[i - 1].lat, w[i - 1].lon, w[i].lat, w[i].lon);  // m
-    speeds.push((d / dt) * 3.6);                         // km/h
+  for (let i = 1; i < recent.length; i++) {
+    const dt = (recent[i].ts - recent[i - 1].ts) / 1000;   // s
+    if (dt <= 0 || dt > 600) continue;                     // přeskoč nesmysly/velké mezery
+    const d = distance(recent[i - 1].lat, recent[i - 1].lon, recent[i].lat, recent[i].lon);  // m
+    speeds.push((d / dt) * 3.6);                            // km/h
   }
   const ownSpeed = speeds.length ? speeds[speeds.length - 1] : null;
   let medSpeed = null;
@@ -827,7 +829,7 @@ function motionContext(member) {
     const s = [...speeds].sort((a, b) => a - b);
     medSpeed = s[Math.floor(s.length / 2)];
   }
-  // směrová stabilita (kruhová koncentrace R z cog) — jen body s platným cog
+  // směrová stabilita (kruhová koncentrace R z cog) — z celého okna, jen platné cog
   let sumC = 0, sumS = 0, nCog = 0;
   for (const p of w) {
     if (p.cog == null || isNaN(p.cog) || p.cog < 0) continue;
