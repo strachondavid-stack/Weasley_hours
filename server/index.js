@@ -858,9 +858,26 @@ function resolveMotionSticky(member, motionActivities, vel, ts, acc = 0, ctx = n
   }
 
   // ── Pohyb (inst je auto/kolo/běh/pěšky) ──────────────────────────────────────
-  st.stoppedSince = null;                      // zase jedeme
+  const acceleratingCar = ctx && ctx.medSpeed != null && ctx.ownSpeed != null && ctx.ownSpeed > ctx.medSpeed + 3;
 
-  if (!st.mode) { st.mode = inst; st.candMode = null; st.candCount = 0; return st.mode; } // první zařazení hned
+  if (!st.mode) {
+    // PRVNÍ zařazení po stání (typicky rozjezd od domu). Nezalepuj hned "pěšky" —
+    // rozjezd auta/kola začíná pomalu. "Nohy" (pěšky/běh) potvrď až 2. bodem;
+    // pokud rychlost mezitím roste (zrychlování), počkej a nezaklikni.
+    if ((inst === 'pěšky' || inst === 'běh')) {
+      if (acceleratingCar) return null;               // zjevně se rozjíždíme → počkej
+      if (st.candMode === inst) {                      // 2. shodný bod → potvrď nohy
+        st.mode = inst; st.candMode = null; st.candCount = 0; st.stoppedSince = null;
+        return st.mode;
+      }
+      st.candMode = inst; st.candCount = 1; st.stoppedSince = null;
+      return null;                                     // 1. bod nohou po stání → ještě nedrž
+    }
+    st.mode = inst; st.candMode = null; st.candCount = 0; st.stoppedSince = null;
+    return st.mode;                                    // auto/kolo hned (jasný signál)
+  }
+
+  st.stoppedSince = null;                      // zase jedeme
   if (inst === st.mode) { st.candMode = null; st.candCount = 0; return st.mode; }          // potvrzení stávajícího
 
   // jiný prostředek než držíme → kandidát na změnu, musí se opakovat
