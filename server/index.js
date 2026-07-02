@@ -1560,9 +1560,7 @@ async function suggestImageForStatus(status) {
   const dir = isMotionStatus(status) ? IMG_DIR_MOTION : IMG_DIR_PLACES;
   const images = getAvailableImages(dir);
   const subfolder = isMotionStatus(status) ? 'motion' : 'places';
-  if (images.length === 0) return null;
 
-  // Zkus přímou shodu — soubory které obsahují název statusu (auto, auto_1, auto_2...)
   const statusKey = status.toLowerCase().replace(/[^a-z0-9]/g, '_');
 
   // Dříve vygenerovaný obrázek pro tento status? (generated/ podsložka)
@@ -1571,6 +1569,16 @@ async function suggestImageForStatus(status) {
     try { if (fs.existsSync(genFile)) return 'places/generated/' + statusKey + '.png'; } catch(e) {}
   }
 
+  // Žádné existující obrázky → u míst zkus rovnou vygenerovat, u pohybu konec
+  if (images.length === 0) {
+    if (subfolder === 'places' && REPLICATE_API_TOKEN) {
+      const gen = await generateImageForStatus(status);
+      if (gen) return gen;
+    }
+    return null;
+  }
+
+  // Zkus přímou shodu — soubory které obsahují název statusu (auto, auto_1, auto_2...)
   const directMatches = images.filter(f => {
     const base = f.toLowerCase().replace(/\.[^.]+$/, '').replace(/[^a-z0-9]/g, '_');
     return base === statusKey || base.startsWith(statusKey + '_') || base.startsWith(statusKey + '-');
