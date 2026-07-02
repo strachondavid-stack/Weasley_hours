@@ -1449,13 +1449,30 @@ async function describeSceneForStatus(status) {
       { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
       JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 60,
+        max_tokens: 80,
         messages: [{ role: 'user', content:
-          `Rodinné hodiny (Weasleyovi z Harryho Pottera) zobrazují stav člena rodiny obrázkem. `
-          + `Stav: "${status}" (název místa v ČR nebo činnost). `
-          + `Popiš JEDNU jednoduchou ikonickou scénu pro tento stav — anglicky, max 8 slov, `
-          + `bez jmen a textu. Např. "doctor's stethoscope and medical cross" pro klinku. `
-          + `Odpověz POUZE popisem scény.` }]
+          `Vymýšlíš ikonku pro rodinné hodiny (styl Harryho Pottera). Z názvu místa urči, `
+          + `O JAKÝ TYP MÍSTA JDE, a popiš pro něj jednoduchou univerzální ikonickou scénu.\n\n`
+          + `Název místa: "${status}"\n\n`
+          + `Pravidla:\n`
+          + `- IGNORUJ města, ulice, čísla popisná a vlastní jména v názvu (Liberec, Budyšínská, 955/54...). `
+          + `Ta NEZOBRAZUJ — soustřeď se jen na TYP místa.\n`
+          + `- Znám tyto řetězce/typy (a jejich ikonu):\n`
+          + `  Albert, Lidl, Kaufland, Tesco, Billa, Globus, Penny, Norma = supermarket → nákupní košík s potravinami\n`
+          + `  Dr.Max, Benu, Pilulka = lékárna → lékárenský kříž a lahvička\n`
+          + `  OMV, Shell, MOL, Benzina, EuroOil = čerpací stanice → benzinová pumpa\n`
+          + `  DM, Rossmann = drogerie → mýdlo a kartáček\n`
+          + `  klinika, ordinace, MEDICON, poliklinika = lékař → stetoskop a kříž\n`
+          + `  ZŠ, gymnázium, škola = škola → školní budova a taška\n`
+          + `  MŠ, školka, mateřská = školka → hračky/pastelky\n`
+          + `  restaurace, bistro, pizzerie, hospoda = jídlo → talíř s příborem\n`
+          + `  kavárna, café = káva → šálek kávy\n`
+          + `  muzeum = muzeum → antická budova se sloupy\n`
+          + `  bazén, koupaliště, aquapark = plavání → vlny a plavky\n`
+          + `- Když název NEPOZNÁŠ (např. "Tomášek od Miska" = návštěva u někoho doma), použij obecnou ikonu `
+          + `pro daný typ (návštěva → dům se srdcem; neznámé → mapová špendlík).\n\n`
+          + `Odpověz POUZE anglickým popisem té scény, max 8 slov, bez textu a jmen. `
+          + `Např. "shopping basket full of groceries".` }]
       }));
     const desc = (data.content?.[0]?.text || '').trim().replace(/^["']|["']$/g, '');
     return desc && desc.length < 100 ? desc : null;
