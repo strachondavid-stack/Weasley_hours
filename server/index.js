@@ -1430,6 +1430,101 @@ function getAvailableImages(dir) {
   } catch(e) { return []; }
 }
 
+// ─── Dynamické generování obrázků (Replicate FLUX) ───────────────────────────
+// Když pro status neexistuje žádný obrázek, vygeneruje se nový v jednotném stylu
+// hodin a uloží do img/places/generated/ (napořád — generuje se jen jednou).
+const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN || null;
+const IMG_DIR_GENERATED = IMG_DIR_PLACES + '/generated';
+// Stylová šablona — jednotný vzhled všech generovaných obrázků
+const IMG_STYLE_PROMPT = 'minimalist flat illustration, {SCENE}, navy blue ink on warm beige background, '
+  + 'hand-drawn woodcut style, vintage storybook aesthetic, simple bold shapes, '
+  + 'no text, no letters, centered composition, square format';
+const imgGenInFlight = {};   // statusKey → Promise (aby se negenerovalo 2x souběžně)
+
+// Claude vymyslí anglický popis scény z českého názvu místa
+async function describeSceneForStatus(status) {
+  if (!ANTHROPIC_API_KEY) return null;
+  try {
+    const data = await httpPost('api.anthropic.com', '/v1/messages',
+      { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 60,
+        messages: [{ role: 'user', content:
+          `Rodinné hodiny (Weasleyovi z Harryho Pottera) zobrazují stav člena rodiny obrázkem. `
+          + `Stav: "${status}" (název místa v ČR nebo činnost). `
+          + `Popiš JEDNU jednoduchou ikonickou scénu pro tento stav — anglicky, max 8 slov, `
+          + `bez jmen a textu. Např. "doctor's stethoscope and medical cross" pro klinku. `
+          + `Odpověz POUZE popisem scény.` }]
+      }));
+    const desc = (data.content?.[0]?.text || '').trim().replace(/^["']|["']$/g, '');
+    return desc && desc.length < 100 ? desc : null;
+  } catch(e) { return null; }
+}
+
+// Zavolá Replicate FLUX schnell, počká na výsledek, stáhne PNG
+function httpGetBinary(urlStr) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(urlStr);
+    const req = https.request({ hostname: u.hostname, path: u.pathname + u.search, method: 'GET' }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return httpGetBinary(res.headers.location).then(resolve, reject);
+      }
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+    req.on('error', reject);
+    req.setTimeout(60000, () => { req.destroy(); reject(new Error('download timeout')); });
+    req.end();
+  });
+}
+
+async function generateImageForStatus(status) {
+  if (!REPLICATE_API_TOKEN) return null;
+  const statusKey = status.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  // Souběžná ochrana — druhé volání počká na první
+  if (imgGenInFlight[statusKey]) return imgGenInFlight[statusKey];
+
+  imgGenInFlight[statusKey] = (async () => {
+    try {
+      const scene = await describeSceneForStatus(status);
+      if (!scene) return null;
+      const prompt = IMG_STYLE_PROMPT.replace('{SCENE}', scene);
+      console.log(`[IMGGEN] "${status}" → scéna: "${scene}"`);
+
+      // Replicate: FLUX schnell, sync čekání (Prefer: wait)
+      const pred = await httpPost('api.replicate.com', '/v1/models/black-forest-labs/flux-schnell/predictions',
+        { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + REPLICATE_API_TOKEN, 'Prefer': 'wait' },
+        JSON.stringify({ input: { prompt, aspect_ratio: '1:1', output_format: 'png', num_outputs: 1 } }));
+
+      const outUrl = Array.isArray(pred.output) ? pred.output[0] : pred.output;
+      if (!outUrl || pred.status === 'failed') {
+        console.error('[IMGGEN] Selhalo:', pred.error || pred.status);
+        await logEvent('img_generated', { status, scene, ok: false, error: pred.error || pred.status });
+        return null;
+      }
+
+      const buf = await httpGetBinary(outUrl);
+      if (!buf || buf.length < 1000) return null;
+      try { fs.mkdirSync(IMG_DIR_GENERATED, { recursive: true }); } catch(e) {}
+      const fileName = statusKey + '.png';
+      fs.writeFileSync(IMG_DIR_GENERATED + '/' + fileName, buf);
+      const finalPath = 'places/generated/' + fileName;
+      console.log(`[IMGGEN] ✓ "${status}" → ${finalPath} (${Math.round(buf.length / 1024)} kB)`);
+      await logEvent('img_generated', { status, scene, ok: true, file: finalPath, bytes: buf.length });
+      return finalPath;
+    } catch(e) {
+      console.error('[IMGGEN] Chyba:', e.message);
+      await logEvent('img_generated', { status, ok: false, error: e.message });
+      return null;
+    } finally {
+      delete imgGenInFlight[statusKey];
+    }
+  })();
+  return imgGenInFlight[statusKey];
+}
+
 async function suggestImageForStatus(status) {
   if (!status || status === 'cesta' || status === 'neznamo') return null;
 
@@ -1440,6 +1535,13 @@ async function suggestImageForStatus(status) {
 
   // Zkus přímou shodu — soubory které obsahují název statusu (auto, auto_1, auto_2...)
   const statusKey = status.toLowerCase().replace(/[^a-z0-9]/g, '_');
+
+  // Dříve vygenerovaný obrázek pro tento status? (generated/ podsložka)
+  if (subfolder === 'places') {
+    const genFile = IMG_DIR_GENERATED + '/' + statusKey + '.png';
+    try { if (fs.existsSync(genFile)) return 'places/generated/' + statusKey + '.png'; } catch(e) {}
+  }
+
   const directMatches = images.filter(f => {
     const base = f.toLowerCase().replace(/\.[^.]+$/, '').replace(/[^a-z0-9]/g, '_');
     return base === statusKey || base.startsWith(statusKey + '_') || base.startsWith(statusKey + '-');
@@ -1506,6 +1608,15 @@ Odpověz POUZE názvy souborů oddělené čárkou, nebo prázdným stringem. Be
       .map(f => f.trim())
       .filter(f => images.includes(f))
       .map(f => subfolder + '/' + f);
+
+    // Žádný existující obrázek nesedí → vygeneruj nový (jen pro místa, ne pohyb)
+    if (candidates.length === 0 && subfolder === 'places' && REPLICATE_API_TOKEN) {
+      const gen = await generateImageForStatus(status);
+      if (gen) {
+        await redis.set(cacheKey, JSON.stringify([gen]), { EX: IMG_CACHE_TTL });
+        return gen;
+      }
+    }
 
     const finalPath = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : '';
 
