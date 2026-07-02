@@ -2798,6 +2798,8 @@ app.post('/img-generate', async (req, res) => {
     if (!img) return res.status(500).json({ error: 'Generování selhalo (viz log img_generated)' });
     // vyčisti imgcache, ať se nový obrázek hned použije
     try { await redis.del('imgcache:' + statusKey); } catch(e) {}
+    // Řekni všem klientům, ať cache-bustnou tento generovaný obrázek
+    broadcast({ type: 'img_regenerated', img });
     // Přepiš per-member cache u kohokoli, kdo je právě na tomto statusu, a pošli
     // novou verzi na hodiny přes WebSocket (jinak by starý obrázek visel do odchodu)
     for (const m of MEMBERS) {

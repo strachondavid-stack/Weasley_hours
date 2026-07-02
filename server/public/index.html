@@ -805,10 +805,19 @@ const STATUS_IMAGES_FALLBACK = {
 };
 function statusImg(key, s){
   const serverImg = memberState[key]?.img;
-  if (serverImg) return 'img/' + serverImg;
+  if (serverImg) {
+    // Generované obrázky se dají přegenerovat pod stejným názvem → cache-busting,
+    // ať prohlížeč po přegenerování stáhne novou verzi (ne starou z cache).
+    if (serverImg.indexOf('generated/') !== -1) {
+      return 'img/' + serverImg + '?v=' + (imgVersion[serverImg] || 0);
+    }
+    return 'img/' + serverImg;
+  }
   if (s) { const r = STATUS_IMAGES_FALLBACK[s.toLowerCase()]; if(r) return r; }
   return null;
 }
+// Verze generovaných obrázků pro cache-busting (zvýší se při přegenerování)
+const imgVersion = {};
 
 function polarXY(r,deg){ const a=(deg-90)*Math.PI/180; return [250+r*Math.cos(a),250+r*Math.sin(a)]; }
 function wedgeArc(r1,r2,s,e){
@@ -1739,6 +1748,7 @@ ws.onmessage=(e)=>{
   try{
     const msg=JSON.parse(e.data);
     if(msg.type==='update'){updateMember(msg.member,msg);renderChips();}
+    if(msg.type==='img_regenerated'){ imgVersion[msg.img]=Date.now(); if(currentPage==='clock') renderClock(); }
     if(msg.type==='sim_arrived'){
       if(famActive) return; // rodinný scénář řídí server — žádné dialogy na klientu
       simState.active = false;
