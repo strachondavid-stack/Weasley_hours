@@ -2798,6 +2798,22 @@ app.post('/img-generate', async (req, res) => {
     if (!img) return res.status(500).json({ error: 'Generování selhalo (viz log img_generated)' });
     // vyčisti imgcache, ať se nový obrázek hned použije
     try { await redis.del('imgcache:' + statusKey); } catch(e) {}
+    // Přepiš per-member cache u kohokoli, kdo je právě na tomto statusu, a pošli
+    // novou verzi na hodiny přes WebSocket (jinak by starý obrázek visel do odchodu)
+    for (const m of MEMBERS) {
+      const mc = memberImgCache[m];
+      if (mc && mc.status && mc.status.toLowerCase().replace(/[^a-z0-9]/g, '_') === statusKey) {
+        memberImgCache[m] = { status: mc.status, img };
+        try {
+          const raw = await (currentMode === 'live' ? redisLive : redis).get('member:' + m);
+          if (raw) {
+            const d = JSON.parse(raw); d.img = img;
+            await (currentMode === 'live' ? redisLive : redis).set('member:' + m, JSON.stringify(d));
+            broadcast({ type: 'update', member: m, ...d });
+          }
+        } catch(e) {}
+      }
+    }
     res.json({ ok: true, img, cached: false });
   } catch(e) {
     res.status(500).json({ error: e.message });
