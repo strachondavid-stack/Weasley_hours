@@ -1606,22 +1606,34 @@ async function suggestImageForStatus(status) {
         console.log(`[IMG] Cache hit: "${status}" → "${chosen}" (${candidates.length} variant)`);
         return chosen || null;
       }
+      // Prázdná cache (dřívější "nic nesedí") → zkus vygenerovat, ne vzdát
+      if (subfolder === 'places' && REPLICATE_API_TOKEN) {
+        const gen = await generateImageForStatus(status);
+        if (gen) { await redis.set(cacheKey, JSON.stringify([gen]), { EX: IMG_CACHE_TTL }); return gen; }
+      }
       return null;
     }
   } catch(e) {}
 
-  if (!ANTHROPIC_API_KEY) return null;
+  if (!ANTHROPIC_API_KEY) {
+    // Bez Claude nemůžeme vybírat — u míst zkus rovnou generovat
+    if (subfolder === 'places' && REPLICATE_API_TOKEN) {
+      const gen = await generateImageForStatus(status);
+      if (gen) return gen;
+    }
+    return null;
+  }
 
   try {
-    const prompt = `Vybíráš obrázky pro zobrazení stavu člena rodiny na GPS hodinkách.
+    const prompt = `Vybíráš obrázky pro zobrazení stavu člena rodiny na GPS hodinkách (Weasleyovské hodiny).
 
 Aktuální stav: "${status}"
 
 Dostupné obrázky (názvy souborů):
 ${images.map(f => '- ' + f).join('\n')}
 
-Vyber VŠECHNY soubory které by mohly odpovídat danému stavu (mohou být varianty stejného tématu).
-Pokud žádný neodpovídá, vrať prázdný string.
+Vyber POUZE soubory, jejichž téma JASNĚ a PŘÍMO odpovídá danému stavu (např. stav "Bazén Liberec" → soubor bazen.png ANO; stav "Muzeum" → soubor boulder.png NE — lezecká stěna není muzeum).
+Buď přísný: pokud žádný soubor tematicky nesedí, vrať prázdný string — systém pak vygeneruje nový obrázek na míru, což je LEPŠÍ než použít nesouvisející.
 
 Odpověz POUZE názvy souborů oddělené čárkou, nebo prázdným stringem. Bez dalšího textu.`;
 
