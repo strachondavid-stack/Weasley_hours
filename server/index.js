@@ -1213,6 +1213,28 @@ async function savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, ai
     await saveFences();
     broadcast({ type: 'fence_added', fence });
     await logEvent('place_saved', { member, lat, lon, name: aiName, aiConfidence, aiReason, autoSave: true, source });
+
+    // Okamžitě přepni status člena na nové místo (bez čekání na další GPS bod
+    // a bez 2min potvrzení). ALE jen když člen právě TEĎ stojí uvnitř geofence —
+    // u detekce "při odchodu"/silence už je jinde, tam status nesahej.
+    try {
+      const activeRedis = currentMode === 'live' ? redisLive : redis;
+      const raw = await activeRedis.get('member:' + member);
+      const d = raw ? JSON.parse(raw) : null;
+      const stillHere = d && d.lat != null && distance(d.lat, d.lon, lat, lon) <= 150;
+      if (stillHere) {
+        memberFenceHyst[member] = { fenceId: placeId, firstTs: Date.now() - FENCE_CONFIRM_MS };
+        d.status = aiName;
+        d.img = await suggestImageForStatus(aiName);
+        d.ts = Date.now();
+        await activeRedis.set('member:' + member, JSON.stringify(d));
+        memberImgCache[member] = { status: aiName, img: d.img };
+        broadcast({ type: 'update', member, ...d });
+        console.log(`[STOP] Status [${member}] → "${aiName}" (okamžitě)`);
+      } else {
+        console.log(`[STOP] "${aiName}" uloženo, ale ${member} už není na místě → status nechávám`);
+      }
+    } catch(e) { console.error('[STOP] Instant status chyba:', e.message); }
   } else {
     console.log(`[STOP] Návrh: "${aiName}" (confidence=${aiConfidence}) — čeká na potvrzení`);
     await logEvent('place_saved', { member, lat, lon, name: null, suggestedName: aiName, aiConfidence, aiReason, autoSave: false, source });
