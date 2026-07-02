@@ -1436,9 +1436,9 @@ function getAvailableImages(dir) {
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN || null;
 const IMG_DIR_GENERATED = IMG_DIR_PLACES + '/generated';
 // Stylová šablona — jednotný vzhled všech generovaných obrázků
-const IMG_STYLE_PROMPT = 'minimalist flat illustration, {SCENE}, navy blue ink on warm beige background, '
-  + 'hand-drawn woodcut style, vintage storybook aesthetic, simple bold shapes, '
-  + 'no text, no letters, centered composition, square format';
+const IMG_STYLE_PROMPT = 'minimalist flat illustration, {SCENE}, navy blue ink drawing, '
+  + 'isolated on pure white background, hand-drawn woodcut style, vintage storybook aesthetic, '
+  + 'simple bold shapes, single centered object, no text, no letters, no border, no frame, square format';
 const imgGenInFlight = {};   // statusKey → Promise (aby se negenerovalo 2x souběžně)
 
 // Claude vymyslí anglický popis scény z českého názvu místa
@@ -1480,6 +1480,34 @@ function httpGetBinary(urlStr) {
   });
 }
 
+// Odstranění bílého/světlého pozadí → průhledné PNG (vyžaduje sharp; bez něj se
+// obrázek uloží s pozadím). Práh: pixel s R,G,B > 235 → alfa 0, jemný přechod.
+let sharpLib = null;
+try { sharpLib = require('sharp'); } catch(e) { console.log('⚠ sharp není nainstalován — generované obrázky budou mít pozadí (cd server && npm install sharp)'); }
+
+async function removeWhiteBackground(buf) {
+  if (!sharpLib) return buf;
+  try {
+    const img = sharpLib(buf).ensureAlpha();
+    const { data, info } = await img.raw().toBuffer({ resolveWithObject: true });
+    const px = data;
+    for (let i = 0; i < px.length; i += info.channels) {
+      const r = px[i], g = px[i + 1], b = px[i + 2];
+      const lum = (r + g + b) / 3;
+      if (lum > 235 && Math.max(r, g, b) - Math.min(r, g, b) < 22) {
+        px[i + 3] = 0;                                   // světlé neutrální → průhledné
+      } else if (lum > 215 && Math.max(r, g, b) - Math.min(r, g, b) < 22) {
+        px[i + 3] = Math.round((235 - lum) / 20 * 255);  // jemný přechod na okraji
+      }
+    }
+    return await sharpLib(px, { raw: { width: info.width, height: info.height, channels: info.channels } })
+      .png().toBuffer();
+  } catch(e) {
+    console.error('[IMGGEN] Odstranění pozadí selhalo:', e.message);
+    return buf;
+  }
+}
+
 async function generateImageForStatus(status) {
   if (!REPLICATE_API_TOKEN) return null;
   const statusKey = status.toLowerCase().replace(/[^a-z0-9]/g, '_');
@@ -1507,12 +1535,13 @@ async function generateImageForStatus(status) {
 
       const buf = await httpGetBinary(outUrl);
       if (!buf || buf.length < 1000) return null;
+      const cleaned = await removeWhiteBackground(buf);
       try { fs.mkdirSync(IMG_DIR_GENERATED, { recursive: true }); } catch(e) {}
       const fileName = statusKey + '.png';
-      fs.writeFileSync(IMG_DIR_GENERATED + '/' + fileName, buf);
+      fs.writeFileSync(IMG_DIR_GENERATED + '/' + fileName, cleaned);
       const finalPath = 'places/generated/' + fileName;
-      console.log(`[IMGGEN] ✓ "${status}" → ${finalPath} (${Math.round(buf.length / 1024)} kB)`);
-      await logEvent('img_generated', { status, scene, ok: true, file: finalPath, bytes: buf.length });
+      console.log(`[IMGGEN] ✓ "${status}" → ${finalPath} (${Math.round(cleaned.length / 1024)} kB${sharpLib ? ', pozadí odstraněno' : ', s pozadím — chybí sharp'})`);
+      await logEvent('img_generated', { status, scene, ok: true, file: finalPath, bytes: cleaned.length, bgRemoved: !!sharpLib });
       return finalPath;
     } catch(e) {
       console.error('[IMGGEN] Chyba:', e.message);

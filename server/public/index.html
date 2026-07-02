@@ -380,7 +380,7 @@
               <defs>
                 <clipPath id="imgGenClip"><path d="M80,80 L80,4 A76,76 0 0 1 156,80 Z"/></clipPath>
               </defs>
-              <image id="imgGenWedge" x="0" y="0" width="160" height="160" preserveAspectRatio="xMidYMid slice" clip-path="url(#imgGenClip)" style="mix-blend-mode:multiply"/>
+              <image id="imgGenWedge" x="78" y="18" width="70" height="70" preserveAspectRatio="xMidYMid meet" clip-path="url(#imgGenClip)" style="mix-blend-mode:multiply"/>
               <path d="M80,80 L80,4 A76,76 0 0 1 156,80 Z" fill="none" stroke="#999" stroke-width="1"/>
               <circle cx="80" cy="80" r="76" fill="none" stroke="#ddd" stroke-width="1"/>
             </svg>
@@ -882,7 +882,10 @@ function renderClock(){
 
     // Obrázek
     if(img){
-      const imgEl=svgEl('image',{href:img,x:mx-sz/2,y:my-sz/2,width:sz,height:sz,'preserveAspectRatio':'xMidYMid slice','clip-path':`url(#${clipId})`});
+      // Generované obrázky (průhledné PNG) — celé viditelné (meet), bez ořezu;
+      // ruční obrázky vyplní čtverec (slice) jako dosud
+      const isGen = img.indexOf('generated/') !== -1;
+      const imgEl=svgEl('image',{href:img,x:mx-sz/2,y:my-sz/2,width:sz,height:sz,'preserveAspectRatio':isGen?'xMidYMid meet':'xMidYMid slice','clip-path':`url(#${clipId})`});
       imgEl.style.mixBlendMode='multiply';
       g.appendChild(imgEl);
     }
