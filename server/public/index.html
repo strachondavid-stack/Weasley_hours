@@ -358,6 +358,44 @@
 </style>
 
 <div class="section">
+  <div class="section-title">Generátor obrázků (debug)</div>
+  <div class="cards">
+    <div class="card" style="grid-column:1/-1">
+      <div class="card-header"><span class="card-icon">🎨</span><span class="card-title">Vygeneruj obrázek pro místo</span></div>
+      <div class="card-body" style="padding:12px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <input type="text" id="imgGenName" placeholder="název místa (např. Klinika Movela)" style="flex:1;min-width:180px;font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px" onkeydown="if(event.key==='Enter')imgGenRun(false)">
+          <button class="btn-action primary" id="imgGenBtn" onclick="imgGenRun(false)">🎨 Vygenerovat</button>
+          <button class="btn-action" id="imgGenForceBtn" onclick="imgGenRun(true)" title="Smaže existující a vygeneruje znovu">↻ Přegenerovat</button>
+        </div>
+        <div id="imgGenStatus" style="font-size:12px;color:#999;margin-top:8px"></div>
+        <div id="imgGenPreview" style="display:none;margin-top:12px;align-items:center;gap:20px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:11px;color:#aaa;margin-bottom:4px">Soubor</div>
+            <img id="imgGenRaw" style="width:140px;height:140px;border-radius:8px;border:1px solid #ddd;object-fit:cover">
+          </div>
+          <div>
+            <div style="font-size:11px;color:#aaa;margin-bottom:4px">Na hodinách (výseč)</div>
+            <svg width="160" height="160" viewBox="0 0 160 160">
+              <defs>
+                <clipPath id="imgGenClip"><path d="M80,80 L80,4 A76,76 0 0 1 156,80 Z"/></clipPath>
+              </defs>
+              <image id="imgGenWedge" x="0" y="0" width="160" height="160" preserveAspectRatio="xMidYMid slice" clip-path="url(#imgGenClip)" style="mix-blend-mode:multiply"/>
+              <path d="M80,80 L80,4 A76,76 0 0 1 156,80 Z" fill="none" stroke="#999" stroke-width="1"/>
+              <circle cx="80" cy="80" r="76" fill="none" stroke="#ddd" stroke-width="1"/>
+            </svg>
+          </div>
+          <div style="flex:1;min-width:150px">
+            <div style="font-size:11px;color:#aaa;margin-bottom:4px">Cesta</div>
+            <code id="imgGenPath" style="font-size:11px;color:#666;word-break:break-all"></code>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
   <div class="section-title">Prostředí</div>
   <div class="cards">
     <div class="card" style="grid-column:1/-1">
@@ -2979,6 +3017,37 @@ document.getElementById('sc-speed')?.addEventListener('change', () => {
     fetch('/simulate/speed', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ member, speed }) });
   }
 });
+
+// ─── Generátor obrázků (admin debug) ───────────────────────────────────
+async function imgGenRun(force) {
+  const name = document.getElementById('imgGenName')?.value?.trim();
+  const st = document.getElementById('imgGenStatus');
+  const btn = document.getElementById('imgGenBtn');
+  const fbtn = document.getElementById('imgGenForceBtn');
+  if (!name) { st.textContent = 'Zadej název místa'; return; }
+  btn.disabled = true; fbtn.disabled = true;
+  st.textContent = force ? '↻ Přegenerovávám (Claude popis → FLUX)…' : '🎨 Generuji (Claude popis → FLUX)… ~5–15 s';
+  document.getElementById('imgGenPreview').style.display = 'none';
+  try {
+    const res = await fetch('/img-generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, force: !!force })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) { st.textContent = '✗ ' + (data.error || 'Chyba'); return; }
+    const url = 'img/' + data.img + '?t=' + Date.now();   // cache-bust
+    document.getElementById('imgGenRaw').src = url;
+    document.getElementById('imgGenWedge').setAttribute('href', url);
+    document.getElementById('imgGenPath').textContent = 'img/' + data.img;
+    document.getElementById('imgGenPreview').style.display = 'flex';
+    st.textContent = data.cached ? '✓ Už existoval (pro nový dej Přegenerovat)' : '✓ Vygenerováno';
+  } catch (e) {
+    st.textContent = '✗ ' + e;
+  } finally {
+    btn.disabled = false; fbtn.disabled = false;
+  }
+}
 
 // ─── Wake Lock (displej stále svítí) ───────────────────────────────────
 // Wake Lock API vyžaduje HTTPS; na HTTP/LAN použijeme tichý video trik

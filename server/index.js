@@ -2715,6 +2715,29 @@ app.get('/img-list', (req, res) => {
   res.json(getAvailableImages());
 });
 
+// Debug: vygeneruj obrázek pro zadaný název (admin). ?force=1 přegeneruje existující.
+app.post('/img-generate', async (req, res) => {
+  const { name, force } = req.body || {};
+  if (!name || !name.trim()) return res.status(400).json({ error: 'name required' });
+  if (!REPLICATE_API_TOKEN) return res.status(400).json({ error: 'REPLICATE_API_TOKEN není nastaven' });
+  const status = name.trim();
+  const statusKey = status.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const genFile = IMG_DIR_GENERATED + '/' + statusKey + '.png';
+  try {
+    if (!force && fs.existsSync(genFile)) {
+      return res.json({ ok: true, img: 'places/generated/' + statusKey + '.png', cached: true });
+    }
+    if (force) { try { fs.unlinkSync(genFile); } catch(e) {} }
+    const img = await generateImageForStatus(status);
+    if (!img) return res.status(500).json({ error: 'Generování selhalo (viz log img_generated)' });
+    // vyčisti imgcache, ať se nový obrázek hned použije
+    try { await redis.del('imgcache:' + statusKey); } catch(e) {}
+    res.json({ ok: true, img, cached: false });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.delete('/img-cache', async (req, res) => {
   const keys = await redis.keys('imgcache:*');
   for (const k of keys) await redis.del(k);
