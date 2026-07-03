@@ -2117,7 +2117,7 @@ function logToggle(i) {
 
 function logTitle(l) {
   switch(l.type) {
-    case 'gps_received': return `${l.status || '?'} · ${l.lat?.toFixed(4)},${l.lon?.toFixed(4)}`;
+    case 'gps_received': return `${l.status || '?'} · ${l.lat?.toFixed(4)},${l.lon?.toFixed(4)}${l.vel != null ? ' · ' + l.vel + 'km/h' : ''}${l.medSpeed != null ? ' (med ' + l.medSpeed + ')' : ''}${l.cogR != null ? ' · R' + l.cogR : ''}${(l.motionActivities || []).length ? ' · ' + l.motionActivities.join(',') : ''}`;
     case 'ai_response': {
       const r = l.result || {};
       return `${r.should_save ? '✓' : '✗'} conf=${r.confidence?.toFixed(2)} · "${r.name || '–'}"`;
@@ -2174,7 +2174,20 @@ function logDetail(l) {
     case 'ai_error':
       return 'chyba: ' + esc(l.error) + nl + 'latence: ' + l.durationMs + 'ms';
     case 'gps_received':
-      return 'lat: ' + l.lat + nl + 'lon: ' + l.lon + nl + 'status: ' + l.status + nl + 'vel: ' + l.vel + nl + 'source: ' + l.source;
+      return '— Z iPhonu (OwnTracks) —' + nl +
+        'lat/lon: ' + l.lat + ', ' + l.lon + nl +
+        'vel (GPS rychlost): ' + (l.vel != null ? l.vel + ' km/h' : '–') + nl +
+        'acc (přesnost GPS): ' + (l.acc != null ? l.acc + ' m' + (l.acc > 40 ? ' ⚠ špatná — rychlost ignorována' : '') : '–') + nl +
+        'cog (azimut pohybu): ' + (l.cog != null && l.cog >= 0 ? l.cog + '°' : '–') + nl +
+        'tst (čas GPS fixu): ' + (l.tst ? new Date(l.tst * 1000).toLocaleTimeString('cs') : '–') + nl +
+        'motion (Core Motion): ' + esc((l.motionActivities || []).join(', ') || '–') + nl +
+        '— Vypočtené (okno ' + (l.windowN || '?') + ' bodů) —' + nl +
+        'ownSpeed (vlastní rychlost z tst+vzdálenost): ' + (l.ownSpeed != null ? l.ownSpeed + ' km/h' : '–') + nl +
+        'medSpeed (medián, použit pro klasifikaci): ' + (l.medSpeed != null ? l.medSpeed + ' km/h' : '–') + nl +
+        'cogR (stabilita směru 0=chaos/pěšky, 1=přímo/kolo): ' + (l.cogR != null ? l.cogR : '–') + nl +
+        '— Výsledek —' + nl +
+        'status: ' + esc(l.status || '–') + nl +
+        'zdroj: ' + esc(l.source || '–');
     case 'fence_added':
       return 'jméno: ' + esc(l.name) + nl + 'lat: ' + l.lat + nl + 'lon: ' + l.lon + nl + 'radius: ' + l.radius + 'm';
     case 'img_selected':

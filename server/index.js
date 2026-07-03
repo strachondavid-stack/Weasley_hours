@@ -1777,10 +1777,11 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   await activeRedis.lPush('history:' + member, JSON.stringify({ lat, lon, ts, status }));
   await activeRedis.lTrim('history:' + member, 0, 999);
   broadcast({ type: 'update', member, ...data });
-  await logEvent('gps_received', { member, lat, lon, status, vel, acc, cog, motionActivities, source,
+  await logEvent('gps_received', { member, lat, lon, status, vel, acc, cog, tst, motionActivities, source,
     ownSpeed: mctx.ownSpeed != null ? Math.round(mctx.ownSpeed * 10) / 10 : null,
     medSpeed: mctx.medSpeed != null ? Math.round(mctx.medSpeed * 10) / 10 : null,
-    cogR: mctx.cogR != null ? Math.round(mctx.cogR * 100) / 100 : null });
+    cogR: mctx.cogR != null ? Math.round(mctx.cogR * 100) / 100 : null,
+    windowN: mctx.n });
   console.log(`[GPS] [${member}] ${status} (${lat.toFixed(5)}, ${lon.toFixed(5)}) vel=${vel} med=${mctx.medSpeed != null ? mctx.medSpeed.toFixed(1) : '-'} cogR=${mctx.cogR != null ? mctx.cogR.toFixed(2) : '-'} acc=${acc} motion=${(motionActivities || []).join(",")}`);
   await updateTracker(member, lat, lon, ts, motionActivities);
   return status;
