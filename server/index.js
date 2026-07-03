@@ -1458,11 +1458,12 @@ function getAvailableImages(dir) {
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN || null;
 const IMG_DIR_GENERATED = IMG_DIR_PLACES + '/generated';
 // Stylová šablona — jednotný vzhled všech generovaných obrázků
-const IMG_STYLE_PROMPT = 'simple vintage line art illustration, {SCENE}, navy blue ink outlines, '
+const IMG_STYLE_PROMPT = 'very simple vintage line art illustration, {SCENE}, navy blue ink outlines, '
   + 'clean thin pen strokes, light hatching for shading only, minimal solid fills, '
-  + 'isolated on pure white background, charming storybook style, few simple elements, '
+  + 'isolated on pure white background, charming naive storybook style, '
+  + 'minimalist composition with very few elements, lots of empty white space, '
   + 'composition filling most of the frame, '
-  + 'no text, no letters, no border, no frame, square format';
+  + 'no text, no letters, no border, no frame, no crowd, no background scenery, square format';
 const imgGenInFlight = {};   // statusKey → Promise (aby se negenerovalo 2x souběžně)
 
 // Claude vymyslí anglický popis scény z českého názvu místa
@@ -1482,14 +1483,16 @@ async function describeSceneForStatus(status) {
           + `- IGNORUJ města, ulice, čísla popisná a vlastní jména v názvu (Liberec, Budyšínská, 955/54...). `
           + `Ta NEZOBRAZUJ — soustřeď se jen na TYP místa.\n`
           + `- NIKDY nekresli budovu zvenku (fasáda, vchod) — všechny budovy vypadají stejně!\n`
-          + `- NEJLEPŠÍ jsou živé momentky S LIDMI, když je činnost místa přirozeně lidská: `
-          + `škola → děti v lavicích se hlásí; školka → děti si hrají s kostkami; muzeum → návštěvníci `
-          + `procházejí mezi sochami; bazén → plavec ve vlnách; restaurace → lidé u stolu; `
-          + `kavárna → člověk s šálkem u stolku; lékař → doktor se stetoskopem u pacienta.\n`
-          + `- Ale NE za každou cenu — kde je předmět výmluvnější, nech předmět: `
+          + `- Momentka musí být na první pohled ROZPOZNATELNÁ — obsahuj klíčový rekvizit, který místo `
+          + `jednoznačně určuje: škola → JEDNO dítě v lavici + učitelka U TABULE (tabule je klíčová!); `
+          + `školka → JEDNO dítě + věž z kostek + plyšový medvěd; muzeum → JEDEN návštěvník + antická socha `
+          + `na podstavci + zarámovaný obraz; bazén → plavec + vlny + žebřík; restaurace → dva lidé + stůl `
+          + `+ talíře; kavárna → osoba + šálek + stolek; lékař → doktor + stetoskop + pacient na lehátku.\n`
+          + `- MAXIMÁLNĚ 1-2 postavy a 2-3 rekvizity. Žádné davy, žádné pozadí, žádné detaily navíc. `
+          + `Ale klíčový rekvizit NIKDY nevynech — bez něj scéna není čitelná.\n`
+          + `- Kde je předmět výmluvnější než lidé, nech jen předmět: `
           + `čerpací stanice → benzinová pumpa; lékárna → kříž a lahvička; supermarket → nákupní košík; `
           + `drogerie → mýdlo a kartáček.\n`
-          + `- Scéna musí být JEDNODUCHÁ: 1-2 postavy, 1-3 předměty, žádné detailní pozadí.\n`
           + `- Řetězce: Albert/Lidl/Kaufland/Tesco/Billa/Globus/Penny = supermarket; Dr.Max/Benu = lékárna; `
           + `OMV/Shell/MOL/Benzina = čerpací stanice; DM/Rossmann = drogerie.\n`
           + `- Když název NEPOZNÁŠ (např. "Tomášek od Miska" = návštěva u někoho doma), použij obecnou ikonu `
