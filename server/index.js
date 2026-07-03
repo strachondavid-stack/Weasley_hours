@@ -1458,9 +1458,11 @@ function getAvailableImages(dir) {
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN || null;
 const IMG_DIR_GENERATED = IMG_DIR_PLACES + '/generated';
 // Stylová šablona — jednotný vzhled všech generovaných obrázků
-const IMG_STYLE_PROMPT = 'minimalist flat illustration, {SCENE}, navy blue ink drawing, '
-  + 'isolated on pure white background, hand-drawn woodcut style, vintage storybook aesthetic, '
-  + 'simple bold shapes, single centered object, no text, no letters, no border, no frame, square format';
+const IMG_STYLE_PROMPT = 'vintage line art illustration, {SCENE}, navy blue ink outlines and hatching, '
+  + 'thin elegant pen strokes, minimal solid fills, mostly white space inside shapes, '
+  + 'isolated on pure white background, hand-drawn etching style, storybook engraving aesthetic, '
+  + 'composition filling the entire frame edge to edge, '
+  + 'no text, no letters, no border, no frame, square format';
 const imgGenInFlight = {};   // statusKey → Promise (aby se negenerovalo 2x souběžně)
 
 // Claude vymyslí anglický popis scény z českého názvu místa
@@ -1479,17 +1481,21 @@ async function describeSceneForStatus(status) {
           + `Pravidla:\n`
           + `- IGNORUJ města, ulice, čísla popisná a vlastní jména v názvu (Liberec, Budyšínská, 955/54...). `
           + `Ta NEZOBRAZUJ — soustřeď se jen na TYP místa.\n`
+          + `- NIKDY nekresli budovu zvenku (fasáda, vchod) — všechny budovy vypadají stejně! `
+          + `Ukaž CO SE UVNITŘ DĚLÁ nebo charakteristický předmět: muzeum → antická socha a zarámované obrazy; `
+          + `škola → otevřená kniha, tužka a pravítko; knihovna → stoh knih; kino → filmový pás a popcorn; `
+          + `úřad → razítko a dokumenty; kostel → svíčka a vitráž.\n`
           + `- Znám tyto řetězce/typy (a jejich ikonu):\n`
           + `  Albert, Lidl, Kaufland, Tesco, Billa, Globus, Penny, Norma = supermarket → nákupní košík s potravinami\n`
           + `  Dr.Max, Benu, Pilulka = lékárna → lékárenský kříž a lahvička\n`
           + `  OMV, Shell, MOL, Benzina, EuroOil = čerpací stanice → benzinová pumpa\n`
           + `  DM, Rossmann = drogerie → mýdlo a kartáček\n`
           + `  klinika, ordinace, MEDICON, poliklinika = lékař → stetoskop a kříž\n`
-          + `  ZŠ, gymnázium, škola = škola → školní budova a taška\n`
+          + `  ZŠ, gymnázium, škola = škola → otevřená kniha, tužka a jablko\n`
           + `  MŠ, školka, mateřská = školka → hračky/pastelky\n`
           + `  restaurace, bistro, pizzerie, hospoda = jídlo → talíř s příborem\n`
           + `  kavárna, café = káva → šálek kávy\n`
-          + `  muzeum = muzeum → antická budova se sloupy\n`
+          + `  muzeum = muzeum → antická socha a zarámované obrazy\n`
           + `  bazén, koupaliště, aquapark = plavání → vlny a plavky\n`
           + `- Když název NEPOZNÁŠ (např. "Tomášek od Miska" = návštěva u někoho doma), použij obecnou ikonu `
           + `pro daný typ (návštěva → dům se srdcem; neznámé → mapová špendlík).\n\n`
