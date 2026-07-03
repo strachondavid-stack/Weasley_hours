@@ -1458,10 +1458,10 @@ function getAvailableImages(dir) {
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN || null;
 const IMG_DIR_GENERATED = IMG_DIR_PLACES + '/generated';
 // Stylová šablona — jednotný vzhled všech generovaných obrázků
-const IMG_STYLE_PROMPT = 'vintage line art illustration, {SCENE}, navy blue ink outlines and hatching, '
-  + 'thin elegant pen strokes, minimal solid fills, mostly white space inside shapes, '
-  + 'isolated on pure white background, hand-drawn etching style, storybook engraving aesthetic, '
-  + 'composition filling the entire frame edge to edge, '
+const IMG_STYLE_PROMPT = 'simple vintage line art illustration, {SCENE}, navy blue ink outlines, '
+  + 'clean thin pen strokes, light hatching for shading only, minimal solid fills, '
+  + 'isolated on pure white background, charming storybook style, few simple elements, '
+  + 'composition filling most of the frame, '
   + 'no text, no letters, no border, no frame, square format';
 const imgGenInFlight = {};   // statusKey → Promise (aby se negenerovalo 2x souběžně)
 
@@ -1481,26 +1481,21 @@ async function describeSceneForStatus(status) {
           + `Pravidla:\n`
           + `- IGNORUJ města, ulice, čísla popisná a vlastní jména v názvu (Liberec, Budyšínská, 955/54...). `
           + `Ta NEZOBRAZUJ — soustřeď se jen na TYP místa.\n`
-          + `- NIKDY nekresli budovu zvenku (fasáda, vchod) — všechny budovy vypadají stejně! `
-          + `Ukaž CO SE UVNITŘ DĚLÁ nebo charakteristický předmět: muzeum → antická socha a zarámované obrazy; `
-          + `škola → otevřená kniha, tužka a pravítko; knihovna → stoh knih; kino → filmový pás a popcorn; `
-          + `úřad → razítko a dokumenty; kostel → svíčka a vitráž.\n`
-          + `- Znám tyto řetězce/typy (a jejich ikonu):\n`
-          + `  Albert, Lidl, Kaufland, Tesco, Billa, Globus, Penny, Norma = supermarket → nákupní košík s potravinami\n`
-          + `  Dr.Max, Benu, Pilulka = lékárna → lékárenský kříž a lahvička\n`
-          + `  OMV, Shell, MOL, Benzina, EuroOil = čerpací stanice → benzinová pumpa\n`
-          + `  DM, Rossmann = drogerie → mýdlo a kartáček\n`
-          + `  klinika, ordinace, MEDICON, poliklinika = lékař → stetoskop a kříž\n`
-          + `  ZŠ, gymnázium, škola = škola → otevřená kniha, tužka a jablko\n`
-          + `  MŠ, školka, mateřská = školka → hračky/pastelky\n`
-          + `  restaurace, bistro, pizzerie, hospoda = jídlo → talíř s příborem\n`
-          + `  kavárna, café = káva → šálek kávy\n`
-          + `  muzeum = muzeum → antická socha a zarámované obrazy\n`
-          + `  bazén, koupaliště, aquapark = plavání → vlny a plavky\n`
+          + `- NIKDY nekresli budovu zvenku (fasáda, vchod) — všechny budovy vypadají stejně!\n`
+          + `- NEJLEPŠÍ jsou živé momentky S LIDMI, když je činnost místa přirozeně lidská: `
+          + `škola → děti v lavicích se hlásí; školka → děti si hrají s kostkami; muzeum → návštěvníci `
+          + `procházejí mezi sochami; bazén → plavec ve vlnách; restaurace → lidé u stolu; `
+          + `kavárna → člověk s šálkem u stolku; lékař → doktor se stetoskopem u pacienta.\n`
+          + `- Ale NE za každou cenu — kde je předmět výmluvnější, nech předmět: `
+          + `čerpací stanice → benzinová pumpa; lékárna → kříž a lahvička; supermarket → nákupní košík; `
+          + `drogerie → mýdlo a kartáček.\n`
+          + `- Scéna musí být JEDNODUCHÁ: 1-2 postavy, 1-3 předměty, žádné detailní pozadí.\n`
+          + `- Řetězce: Albert/Lidl/Kaufland/Tesco/Billa/Globus/Penny = supermarket; Dr.Max/Benu = lékárna; `
+          + `OMV/Shell/MOL/Benzina = čerpací stanice; DM/Rossmann = drogerie.\n`
           + `- Když název NEPOZNÁŠ (např. "Tomášek od Miska" = návštěva u někoho doma), použij obecnou ikonu `
-          + `pro daný typ (návštěva → dům se srdcem; neznámé → mapová špendlík).\n\n`
-          + `Odpověz POUZE anglickým popisem té scény, max 8 slov, bez textu a jmen. `
-          + `Např. "shopping basket full of groceries".` }]
+          + `(návštěva → dva lidé u stolu s čajem; neznámé → mapový špendlík).\n\n`
+          + `Odpověz POUZE anglickým popisem té scény, max 12 slov, bez textu a jmen. `
+          + `Např. "children raising hands at school desks".` }]
       }));
     const desc = (data.content?.[0]?.text || '').trim().replace(/^["']|["']$/g, '');
     return desc && desc.length < 100 ? desc : null;
