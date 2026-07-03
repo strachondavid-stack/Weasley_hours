@@ -1458,10 +1458,10 @@ function getAvailableImages(dir) {
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN || null;
 const IMG_DIR_GENERATED = IMG_DIR_PLACES + '/generated';
 // Stylová šablona — jednotný vzhled všech generovaných obrázků
-const IMG_STYLE_PROMPT = 'very simple vintage line art illustration, {SCENE}, navy blue ink outlines, '
-  + 'clean thin pen strokes, light hatching for shading only, minimal solid fills, '
-  + 'isolated on pure white background, charming naive storybook style, '
-  + 'minimalist composition with very few elements, lots of empty white space, '
+const IMG_STYLE_PROMPT = 'simple childlike illustration, {SCENE}, navy blue ink, '
+  + 'bold thick outlines, naive children\'s book drawing style, playful and charming, '
+  + 'minimal solid fills, isolated on pure white background, '
+  + 'minimalist composition with very few elements, '
   + 'composition filling most of the frame, '
   + 'no text, no letters, no border, no frame, no crowd, no background scenery, square format';
 const imgGenInFlight = {};   // statusKey → Promise (aby se negenerovalo 2x souběžně)
