@@ -2856,6 +2856,65 @@ app.delete('/img-cache', async (req, res) => {
   res.json({ ok: true, deleted: keys.length });
 });
 
+// ─── Statistiky ujeté vzdálenosti ─────────────────────────────────────────────
+// Sečte vzdálenost mezi po sobě jdoucími GPS body ze STEJNÉ kategorie pohybu
+// (auto/kolo/běh/pěšky), rozdělené po dnech. Zdroj: history:<member> (Redis).
+// POZOR: historie drží jen posledních 1000 bodů/člena — při běžném intervalu
+// (řádově minuty) to pokryje cca posledních pár dní, ne měsíce dozadu.
+const DIST_CATEGORIES = { auto: 'auto', kolo: 'kolo', 'běh': 'běh', beh: 'běh', 'pěšky': 'pěšky', pesky: 'pěšky' };
+
+function dayKeyOf(ts) {
+  const d = new Date(ts);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+async function computeDistanceStats(member, days = 14) {
+  const activeRedis = currentMode === 'live' ? redisLive : redis;
+  const raw = await activeRedis.lRange('history:' + member, 0, 999);
+  // Redis lPush → nejnovější první; pro výpočet rozdílů chceme chronologicky
+  const points = raw.map(r => { try { return JSON.parse(r); } catch(e) { return null; } })
+    .filter(Boolean).reverse();
+
+  const cutoff = Date.now() - days * 24 * 3600 * 1000;
+  const byDay = {};   // { '2026-06-29': { auto: m, kolo: m, běh: m, pěšky: m } }
+  const MAX_GAP_MS = 15 * 60 * 1000;   // > 15 min mezi body = přerušení (jiná cesta)
+
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1], b = points[i];
+    if (b.ts < cutoff) continue;
+    const cat = DIST_CATEGORIES[(b.status || '').toLowerCase()];
+    if (!cat) continue;                                   // jen pohybové statusy
+    if (DIST_CATEGORIES[(a.status || '').toLowerCase()] !== cat) continue;  // musí navazovat na stejnou kategorii
+    const dt = b.ts - a.ts;
+    if (dt <= 0 || dt > MAX_GAP_MS) continue;              // přeskoč mezery (výpadek signálu apod.)
+    const d = distance(a.lat, a.lon, b.lat, b.lon);
+    if (d > 3000) continue;                                 // GPS skok — nesmysl, přeskoč
+    const day = dayKeyOf(b.ts);
+    if (!byDay[day]) byDay[day] = { auto: 0, kolo: 0, 'běh': 0, 'pěšky': 0 };
+    byDay[day][cat] += d;
+  }
+  // metry → km, zaokrouhleno na 2 desetiny
+  const out = {};
+  for (const [day, cats] of Object.entries(byDay)) {
+    out[day] = {};
+    for (const [cat, m] of Object.entries(cats)) out[day][cat] = Math.round(m / 100) / 10;
+  }
+  return out;
+}
+
+app.get('/stats/distance', async (req, res) => {
+  const member = req.query.member;
+  const days = Math.min(parseInt(req.query.days) || 14, 60);
+  if (!MEMBERS.includes(member)) return res.status(400).json({ error: 'neplatný member' });
+  try {
+    const byDay = await computeDistanceStats(member, days);
+    res.json({ member, days, byDay,
+      note: 'historie drží posledních 1000 bodů/člena — starší dny nemusí být kompletní' });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/tracker', (req, res) => {
   const out = {};
   Object.entries(trackers).forEach(([m, t]) => {
