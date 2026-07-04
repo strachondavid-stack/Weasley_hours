@@ -1763,6 +1763,9 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   // Status = výhradně to, co systém sám rozpozná: geofence (resolveStatus) + pohyb.
   // Žádné názvy ze scénáře ani z nepotvrzených návrhů — chceme vidět reálné chování.
 
+  // Trvalá denní statistika ujeté vzdálenosti (nezávislá na trimované historii)
+  await addDailyDistance(member, status, lat, lon, pointTs);
+
   // memberImgCache drží obrázek po dobu jednoho pobytu — mění se jen při změně statusu
   let img;
   const mc = memberImgCache[member];
@@ -2868,6 +2871,50 @@ function dayKeyOf(ts) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
+// ── Trvalé denní statistiky ujeté vzdálenosti ─────────────────────────────────
+// Na rozdíl od history:<member> (trimovaná na 1000 bodů) se tohle NIKDY nemaže —
+// každý den se sčítá přírůstek vzdálenosti přímo při příchodu GPS bodu, takže
+// statistiky fungují napořád, ne jen za posledních pár dní pokrytých historií.
+const lastAccumPoint = {};   // member → { lat, lon, ts, cat }
+const DAILY_MAX_GAP_MS = 15 * 60 * 1000;   // > 15 min mezi body = přerušení (výpadek signálu)
+
+async function addDailyDistance(member, status, lat, lon, ts) {
+  const cat = DIST_CATEGORIES[(status || '').toLowerCase()];
+  const prev = lastAccumPoint[member];
+  lastAccumPoint[member] = { lat, lon, ts, cat: cat || null };
+  if (!cat || !prev || prev.cat !== cat) return;           // musí navazovat na stejnou kategorii
+  const dt = ts - prev.ts;
+  if (dt <= 0 || dt > DAILY_MAX_GAP_MS) return;             // mezera = přerušená cesta
+  const d = distance(prev.lat, prev.lon, lat, lon);
+  if (d > 3000) return;                                      // GPS skok — artefakt
+  try {
+    const activeRedis = currentMode === 'live' ? redisLive : redis;
+    const key = 'daily:' + member + ':' + dayKeyOf(ts);
+    await activeRedis.hIncrByFloat(key, cat, Math.round(d * 100) / 100);
+    // 400 dní — ať statistiky fungují i po roce, ale nekopí se navěky
+    await activeRedis.expire(key, 400 * 24 * 3600);
+  } catch(e) { console.error('[STATS] Chyba ukládání:', e.message); }
+}
+
+async function getDailyStats(member, days = 14) {
+  const activeRedis = currentMode === 'live' ? redisLive : redis;
+  const byDay = {};
+  const now = Date.now();
+  for (let i = 0; i < days; i++) {
+    const day = dayKeyOf(now - i * 24 * 3600 * 1000);
+    try {
+      const raw = await activeRedis.hGetAll('daily:' + member + ':' + day);
+      if (raw && Object.keys(raw).length) {
+        byDay[day] = { auto: 0, kolo: 0, 'běh': 0, 'pěšky': 0 };
+        for (const [cat, m] of Object.entries(raw)) {
+          if (byDay[day][cat] != null) byDay[day][cat] = Math.round(parseFloat(m) / 100) / 10;  // m → km, 1 des.
+        }
+      }
+    } catch(e) {}
+  }
+  return byDay;
+}
+
 async function computeDistanceStats(member, days = 14) {
   const activeRedis = currentMode === 'live' ? redisLive : redis;
   const raw = await activeRedis.lRange('history:' + member, 0, 999);
@@ -2902,14 +2949,27 @@ async function computeDistanceStats(member, days = 14) {
   return out;
 }
 
-app.get('/stats/distance', async (req, res) => {
+// Debug: stejný výpočet, ale z trimované historie (posledních 1000 bodů) — pro
+// porovnání s trvalými denními součty výše, kdyby se něco rozcházelo.
+app.get('/stats/distance-debug-history', async (req, res) => {
   const member = req.query.member;
   const days = Math.min(parseInt(req.query.days) || 14, 60);
   if (!MEMBERS.includes(member)) return res.status(400).json({ error: 'neplatný member' });
   try {
     const byDay = await computeDistanceStats(member, days);
-    res.json({ member, days, byDay,
-      note: 'historie drží posledních 1000 bodů/člena — starší dny nemusí být kompletní' });
+    res.json({ member, days, byDay, note: 'z history: (posledních 1000 bodů, ne trvalé)' });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/stats/distance', async (req, res) => {
+  const member = req.query.member;
+  const days = Math.min(parseInt(req.query.days) || 14, 400);
+  if (!MEMBERS.includes(member)) return res.status(400).json({ error: 'neplatný member' });
+  try {
+    const byDay = await getDailyStats(member, days);
+    res.json({ member, days, byDay });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
