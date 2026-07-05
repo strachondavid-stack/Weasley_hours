@@ -789,7 +789,7 @@ function showPage(p){
   if(p==='scenarios') { if(typeof renderScenarios==='function') renderScenarios(); if(typeof famSyncFromServer==='function') famSyncFromServer(); }
   if(p==='admin')     { loadMode(); }
   if(p==='log')       { logInitListeners(); loadLog(); }
-  if(p==='stats')     { if(statsMember) loadStats(); }
+  if(p==='stats')     { if(statsMember) loadStats(); loadPlacesStats(); }
   if(p==='map')       { setTimeout(()=>map.invalidateSize(),50); fetch('/mode').then(r=>r.json()).then(d=>{ if(d.mode==='test' && !simState.active) simSetupListeners(); }); }
 }
 
@@ -2047,6 +2047,18 @@ setInterval(()=>{
     .stats-empty{text-align:center;padding:2.5rem 1rem;color:#bbb;font-size:13px}
     .stats-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:#999}
     .stats-legend span{display:flex;align-items:center;gap:4px}
+    .place-row{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #f0f0f0;cursor:pointer;transition:background 0.1s}
+    .place-row:last-child{border-bottom:none}
+    .place-row:hover{background:#fafafa}
+    .place-thumb{width:40px;height:40px;border-radius:8px;object-fit:cover;background:#f0f0f0;flex-shrink:0;border:1px solid #eee}
+    .place-thumb-empty{width:40px;height:40px;border-radius:8px;background:#f5f5f5;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px;color:#ccc;border:1px solid #eee}
+    .place-info{flex:1;min-width:0}
+    .place-name{font-size:13px;font-weight:600;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .place-sub{font-size:11px;color:#999;margin-top:1px}
+    .place-count{font-size:12px;font-weight:700;color:#666;flex-shrink:0;background:#f5f5f5;padding:3px 9px;border-radius:10px}
+    .pv-visit{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f5f5f5}
+    .pv-visit:last-child{border-bottom:none}
+    .pv-visit .place-thumb, .pv-visit .place-thumb-empty{width:32px;height:32px;border-radius:6px}
   </style>
   <div class="stats-toolbar">
     <button class="stats-mbtn" data-member="tatka" onclick="statsSetMember('tatka',this)">tatka</button>
@@ -2060,6 +2072,27 @@ setInterval(()=>{
     </select>
   </div>
   <div id="statsContent"><div class="stats-empty">Vyber člena rodiny</div></div>
+
+  <div class="stats-card">
+    <div class="stats-card-title">📍 Nově vzniklá místa</div>
+    <div id="statsNewPlaces"><div class="stats-empty">Načítám…</div></div>
+  </div>
+
+  <div class="stats-card">
+    <div class="stats-card-title">🚩 Nejnavštívenější místa</div>
+    <div id="statsTopPlaces"><div class="stats-empty">Načítám…</div></div>
+  </div>
+
+  <!-- Detail návštěv místa (modal) -->
+  <div id="placeVisitsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:2000;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closePlaceVisits()">
+    <div style="background:#fff;border-radius:12px;max-width:420px;width:100%;max-height:80vh;overflow-y:auto;padding:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div id="pvTitle" style="font-size:15px;font-weight:700;color:#222"></div>
+        <button onclick="closePlaceVisits()" style="border:none;background:none;font-size:20px;color:#999;cursor:pointer;line-height:1">×</button>
+      </div>
+      <div id="pvBody"></div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -3288,6 +3321,82 @@ function renderStats(data) {
 
   content.innerHTML = html;
 }
+
+// ─── Vzniklá a navštívená místa ──────────────────────────────────────────
+const MEMBER_LABELS = { tatka:'Tatka', mamka:'Mamka', misak:'Mišák', kubik:'Kubík' };
+
+function placeThumb(img) {
+  return img ? `<img class="place-thumb" src="img/${img}" onerror="this.outerHTML='<div class=&quot;place-thumb-empty&quot;>📍</div>'">`
+             : `<div class="place-thumb-empty">📍</div>`;
+}
+function relDay(ts) {
+  if (!ts) return '';
+  const days = Math.floor((Date.now() - ts) / 86400000);
+  if (days <= 0) return 'dnes';
+  if (days === 1) return 'včera';
+  if (days < 30) return `před ${days} dny`;
+  return new Date(ts).toLocaleDateString('cs');
+}
+
+async function loadPlacesStats() {
+  try {
+    const fences = await fetch('/geofences').then(r => r.json());
+
+    // Nově vzniklá — podle createdAt, nejnovější první (jen ta co createdAt mají)
+    const withCreated = fences.filter(f => f.createdAt).sort((a,b) => b.createdAt - a.createdAt).slice(0, 12);
+    const newEl = document.getElementById('statsNewPlaces');
+    newEl.innerHTML = withCreated.length ? withCreated.map(f => `
+      <div class="place-row" onclick="openPlaceVisits('${f.id}','${esc(f.name)}')">
+        ${placeThumb(f.img)}
+        <div class="place-info">
+          <div class="place-name">${esc(f.name)}</div>
+          <div class="place-sub">vzniklo ${relDay(f.createdAt)}</div>
+        </div>
+      </div>`).join('') : '<div class="stats-empty">Zatím žádná nová místa</div>';
+
+    // Nejnavštívenější — podle visitCount
+    const withVisits = fences.filter(f => f.visitCount > 0).sort((a,b) => b.visitCount - a.visitCount).slice(0, 12);
+    const topEl = document.getElementById('statsTopPlaces');
+    topEl.innerHTML = withVisits.length ? withVisits.map(f => `
+      <div class="place-row" onclick="openPlaceVisits('${f.id}','${esc(f.name)}')">
+        ${placeThumb(f.img)}
+        <div class="place-info">
+          <div class="place-name">${esc(f.name)}</div>
+          <div class="place-sub">naposledy ${relDay(f.lastVisitedAt)}${f.lastVisitedBy ? ' · ' + (MEMBER_LABELS[f.lastVisitedBy]||f.lastVisitedBy) : ''}</div>
+        </div>
+        <div class="place-count">${f.visitCount}×</div>
+      </div>`).join('') : '<div class="stats-empty">Zatím žádné návštěvy</div>';
+  } catch (e) {
+    document.getElementById('statsNewPlaces').innerHTML = '<div class="stats-empty">Nepodařilo se načíst</div>';
+    document.getElementById('statsTopPlaces').innerHTML = '<div class="stats-empty">Nepodařilo se načíst</div>';
+  }
+}
+function esc(s){ return (''+(s||'')).replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
+async function openPlaceVisits(id, name) {
+  const modal = document.getElementById('placeVisitsModal');
+  document.getElementById('pvTitle').textContent = name;
+  document.getElementById('pvBody').innerHTML = '<div class="stats-empty">Načítám…</div>';
+  modal.style.display = 'flex';
+  try {
+    const data = await fetch(`/geofences/${id}/visits?limit=50`).then(r => r.json());
+    if (!data.visits || !data.visits.length) {
+      document.getElementById('pvBody').innerHTML = '<div class="stats-empty">Žádné zaznamenané návštěvy</div>';
+      return;
+    }
+    document.getElementById('pvBody').innerHTML = data.visits.map(v => `
+      <div class="pv-visit">
+        ${placeThumb(v.img)}
+        <div class="place-info">
+          <div class="place-name">${MEMBER_LABELS[v.member] || v.member}</div>
+          <div class="place-sub">${new Date(v.ts).toLocaleString('cs')}</div>
+        </div>
+      </div>`).join('');
+  } catch (e) {
+    document.getElementById('pvBody').innerHTML = '<div class="stats-empty">Nepodařilo se načíst</div>';
+  }
+}
+function closePlaceVisits() { document.getElementById('placeVisitsModal').style.display = 'none'; }
 </script>
 
 </body>
