@@ -1208,7 +1208,7 @@ async function savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, ai
 
   if (autoSave) {
     console.log(`[STOP] Auto-uloženo: "${aiName}" (confidence=${aiConfidence})`);
-    const fence = { id: placeId, name: aiName, lat, lon, radius: 150 };
+    const fence = { id: placeId, name: aiName, lat, lon, radius: 150, createdAt: Date.now() };
     dynamicFences.push(fence);
     await saveFences();
     broadcast({ type: 'fence_added', fence });
@@ -1293,7 +1293,7 @@ async function reevaluatePendingPlace(member, place, allPlaces, ts, source) {
   if (autoSave) {
     place.name = aiResult.name;
     if (!dynamicFences.some(f => f.id === place.id)) {
-      const fence = { id: place.id, name: aiResult.name, lat, lon, radius: 150 };
+      const fence = { id: place.id, name: aiResult.name, lat, lon, radius: 150, createdAt: Date.now() };
       dynamicFences.push(fence);
       await saveFences();
       broadcast({ type: 'fence_added', fence });
@@ -1769,12 +1769,20 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   // memberImgCache drží obrázek po dobu jednoho pobytu — mění se jen při změně statusu
   let img;
   const mc = memberImgCache[member];
+  const isNewArrival = !mc || mc.status !== status;
   if (mc && mc.status === status) {
     img = mc.img;
   } else {
     img = await suggestImageForStatus(status);
     memberImgCache[member] = { status, img };
   }
+
+  // Nová návštěva pojmenovaného místa (geofence) — zaznamenej ji (trvale, pro Statistiky)
+  if (isNewArrival) {
+    const fence = dynamicFences.find(f => f.name === status);
+    if (fence) await recordPlaceVisit(fence, member, ts, img);
+  }
+
   const data = { status, lat, lon, ts, img };
   await activeRedis.set('member:' + member, JSON.stringify(data));
   await activeRedis.lPush('history:' + member, JSON.stringify({ lat, lon, ts, status }));
@@ -2461,7 +2469,7 @@ app.post('/places/:id/name', async (req, res) => {
   // Pokud frontend poslal souradnice kandidata, pouzij je
   if (reqLat != null && reqLon != null) { place.lat = parseFloat(reqLat); place.lon = parseFloat(reqLon); }
   await redis.set('detected_places', JSON.stringify(places));
-  const fence = { id, name, lat: place.lat, lon: place.lon, radius, ...(only ? { only } : {}) };
+  const fence = { id, name, lat: place.lat, lon: place.lon, radius, createdAt: Date.now(), ...(only ? { only } : {}) };
   dynamicFences.push(fence);
   await saveFences();
   console.log(`✓ Nový geofence: "${name}" @ ${place.lat.toFixed(5)},${place.lon.toFixed(5)} r=${radius}m`);
@@ -2552,7 +2560,7 @@ app.put('/places/:id', async (req, res) => {
     console.log(`✓ Misto upraveno: "${oldName}" -> "${name}" @ ${place.lat.toFixed(5)},${place.lon.toFixed(5)}`);
     broadcast({ type: 'fence_updated', fence });
   } else {
-    const newFence = { id, name, lat: place.lat, lon: place.lon, radius: parseInt(radius) || 150, ...(only && only.length ? { only } : {}) };
+    const newFence = { id, name, lat: place.lat, lon: place.lon, radius: parseInt(radius) || 150, createdAt: Date.now(), ...(only && only.length ? { only } : {}) };
     dynamicFences.push(newFence);
     await saveFences();
     console.log(`✓ Misto pojmenovano (PUT): "${name}" @ ${place.lat.toFixed(5)},${place.lon.toFixed(5)} r=${newFence.radius}m`);
@@ -2564,11 +2572,23 @@ app.put('/places/:id', async (req, res) => {
 
 app.get('/geofences', (req, res) => res.json(dynamicFences));
 
+// Historie návštěv konkrétního místa (pro rozklik ve Statistikách)
+app.get('/geofences/:id/visits', async (req, res) => {
+  const { id } = req.params;
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  try {
+    const visits = await getPlaceVisits(id, limit);
+    res.json({ id, count: visits.length, visits });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/geofences', async (req, res) => {
   const { name, lat, lon, radius = 150, only } = req.body;
   if (!name || !lat || !lon) return res.status(400).json({ error: 'name, lat, lon required' });
   const id = 'manual_' + Date.now();
-  const fence = { id, name, lat: parseFloat(lat), lon: parseFloat(lon), radius, ...(only ? { only } : {}) };
+  const fence = { id, name, lat: parseFloat(lat), lon: parseFloat(lon), radius, createdAt: Date.now(), ...(only ? { only } : {}) };
   dynamicFences.push(fence);
   await saveFences();
   console.log(`✓ Manuální geofence: "${name}"`);
@@ -2877,6 +2897,35 @@ function dayKeyOf(ts) {
 // statistiky fungují napořád, ne jen za posledních pár dní pokrytých historií.
 const lastAccumPoint = {};   // member → { lat, lon, ts, cat }
 const DAILY_MAX_GAP_MS = 15 * 60 * 1000;   // > 15 min mezi body = přerušení (výpadek signálu)
+
+// ── Návštěvy míst (trvalé, pro Statistiky) ────────────────────────────────────
+// Při KAŽDÉM příchodu na pojmenované místo (přechod statusu → název geofence)
+// se přičte návštěva a uloží se poslední použitý obrázek. Seznam posledních
+// návštěv (kdo, kdy) se drží v Redis listu, ať jde zobrazit historie po rozkliku.
+const VISITS_KEEP = 200;   // posledních N návštěv na místo (ať list neroste do nekonečna)
+
+async function recordPlaceVisit(fence, member, ts, img) {
+  fence.visitCount = (fence.visitCount || 0) + 1;
+  fence.lastVisitedAt = ts;
+  fence.lastVisitedBy = member;
+  if (img) fence.img = img;   // poslední použitý obrázek pro toto místo
+  try { await saveFences(); } catch(e) {}
+  try {
+    const activeRedis = currentMode === 'live' ? redisLive : redis;
+    const key = 'visits:' + fence.id;
+    await activeRedis.lPush(key, JSON.stringify({ member, ts, img: img || null }));
+    await activeRedis.lTrim(key, 0, VISITS_KEEP - 1);
+    await activeRedis.expire(key, 400 * 24 * 3600);
+  } catch(e) { console.error('[VISITS] Chyba:', e.message); }
+}
+
+async function getPlaceVisits(fenceId, limit = 50) {
+  const activeRedis = currentMode === 'live' ? redisLive : redis;
+  try {
+    const raw = await activeRedis.lRange('visits:' + fenceId, 0, limit - 1);
+    return raw.map(r => { try { return JSON.parse(r); } catch(e) { return null; } }).filter(Boolean);
+  } catch(e) { return []; }
+}
 
 async function addDailyDistance(member, status, lat, lon, ts) {
   const cat = DIST_CATEGORIES[(status || '').toLowerCase()];
