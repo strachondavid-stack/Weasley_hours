@@ -793,6 +793,14 @@ const MOTION_CHANGE_CONFIRM = 5;             // bodů po sobě pro ZMĚNU prost�
 const MOTION_STOP_FORGET_MS = 5 * 60 * 1000; // stání → po 5 min zapomeň prostředek
 const motionState = {};  // member → { mode, candMode, candCount, stoppedSince }
 
+// ── Poslední smysluplný pohyb (fallback, když nemáme nic lepšího) ────────────
+// Po MOTION_STOP_FORGET_MS (5 min) sticky logika "zapomene" prostředek a status
+// by spadl na holé "cesta" bez obrázku — třeba na benzínce, kde zastávka není
+// (ještě) uložená jako místo. Radši držíme poslední známý pohyb (auto/kolo/...)
+// a jeho obrázek, dokud nepřijde něco konkrétnějšího (skutečné místo).
+const lastMovementStatus = {};             // member → { status, ts }
+const LAST_MOVEMENT_TTL_MS = 3 * 60 * 60 * 1000;   // 3 hodiny — pak už radši "cesta"
+
 // ── Klouzavé okno GPS bodů pro lepší rozlišení pohybu ──────────────────────────
 // Z časových značek (tst) počítáme VLASTNÍ rychlost (nezávislou na nespolehlivém
 // OwnTracks "vel") a ze "cog" (azimut pohybu) směrovou stabilitu — chodec mění směr
@@ -1758,6 +1766,19 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
       }
     }
     // Pokud jsme doma a pohybujeme se — necháme doma
+  }
+
+  // Zapamatuj si poslední smysluplný pohyb, nebo ho použij jako fallback, když
+  // aktuálně nemáme nic (holé "cesta" bez pohybu ani místa) — viz komentář výše.
+  if (status === motion && motion) {
+    lastMovementStatus[member] = { status, ts };
+  } else if (status === 'cesta') {
+    const lm = lastMovementStatus[member];
+    if (lm && (ts - lm.ts) < LAST_MOVEMENT_TTL_MS) status = lm.status;
+  } else {
+    // Dorazili jsme na konkrétní pojmenované místo (doma i jinam) — stará
+    // "poslední jízda" už je neaktuální, příští cesta se vyhodnotí znovu.
+    lastMovementStatus[member] = null;
   }
 
   // Status = výhradně to, co systém sám rozpozná: geofence (resolveStatus) + pohyb.
