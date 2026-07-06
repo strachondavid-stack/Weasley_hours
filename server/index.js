@@ -229,7 +229,7 @@ async function findPlaceAtAddress(address, lat, lon) {
 const OSM_CACHE_TTL = 30 * 24 * 3600;
 // Žebříček "místotvornosti" OSM objektu — instituce/kultura > rekreace/příroda > drobné.
 // Škola (tier 3) tak vyhraje nad hřištěm (tier 1), i když je hřiště o kus blíž.
-const OSM_TIER3 = ['school','kindergarten','college','university','library','hospital','clinic','doctors','dentist','theatre','cinema','arts_centre','museum','gallery','attraction','townhall','courthouse','place_of_worship','community_centre','public','civic','sports_centre','stadium'];
+const OSM_TIER3 = ['school','kindergarten','college','university','library','hospital','clinic','doctors','dentist','theatre','cinema','arts_centre','museum','gallery','attraction','townhall','courthouse','place_of_worship','community_centre','public','civic','sports_centre','stadium','police','fire_station','government','ranger_station','embassy','post_office'];
 const OSM_TIER2 = ['swimming_pool','water_park','sports_hall','pitch','track','park','garden','dog_park','nature_reserve','marketplace','fountain','public_bath','events_venue','festival_grounds','viewpoint','memorial','monument','castle','ruins','zoo','theme_park','beach','peak','spring','water','reservoir','wood','forest'];
 const OSM_SKIP_KINDS = ['parking','parking_space','parking_entrance','bench','waste_basket','vending_machine','bicycle_parking','motorcycle_parking','recycling','drinking_water','toilets','atm','post_box','telephone','clock','hunting_stand','charging_station','bicycle_rental','shelter','street_lamp','surveillance'];
 function osmTier(kind) {
@@ -536,7 +536,10 @@ async function askClaude(member, lat, lon, context) {
     : '';
 
   const osmStr = osmPlace
-    ? '\nMapová data OpenStreetMap znají na tomto místě pojmenovaný objekt: "' + osmPlace.name + '" (' + osmPlace.kind + ', ' + osmPlace.dist + 'm). Google Places ho nezná. Pokud sedí (přírodní/rekreační/kulturní místo bez adresy — amfiteátr, park, kopec, koupaliště...), použij tento název.'
+    ? '\nMapová data OpenStreetMap znají na tomto místě pojmenovaný objekt: "' + osmPlace.name + '" (' + osmPlace.kind + ', ' + osmPlace.dist + 'm). Google Places ho nezná.'
+      + (osmPlace.tier >= 3
+        ? ' → Je to KONKRÉTNÍ INSTITUCE (úřad/škola/nemocnice/policie...) — Google Places o ní neví, protože takové instituce v ní často nemá zaregistrované. Pokud v okolí vidíš víc podobně vzdálených firem v jedné budově a nejsi si jistý, kterou z nich vybrat, DEJ PŘEDNOST této konkrétní instituci z mapy před hádáním mezi firmami — je to spolehlivější signál než tipování.'
+        : ' Pokud sedí (přírodní/rekreační/kulturní místo bez adresy — amfiteátr, park, kopec, koupaliště...), použij tento název.')
     : '';
 
   const mapStr = mapName
@@ -1140,6 +1143,22 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
           await logEvent('addr_bonus', { member, lat, lon, name: aiResult.name, address: geo.formatted, confidenceBefore: before, confidenceAfter: aiResult.confidence });
         }
       }
+    }
+  }
+
+  // OSM konkrétní INSTITUCE (úřad/škola/nemocnice/policie...) vs. nejednoznačné
+  // hádání mezi víc firmami ve stejné budově (Google nedal jednoznačnou adresní
+  // shodu — addrPick je null — a v okolí je víc podobně vzdálených kandidátů).
+  // Instituce z mapy je spolehlivější signál než tipování mezi firmami → přebij
+  // i AI vlastní hádání (ne jen prázdný název jako níž).
+  if (aiResult && osmPlace && osmPlace.tier >= 3 && aiResult.should_save && !addrPick) {
+    const nearbyCount = placesNearby.filter(p => p.dist <= osmPlace.dist + 15).length;
+    if (nearbyCount >= 2 && aiResult.name !== osmPlace.name) {
+      console.log(`[OSM] Instituce z mapy má přednost před hádáním mezi ${nearbyCount} firmami: "${aiResult.name || '—'}" → "${osmPlace.name}"`);
+      await logEvent('osm_pick', { member, lat, lon, from: aiResult.name || null, to: osmPlace.name, kind: osmPlace.kind, nearbyCount });
+      aiResult.name = osmPlace.name;
+      aiResult.confidence = Math.max(aiResult.confidence || 0, AI_AUTOSAVE_THRESHOLD);
+      aiResult.reason = `Instituce z mapy (${osmPlace.kind}) místo hádání mezi ${nearbyCount} firmami → ${osmPlace.name}. ` + (aiResult.reason || '');
     }
   }
 
@@ -2762,6 +2781,13 @@ async function previewDetection(member, lat, lon, gapMinutes = 15) {
     } else if (typeof aiResult.confidence === 'number') {
       const sel = placesNearby.find(p => p.name === aiResult.name && p.addrScore >= 1);
       if (sel) aiResult.confidence = Math.min(1, aiResult.confidence + ADDR_MATCH_BONUS);
+    }
+  }
+  if (aiResult && osmPlace && osmPlace.tier >= 3 && aiResult.should_save && !addrPick) {
+    const nearbyCount = placesNearby.filter(p => p.dist <= osmPlace.dist + 15).length;
+    if (nearbyCount >= 2 && aiResult.name !== osmPlace.name) {
+      aiResult.name = osmPlace.name;
+      aiResult.confidence = Math.max(aiResult.confidence || 0, AI_AUTOSAVE_THRESHOLD);
     }
   }
   if (aiResult && osmPlace && aiResult.should_save && (!aiResult.name || aiResult.name === 'null')) {
