@@ -1183,7 +1183,7 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
     return;
   }
 
-  if (!aiResult.should_save || aiResult.confidence < AI_SUGGEST_THRESHOLD) {
+  if (!aiResult.should_save || aiResult.confidence < AI_SUGGEST_THRESHOLD - 0.001) {
     if (forceLong) {
       // Dlouhé stání: i když AI nedoporučuje, 30+ min na místě označ jako "?"
       // (s případným návrhem názvu od AI, pokud nějaký dala)
@@ -2777,7 +2777,7 @@ async function previewDetection(member, lat, lon, gapMinutes = 15) {
     else if (osmPlace) { decision = 'suggest'; finalName = osmPlace.name; }
     else if (placesNearby.length > 0 && historyVisits >= 3) { decision = 'suggest'; finalName = null; }
     else decision = 'reject';
-  } else if (!aiResult.should_save || aiResult.confidence < AI_SUGGEST_THRESHOLD) {
+  } else if (!aiResult.should_save || aiResult.confidence < AI_SUGGEST_THRESHOLD - 0.001) {
     decision = 'reject';
   } else if (aiResult.confidence >= AI_AUTOSAVE_THRESHOLD && aiResult.name) {
     decision = 'auto_save'; finalName = aiResult.name;
