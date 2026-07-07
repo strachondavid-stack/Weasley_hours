@@ -743,7 +743,7 @@ const LABELS = {
   doma:'doma',prace:'v práci',prace_tatka:'v práci',prace_mamka:'v práci',
   skola:'ve škole',nakupy:'na nákupech',cesta:'na cestě',
   zahrada:'na zahradě',nebezpeci:'v nebezpečí',neznamo:'neznámo',
-  auto:'autem',kolo:'na kole','pěšky':'pěšky','běh':'běží',
+  auto:'autem',kolo:'na kole','pěšky':'pěšky','běh':'běží',vlak:'vlakem',tramvaj:'tramvají',
 };
 
 // status → { icon, label, cssClass }
@@ -3238,10 +3238,12 @@ document.addEventListener('visibilitychange', async () => {
 
 // ─── Statistiky ujeté vzdálenosti ───────────────────────────────────────
 const STATS_CATS = [
-  { key: 'auto',   label: 'auto',   color: '#5B7A5A' },
-  { key: 'kolo',   label: 'kolo',   color: '#C49A3C' },
-  { key: 'běh',    label: 'běh',    color: '#B87070' },
-  { key: 'pěšky',  label: 'pěšky',  color: '#6B8CB0' },
+  { key: 'auto',    label: 'auto',    color: '#5B7A5A' },
+  { key: 'kolo',    label: 'kolo',    color: '#C49A3C' },
+  { key: 'běh',     label: 'běh',     color: '#B87070' },
+  { key: 'pěšky',   label: 'pěšky',   color: '#6B8CB0' },
+  { key: 'vlak',    label: 'vlak',    color: '#8B6BB0' },
+  { key: 'tramvaj', label: 'tramvaj', color: '#4A9DA8' },
 ];
 let statsMember = null;
 
@@ -3274,7 +3276,7 @@ function renderStats(data) {
   }
 
   // Součty za období
-  const totals = { auto: 0, kolo: 0, 'běh': 0, 'pěšky': 0 };
+  const totals = { auto: 0, kolo: 0, 'běh': 0, 'pěšky': 0, vlak: 0, tramvaj: 0 };
   days.forEach(d => STATS_CATS.forEach(c => totals[c.key] += (data.byDay[d][c.key] || 0)));
 
   let html = '<div class="stats-totals">';

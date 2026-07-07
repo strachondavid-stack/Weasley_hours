@@ -324,6 +324,63 @@ async function nominatimReverse(lat, lon, member = null) {
 
 const GEOCODE_CACHE_TTL = 30 * 24 * 3600;   // adresa bodu je stálá → cache na 30 dní
 
+// ── Detekce jízdy po kolejích (vlak/tramvaj) z mapového podkladu ─────────────
+// OSM má koleje jako geometrii (railway=rail/tram/light_rail). Namísto "je poblíž
+// pojmenované místo" tady zjišťujeme "leží GPS bod přímo NA trati" — vzdálenost
+// bodu k nejbližší úsečce dráhy, ne jen k jejímu nejbližšímu vrcholu.
+const RAIL_CACHE_TTL = 90 * 24 * 3600;   // koleje se nehýbou — cache dlouho
+const RAIL_GRID_DEG = 0.004;             // ~400m — cache po dlaždicích, ne po bodu
+
+// Vzdálenost bodu od úsečky (A→B) v metrech. Pro krátké úseky (desítky–stovky m)
+// stačí jednoduchá rovinná projekce (přesnost na jednotky metrů, dost dobré).
+function pointToSegmentMeters(lat, lon, aLat, aLon, bLat, bLon) {
+  const mPerDegLat = 111320;
+  const mPerDegLon = 111320 * Math.cos(lat * Math.PI / 180);
+  const px = (lon - aLon) * mPerDegLon, py = (lat - aLat) * mPerDegLat;
+  const dx = (bLon - aLon) * mPerDegLon, dy = (bLat - aLat) * mPerDegLat;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 > 0 ? (px * dx + py * dy) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const ex = dx * t - px, ey = dy * t - py;
+  return Math.sqrt(ex * ex + ey * ey);
+}
+
+async function findNearbyRailLines(lat, lon, radiusM = 200) {
+  const gLat = Math.round(lat / RAIL_GRID_DEG) * RAIL_GRID_DEG;
+  const gLon = Math.round(lon / RAIL_GRID_DEG) * RAIL_GRID_DEG;
+  const cacheKey = 'rail:' + gLat.toFixed(4) + ',' + gLon.toFixed(4);
+  try { const c = await redis.get(cacheKey); if (c !== null) return JSON.parse(c); } catch(e) {}
+  const q = `[out:json][timeout:10];way(around:${radiusM},${gLat},${gLon})[railway~"^(rail|tram|light_rail|subway|narrow_gauge)$"];out geom;`;
+  try {
+    const data = await httpPost('overpass-api.de', '/api/interpreter',
+      { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'weasley-hours/1.0' },
+      'data=' + encodeURIComponent(q));
+    const lines = (data.elements || [])
+      .filter(el => el.geometry && el.geometry.length >= 2 && el.tags && el.tags.railway)
+      .map(el => ({ kind: el.tags.railway, geometry: el.geometry.map(p => [p.lat, p.lon]) }));
+    try { await redis.set(cacheKey, JSON.stringify(lines), { EX: RAIL_CACHE_TTL }); } catch(e) {}
+    return lines;
+  } catch(e) {
+    console.error('[RAIL] Chyba:', e.message);
+    return [];
+  }
+}
+
+// Vrátí { kind: 'rail'|'tram'|..., dist } pro nejbližší trať do maxDist, jinak null.
+async function matchRailway(lat, lon, maxDist = 20) {
+  const lines = await findNearbyRailLines(lat, lon);
+  if (!lines.length) return null;
+  let best = null;
+  for (const line of lines) {
+    for (let i = 1; i < line.geometry.length; i++) {
+      const [aLat, aLon] = line.geometry[i - 1], [bLat, bLon] = line.geometry[i];
+      const d = pointToSegmentMeters(lat, lon, aLat, aLon, bLat, bLon);
+      if (!best || d < best.dist) best = { kind: line.kind, dist: Math.round(d) };
+    }
+  }
+  return (best && best.dist <= maxDist) ? best : null;
+}
+
 // Široký dotaz na VŠECHNY pojmenované objekty z OSM kolem bodu (i škola, hřiště,
 // budova...). Na rozdíl od findOsmPlace nefiltruje na přírodní/kulturní — vrací vše
 // pojmenované s "místotvorným" tagem, ať to lze porovnat s požadovaným názvem.
@@ -693,6 +750,13 @@ function resolveMotion(motionActivities, vel, acc = 0, ctx = null) {
 
   // Stojí — nepřepisuj geofence status
   if (acts.includes('stationary') && speed < 3) return null;
+
+  // Koleje z mapy — vysoká priorita (přesnější než hádání z rychlosti/Core Motion,
+  // protože auto/kolo po kolejích normálně nejezdí — jasný signál).
+  const rail = ctx ? ctx.rail : null;
+  if (rail && rail.kind === 'rail' && rail.dist <= 15 && speed > 8) return 'vlak';
+  if (rail && (rail.kind === 'tram' || rail.kind === 'light_rail') && rail.dist <= 12
+      && speed >= 3 && speed <= 55 && !acts.includes('cycling') && !acts.includes('walking')) return 'tramvaj';
 
   // Core Motion má přednost u jízdy (GPS drift dává nízké vel i při jízdě)
   if (acts.includes('automotive')) return 'auto';
@@ -1466,7 +1530,7 @@ const IMG_CACHE_TTL = 7 * 24 * 3600;
 // Per-member image cache — drží obrázek po dobu jednoho pobytu na statusu
 const memberImgCache = {}; // { member: { status, img } }
 
-const MOTION_STATUSES = ['auto', 'kolo', 'běh', 'beh', 'pěšky', 'pesky', 'running', 'cycling', 'walking'];
+const MOTION_STATUSES = ['auto', 'kolo', 'běh', 'beh', 'pěšky', 'pesky', 'vlak', 'tramvaj', 'running', 'cycling', 'walking'];
 
 function isMotionStatus(status) {
   return MOTION_STATUSES.includes((status || '').toLowerCase());
@@ -1758,6 +1822,11 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   const pointTs = (tst && !simTs) ? tst * 1000 : ts;
   pushGpsPoint(member, lat, lon, pointTs, vel, cog);
   const mctx = motionContext(member);
+  // Koleje z mapy — jen když má smysl (nejsme evidentně v klidu); grid cache
+  // (400m dlaždice, 90 dní) drží běžné volání jen na rychlý Redis GET.
+  if ((vel || 0) > 3 || (mctx.medSpeed || 0) > 3) {
+    try { mctx.rail = await matchRailway(lat, lon); } catch(e) { mctx.rail = null; }
+  }
   // MQTT a live zdroje vždy zapisují do live Redis bez ohledu na mód
   const activeRedis = (forceLive || currentMode === 'live') ? redisLive : redis;
   let status = resolveStatus(member, lat, lon, vel, motionActivities, simTs || Date.now());
@@ -2931,7 +3000,7 @@ app.delete('/img-cache', async (req, res) => {
 // (auto/kolo/běh/pěšky), rozdělené po dnech. Zdroj: history:<member> (Redis).
 // POZOR: historie drží jen posledních 1000 bodů/člena — při běžném intervalu
 // (řádově minuty) to pokryje cca posledních pár dní, ne měsíce dozadu.
-const DIST_CATEGORIES = { auto: 'auto', kolo: 'kolo', 'běh': 'běh', beh: 'běh', 'pěšky': 'pěšky', pesky: 'pěšky' };
+const DIST_CATEGORIES = { auto: 'auto', kolo: 'kolo', 'běh': 'běh', beh: 'běh', 'pěšky': 'pěšky', pesky: 'pěšky', vlak: 'vlak', tramvaj: 'tramvaj' };
 
 function dayKeyOf(ts) {
   const d = new Date(ts);
@@ -3001,7 +3070,7 @@ async function getDailyStats(member, days = 14) {
     try {
       const raw = await activeRedis.hGetAll('daily:' + member + ':' + day);
       if (raw && Object.keys(raw).length) {
-        byDay[day] = { auto: 0, kolo: 0, 'běh': 0, 'pěšky': 0 };
+        byDay[day] = { auto: 0, kolo: 0, 'běh': 0, 'pěšky': 0, vlak: 0, tramvaj: 0 };
         for (const [cat, m] of Object.entries(raw)) {
           if (byDay[day][cat] != null) byDay[day][cat] = Math.round(parseFloat(m) / 100) / 10;  // m → km, 1 des.
         }
@@ -3033,7 +3102,7 @@ async function computeDistanceStats(member, days = 14) {
     const d = distance(a.lat, a.lon, b.lat, b.lon);
     if (d > 3000) continue;                                 // GPS skok — nesmysl, přeskoč
     const day = dayKeyOf(b.ts);
-    if (!byDay[day]) byDay[day] = { auto: 0, kolo: 0, 'běh': 0, 'pěšky': 0 };
+    if (!byDay[day]) byDay[day] = { auto: 0, kolo: 0, 'běh': 0, 'pěšky': 0, vlak: 0, tramvaj: 0 };
     byDay[day][cat] += d;
   }
   // metry → km, zaokrouhleno na 2 desetiny
