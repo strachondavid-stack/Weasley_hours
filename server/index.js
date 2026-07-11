@@ -28,6 +28,23 @@ async function loadFences() {
 
 async function saveFences() {
   await redis.set('geofences', JSON.stringify(dynamicFences));
+  // Nezávislá záloha na disku (mimo Redis) — jen v live módu, ať test-mode zápisy
+  // nezaplavují disk. Chrání proti přesně tomu, co se stalo 2026-07-09: chybný
+  // filtr smazal geofences a přepsal se i Redis snapshot dřív, než si toho
+  // někdo všiml. Držíme posledních BACKUP_KEEP verzí (rotace).
+  if (currentMode === 'live') {
+    try {
+      const dir = '/app/public/backups-geofences';
+      fs.mkdirSync(dir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      fs.writeFileSync(dir + '/geofences_' + stamp + '.json', JSON.stringify(dynamicFences, null, 2));
+      const files = fs.readdirSync(dir).filter(f => f.startsWith('geofences_')).sort();
+      const BACKUP_KEEP = 50;
+      for (const f of files.slice(0, Math.max(0, files.length - BACKUP_KEEP))) {
+        try { fs.unlinkSync(dir + '/' + f); } catch(e) {}
+      }
+    } catch(e) { console.error('[BACKUP] Chyba zálohy geofences:', e.message); }
+  }
 }
 
 // ─── Geo helper ───────────────────────────────────────────────────────────────
@@ -2588,14 +2605,19 @@ app.post('/places/:id/name', async (req, res) => {
 });
 
 // MUSÍ být před /places/:id
+// Reset testovacích dat (kandidátů zastávek z detekce). NIKDY nemaže potvrzené
+// geofences — ty představují skutečná, uživatelem uznaná místa a tahle akce
+// slouží jen k vyčištění stavu mezi testovacími běhy. (Bug do 2026-07-10:
+// mazalo i geofences podle chybného kritéria ID prefixu — způsobilo ztrátu dat.)
 app.delete('/places/all', async (req, res) => {
+  if (currentMode !== 'test') {
+    return res.status(400).json({ error: 'Tato akce je dostupná jen v testovacím módu (ochrana proti smazání živých dat).' });
+  }
   await redis.del('detected_places');
   await redis.del('ai_recent');   // reset cooldown spolu s místy
   await redis.del('test_run_index');   // reset počítadla testovacích běhů (posun dne)
   for (const m of MEMBERS) { try { await redis.del('visits:' + m); } catch(e) {} }  // reset historie návštěv
-  dynamicFences = dynamicFences.filter(f => f.id.startsWith('manual_'));
-  await saveFences();
-  console.log('✓ Reset detected_places, zachováno ' + dynamicFences.length + ' manuálních fences');
+  console.log('✓ Reset detected_places (test mode) — geofences NEDOTČENY (' + dynamicFences.length + ' zachováno)');
   res.json({ ok: true, remaining_fences: dynamicFences.length });
 });
 
