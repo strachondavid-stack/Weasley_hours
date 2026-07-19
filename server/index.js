@@ -1337,6 +1337,7 @@ async function savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, ai
         d.ts = Date.now();
         await activeRedis.set('member:' + member, JSON.stringify(d));
         memberImgCache[member] = { status: aiName, img: d.img };
+        await recordPlaceVisit(fence, member, d.ts, d.img);   // první návštěva — jinak by se nikdy nezaznamenala
         broadcast({ type: 'update', member, ...d });
         console.log(`[STOP] Status [${member}] → "${aiName}" (okamžitě)`);
       } else {
@@ -1688,11 +1689,28 @@ async function generateImageForStatus(status) {
       if (!buf || buf.length < 1000) return null;
       const cleaned = await removeWhiteBackground(buf);
       try { fs.mkdirSync(IMG_DIR_GENERATED, { recursive: true }); } catch(e) {}
-      const fileName = statusKey + '.png';
+      // Verzované jméno souboru — přegenerování NIKDY nepřepíše starý soubor,
+      // aby staré záznamy návštěv (Statistiky) pořád ukazovaly obrázek, který
+      // byl reálně použit tehdy, ne ten nejnovější. Ukazatel na "aktuální verzi"
+      // se drží v Redis (imgver:<statusKey>).
+      let version = 1;
+      try { version = (parseInt(await redis.get('imgver:' + statusKey)) || 0) + 1; } catch(e) {}
+      const fileName = statusKey + '_v' + version + '.png';
       fs.writeFileSync(IMG_DIR_GENERATED + '/' + fileName, cleaned);
+      try { await redis.set('imgver:' + statusKey, String(version)); } catch(e) {}
+      // Úklid starých verzí — drž posledních VERSIONS_KEEP, ať disk neroste do nekonečna
+      try {
+        const VERSIONS_KEEP = 5;
+        const prefix = statusKey + '_v';
+        const olds = fs.readdirSync(IMG_DIR_GENERATED)
+          .filter(f => f.startsWith(prefix) && f.endsWith('.png'))
+          .map(f => ({ f, v: parseInt(f.slice(prefix.length, -4)) || 0 }))
+          .sort((a, b) => b.v - a.v);
+        for (const o of olds.slice(VERSIONS_KEEP)) { try { fs.unlinkSync(IMG_DIR_GENERATED + '/' + o.f); } catch(e) {} }
+      } catch(e) {}
       const finalPath = 'places/generated/' + fileName;
       console.log(`[IMGGEN] ✓ "${status}" → ${finalPath} (${Math.round(cleaned.length / 1024)} kB${sharpLib ? ', pozadí odstraněno' : ', s pozadím — chybí sharp'})`);
-      await logEvent('img_generated', { status, scene, ok: true, file: finalPath, bytes: cleaned.length, bgRemoved: !!sharpLib });
+      await logEvent('img_generated', { status, scene, ok: true, file: finalPath, bytes: cleaned.length, bgRemoved: !!sharpLib, version });
       return finalPath;
     } catch(e) {
       console.error('[IMGGEN] Chyba:', e.message);
@@ -1714,10 +1732,15 @@ async function suggestImageForStatus(status) {
 
   const statusKey = status.toLowerCase().replace(/[^a-z0-9]/g, '_');
 
-  // Dříve vygenerovaný obrázek pro tento status? (generated/ podsložka)
+  // Dříve vygenerovaný obrázek pro tento status? (generated/ podsložka, verzované)
   if (subfolder === 'places') {
-    const genFile = IMG_DIR_GENERATED + '/' + statusKey + '.png';
-    try { if (fs.existsSync(genFile)) return 'places/generated/' + statusKey + '.png'; } catch(e) {}
+    try {
+      const v = await redis.get('imgver:' + statusKey);
+      if (v) {
+        const genFile = IMG_DIR_GENERATED + '/' + statusKey + '_v' + v + '.png';
+        if (fs.existsSync(genFile)) return 'places/generated/' + statusKey + '_v' + v + '.png';
+      }
+    } catch(e) {}
   }
 
   // Žádné existující obrázky → u míst zkus rovnou vygenerovat, u pohybu konec
@@ -2976,12 +2999,16 @@ app.post('/img-generate', async (req, res) => {
   if (!REPLICATE_API_TOKEN) return res.status(400).json({ error: 'REPLICATE_API_TOKEN není nastaven' });
   const status = name.trim();
   const statusKey = status.toLowerCase().replace(/[^a-z0-9]/g, '_');
-  const genFile = IMG_DIR_GENERATED + '/' + statusKey + '.png';
   try {
-    if (!force && fs.existsSync(genFile)) {
-      return res.json({ ok: true, img: 'places/generated/' + statusKey + '.png', cached: true });
+    if (!force) {
+      const v = await redis.get('imgver:' + statusKey);
+      if (v) {
+        const genFile = IMG_DIR_GENERATED + '/' + statusKey + '_v' + v + '.png';
+        if (fs.existsSync(genFile)) return res.json({ ok: true, img: 'places/generated/' + statusKey + '_v' + v + '.png', cached: true });
+      }
     }
-    if (force) { try { fs.unlinkSync(genFile); } catch(e) {} }
+    // force i "nic nenalezeno" → vygeneruj NOVOU verzi (stará zůstává na disku
+    // kvůli historii návštěv, nemaže se — jen se přestane používat).
     const img = await generateImageForStatus(status);
     if (!img) return res.status(500).json({ error: 'Generování selhalo (viz log img_generated)' });
     // vyčisti imgcache, ať se nový obrázek hned použije

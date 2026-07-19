@@ -2093,6 +2093,12 @@ setInterval(()=>{
       <div id="pvBody"></div>
     </div>
   </div>
+
+  <!-- Zvětšený náhled obrázku (lightbox) -->
+  <div id="imgZoomModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:2100;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeImgZoom()">
+    <img id="imgZoomPic" style="max-width:100%;max-height:100%;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,0.5)">
+    <button onclick="closeImgZoom()" style="position:fixed;top:16px;right:16px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:24px;width:40px;height:40px;border-radius:50%;cursor:pointer;line-height:1">×</button>
+  </div>
 </div>
 
 <script>
@@ -3328,9 +3334,15 @@ function renderStats(data) {
 const MEMBER_LABELS = { tatka:'Tatka', mamka:'Mamka', misak:'Mišák', kubik:'Kubík' };
 
 function placeThumb(img) {
-  return img ? `<img class="place-thumb" src="img/${img}" onerror="this.outerHTML='<div class=&quot;place-thumb-empty&quot;>📍</div>'">`
+  return img ? `<img class="place-thumb" src="img/${img}" onclick="event.stopPropagation();zoomImg('img/${img}')" onerror="this.outerHTML='<div class=&quot;place-thumb-empty&quot;>📍</div>'">`
              : `<div class="place-thumb-empty">📍</div>`;
 }
+function zoomImg(src) {
+  const m = document.getElementById('imgZoomModal');
+  document.getElementById('imgZoomPic').src = src;
+  m.style.display = 'flex';
+}
+function closeImgZoom() { document.getElementById('imgZoomModal').style.display = 'none'; }
 function relDay(ts) {
   if (!ts) return '';
   const days = Math.floor((Date.now() - ts) / 86400000);
