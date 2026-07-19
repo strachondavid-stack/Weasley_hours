@@ -1544,6 +1544,7 @@ async function updateTracker(member, lat, lon, ts, motionActivities = []) {
 const IMG_DIR_PLACES = '/app/public/img/places';  // místa — doma, školka, karate...
 const IMG_DIR_MOTION = '/app/public/img/motion';  // pohyb — auto, kolo, běh, pěšky
 const IMG_CACHE_TTL = 7 * 24 * 3600;
+const IMG_GEN_RETRY_TTL = 10 * 60;   // generování selhalo (přechodná chyba) → zkus znovu za 10 min, ne za týden
 
 // Per-member image cache — drží obrázek po dobu jednoho pobytu na statusu
 const memberImgCache = {}; // { member: { status, img } }
@@ -1784,6 +1785,8 @@ async function suggestImageForStatus(status) {
       if (subfolder === 'places' && REPLICATE_API_TOKEN) {
         const gen = await generateImageForStatus(status);
         if (gen) { await redis.set(cacheKey, JSON.stringify([gen]), { EX: IMG_CACHE_TTL }); return gen; }
+        // Generování zkusil a selhal znovu → krátký TTL, ať to nečeká celý týden
+        try { await redis.set(cacheKey, JSON.stringify([]), { EX: IMG_GEN_RETRY_TTL }); } catch(e) {}
       }
       return null;
     }
@@ -1833,20 +1836,25 @@ Odpověz POUZE názvy souborů oddělené čárkou, nebo prázdným stringem. Be
       .map(f => subfolder + '/' + f);
 
     // Žádný existující obrázek nesedí → vygeneruj nový (jen pro místa, ne pohyb)
+    let genAttempted = false, genFailed = false;
     if (candidates.length === 0 && subfolder === 'places' && REPLICATE_API_TOKEN) {
+      genAttempted = true;
       const gen = await generateImageForStatus(status);
       if (gen) {
         await redis.set(cacheKey, JSON.stringify([gen]), { EX: IMG_CACHE_TTL });
         return gen;
       }
+      genFailed = true;
     }
 
     const finalPath = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : '';
 
     console.log(`[IMG] Status "${status}" (${subfolder}) → AI vybrala ${candidates.length} kandidátů, zvoleno: "${finalPath || 'žádný'}"`);
-    // Ulož pole kandidátů — při každém novém pobytu se vybere náhodná varianta
-    await redis.set(cacheKey, JSON.stringify(candidates), { EX: IMG_CACHE_TTL });
-    await logEvent('img_selected', { status, subfolder, candidates, selectedImg: finalPath || null, availableImgs: images });
+    // Ulož pole kandidátů — při každém novém pobytu se vybere náhodná varianta.
+    // Když generování reálně selhalo (ne že se jen nezkoušelo), krátký TTL — ať
+    // to zkusí znovu za chvíli, ne až za týden (přechodná chyba API se opraví sama).
+    await redis.set(cacheKey, JSON.stringify(candidates), { EX: genFailed ? IMG_GEN_RETRY_TTL : IMG_CACHE_TTL });
+    await logEvent('img_selected', { status, subfolder, candidates, selectedImg: finalPath || null, availableImgs: images, genAttempted, genFailed });
     return finalPath || null;
 
   } catch(e) {
@@ -2999,12 +3007,26 @@ app.post('/img-generate', async (req, res) => {
   if (!REPLICATE_API_TOKEN) return res.status(400).json({ error: 'REPLICATE_API_TOKEN není nastaven' });
   const status = name.trim();
   const statusKey = status.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  // Aktualizuj fence.img u odpovídajícího místa (podle názvu), ať se to hned
+  // ukáže i ve Statistikách — jinak by se to projevilo až při další návštěvě.
+  async function syncFenceImg(img) {
+    let updated = false;
+    for (const f of dynamicFences) {
+      if (f.name.toLowerCase().replace(/[^a-z0-9]/g, '_') === statusKey) { f.img = img; updated = true; }
+    }
+    if (updated) { try { await saveFences(); } catch(e) {} }
+    return updated;
+  }
   try {
     if (!force) {
       const v = await redis.get('imgver:' + statusKey);
       if (v) {
         const genFile = IMG_DIR_GENERATED + '/' + statusKey + '_v' + v + '.png';
-        if (fs.existsSync(genFile)) return res.json({ ok: true, img: 'places/generated/' + statusKey + '_v' + v + '.png', cached: true });
+        if (fs.existsSync(genFile)) {
+          const img = 'places/generated/' + statusKey + '_v' + v + '.png';
+          const fenceUpdated = await syncFenceImg(img);
+          return res.json({ ok: true, img, cached: true, fenceUpdated });
+        }
       }
     }
     // force i "nic nenalezeno" → vygeneruj NOVOU verzi (stará zůstává na disku
@@ -3031,7 +3053,10 @@ app.post('/img-generate', async (req, res) => {
         } catch(e) {}
       }
     }
-    res.json({ ok: true, img, cached: false });
+    // Aktualizuj fence.img u odpovídajícího místa (podle názvu), ať se to hned
+    // ukáže i ve Statistikách — jinak by se to projevilo až při další návštěvě.
+    const fenceUpdated = await syncFenceImg(img);
+    res.json({ ok: true, img, cached: false, fenceUpdated });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
