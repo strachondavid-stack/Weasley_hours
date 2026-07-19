@@ -731,6 +731,9 @@ const SILENCE_MIN_GAP = 20 * 60 * 1000;     // 20 minut — filtruje průjezdy
 const SILENCE_MAX_GAP = 4 * 60 * 60 * 1000;
 
 const AI_AUTOSAVE_THRESHOLD = 0.70;
+const DEFAULT_FENCE_RADIUS = 60;   // dřív 150m — zúženo kvůli nejednoznačnosti mezi
+                                    // blízkými firmami (víc s rezervou nad GPS šumem,
+                                    // který uvnitř budov běžně dosahuje 20-60m acc)
 const AI_SUGGEST_THRESHOLD = 0.55;
 
 // Bonus k confidence za opakované návštěvy (deterministicky, nezávisle na AI)
@@ -1316,7 +1319,7 @@ async function savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, ai
 
   if (autoSave) {
     console.log(`[STOP] Auto-uloženo: "${aiName}" (confidence=${aiConfidence})`);
-    const fence = { id: placeId, name: aiName, lat, lon, radius: 150, createdAt: Date.now() };
+    const fence = { id: placeId, name: aiName, lat, lon, radius: DEFAULT_FENCE_RADIUS, createdAt: Date.now() };
     dynamicFences.push(fence);
     await saveFences();
     broadcast({ type: 'fence_added', fence });
@@ -1402,7 +1405,7 @@ async function reevaluatePendingPlace(member, place, allPlaces, ts, source) {
   if (autoSave) {
     place.name = aiResult.name;
     if (!dynamicFences.some(f => f.id === place.id)) {
-      const fence = { id: place.id, name: aiResult.name, lat, lon, radius: 150, createdAt: Date.now() };
+      const fence = { id: place.id, name: aiResult.name, lat, lon, radius: DEFAULT_FENCE_RADIUS, createdAt: Date.now() };
       dynamicFences.push(fence);
       await saveFences();
       broadcast({ type: 'fence_added', fence });
@@ -2659,7 +2662,7 @@ app.get('/places', async (req, res) => {
 
 app.post('/places/:id/name', async (req, res) => {
   const { id } = req.params;
-  const { name, radius = 150, only, lat: reqLat, lon: reqLon } = req.body;
+  const { name, radius = DEFAULT_FENCE_RADIUS, only, lat: reqLat, lon: reqLon } = req.body;
   if (!name) return res.status(400).json({ error: 'name required' });
   const raw = await redis.get('detected_places');
   const places = raw ? JSON.parse(raw) : [];
@@ -2790,7 +2793,7 @@ app.get('/geofences/:id/visits', async (req, res) => {
 });
 
 app.post('/geofences', async (req, res) => {
-  const { name, lat, lon, radius = 150, only } = req.body;
+  const { name, lat, lon, radius = DEFAULT_FENCE_RADIUS, only } = req.body;
   if (!name || !lat || !lon) return res.status(400).json({ error: 'name, lat, lon required' });
   const id = 'manual_' + Date.now();
   const fence = { id, name, lat: parseFloat(lat), lon: parseFloat(lon), radius, createdAt: Date.now(), ...(only ? { only } : {}) };

@@ -314,7 +314,7 @@
       <input type="text"   id="gName"   placeholder="název"  style="flex:1;min-width:80px">
       <input type="number" id="gLat"    placeholder="lat"    style="width:105px" step="0.00001">
       <input type="number" id="gLon"    placeholder="lon"    style="width:105px" step="0.00001">
-      <input type="number" id="gRadius" placeholder="radius" style="width:66px" value="150">
+      <input type="number" id="gRadius" placeholder="radius" style="width:66px" value="60">
       <span class="lbl">m</span>
       <button class="btn-action primary" onclick="addGeofence()">Přidat</button>
     </div>
@@ -988,7 +988,7 @@ function buildPlacePopup(place){
     cands.forEach((c,i)=>{ch+=`<div class="candidate" id="mc_${place.id}_${i}" onclick="mapSelCand('${place.id}','${c.name.replace(/'/g,"\\'")}',${i})"><div class="cand-info"><div style="font-size:13px;font-weight:600;color:#222">${c.name}</div><div style="font-size:10px;color:#aaa">${c.primaryType||''}${c.rating?' ★'+c.rating:''}</div></div><div style="font-size:11px;color:#bbb;margin-left:7px;white-space:nowrap">${c.dist}m</div></div>`;});
     ch+='</div>';
   }
-  return `<div class="place-popup"><h3>📍 Neznámé místo</h3><div class="meta">${place.lat.toFixed(5)}, ${place.lon.toFixed(5)} · ${place.duration} min · ${fmtT(place.detectedAt)}</div>${cands.length?'<div style="font-size:12px;color:#777;margin-bottom:5px">Vyber nebo napiš:</div>':''}${ch}<div class="custom-row"><input type="text" id="mp_${place.id}" placeholder="název místa..." value="${place.suggestedName||''}"/></div><div class="radius-row"><span>Radius:</span><input type="number" id="mr_${place.id}" value="150" min="50" max="500"/>m</div><div class="btn-row"><button class="primary" onclick="mapNamePlace('${place.id}')">✓ Uložit</button><button onclick="showPage('places')" style="font-size:12px">✏ Editor</button><button class="danger" onclick="mapDelPlace('${place.id}')">Smazat</button></div></div>`;
+  return `<div class="place-popup"><h3>📍 Neznámé místo</h3><div class="meta">${place.lat.toFixed(5)}, ${place.lon.toFixed(5)} · ${place.duration} min · ${fmtT(place.detectedAt)}</div>${cands.length?'<div style="font-size:12px;color:#777;margin-bottom:5px">Vyber nebo napiš:</div>':''}${ch}<div class="custom-row"><input type="text" id="mp_${place.id}" placeholder="název místa..." value="${place.suggestedName||''}"/></div><div class="radius-row"><span>Radius:</span><input type="number" id="mr_${place.id}" value="60" min="30" max="500"/>m</div><div class="btn-row"><button class="primary" onclick="mapNamePlace('${place.id}')">✓ Uložit</button><button onclick="showPage('places')" style="font-size:12px">✏ Editor</button><button class="danger" onclick="mapDelPlace('${place.id}')">Smazat</button></div></div>`;
 }
 function mapSelCand(pid,name,idx){
   document.querySelectorAll(`[id^="mc_${pid}_"]`).forEach(el=>el.classList.remove('selected'));
@@ -1075,7 +1075,7 @@ function renderPlaceCard(p){
   const cands=editCands[p.id]||p.candidates||[];
   const loading=loadingCands[p.id];
   const curName=p._editName!=null?p._editName:(p.name||p.suggestedName||'');
-  const curRadius=p._editRadius||150;
+  const curRadius=p._editRadius||60;
 
   let badge='';
   if(isNamed)                   badge='<span class="pbadge pbadge-ok">pojmenováno</span>';
@@ -1112,7 +1112,7 @@ function renderPlaceCard(p){
     <div class="pc-section">Název a radius</div>
     <div class="pc-field-row">
       <input type="text"   id="pn_${p.id}" value="${curName}"   placeholder="název místa..."     oninput="storeN('${p.id}',this.value)">
-      <input type="number" id="pr_${p.id}" value="${curRadius}" placeholder="radius" min="50" max="1000" oninput="storeR('${p.id}',parseInt(this.value)||150)">
+      <input type="number" id="pr_${p.id}" value="${curRadius}" placeholder="radius" min="30" max="1000" oninput="storeR('${p.id}',parseInt(this.value)||60)">
       <span>m</span>
     </div>
     <div class="pc-only-row">
