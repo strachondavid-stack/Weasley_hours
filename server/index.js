@@ -1661,6 +1661,35 @@ async function removeWhiteBackground(buf) {
   }
 }
 
+// Volání Replicate s automatickým retry na 429 (rate limit) — respektuje
+// Retry-After header, pokud ho Replicate pošle, jinak čeká rostoucí dobu.
+function httpPostReplicate(path, body, attempt = 1) {
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'api.replicate.com', path, method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + REPLICATE_API_TOKEN, 'Prefer': 'wait' },
+    }, (res) => {
+      let d = '';
+      res.on('data', chunk => d += chunk);
+      res.on('end', async () => {
+        if (res.statusCode === 429 && attempt <= 3) {
+          const retryAfter = parseInt(res.headers['retry-after']) || (attempt * 8);   // 8s, 16s, 24s
+          console.log(`[IMGGEN] 429 (rate limit) → čekám ${retryAfter}s, pokus ${attempt}/3`);
+          await new Promise(r => setTimeout(r, retryAfter * 1000));
+          try { resolve(await httpPostReplicate(path, body, attempt + 1)); } catch(e) { reject(e); }
+          return;
+        }
+        try { resolve({ statusCode: res.statusCode, body: JSON.parse(d) }); }
+        catch(e) { resolve({ statusCode: res.statusCode, body: null, raw: d }); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(30000, () => { req.destroy(); reject(new Error('timeout')); });
+    req.write(body);
+    req.end();
+  });
+}
+
 async function generateImageForStatus(status) {
   if (!REPLICATE_API_TOKEN) return null;
   const statusKey = status.toLowerCase().replace(/[^a-z0-9]/g, '_');
@@ -1674,15 +1703,15 @@ async function generateImageForStatus(status) {
       const prompt = IMG_STYLE_PROMPT.replace('{SCENE}', scene);
       console.log(`[IMGGEN] "${status}" → scéna: "${scene}"`);
 
-      // Replicate: FLUX schnell, sync čekání (Prefer: wait)
-      const pred = await httpPost('api.replicate.com', '/v1/models/black-forest-labs/flux-schnell/predictions',
-        { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + REPLICATE_API_TOKEN, 'Prefer': 'wait' },
+      // Replicate: FLUX schnell, sync čekání (Prefer: wait), auto-retry na 429
+      const resp = await httpPostReplicate('/v1/models/black-forest-labs/flux-schnell/predictions',
         JSON.stringify({ input: { prompt, aspect_ratio: '1:1', output_format: 'png', num_outputs: 1 } }));
+      const pred = resp.body || {};
 
       const outUrl = Array.isArray(pred.output) ? pred.output[0] : pred.output;
       if (!outUrl || pred.status === 'failed') {
-        console.error('[IMGGEN] Selhalo:', pred.error || pred.status);
-        await logEvent('img_generated', { status, scene, ok: false, error: pred.error || pred.status });
+        console.error('[IMGGEN] Selhalo:', resp.statusCode, pred.error || pred.detail || resp.raw || pred.status);
+        await logEvent('img_generated', { status, scene, ok: false, error: pred.error || pred.detail || pred.status, httpStatus: resp.statusCode });
         return null;
       }
 
