@@ -1603,15 +1603,29 @@ async function describeSceneForStatus(status) {
           + `- Kde je předmět výmluvnější než lidé, nech jen předmět: `
           + `čerpací stanice → benzinová pumpa; lékárna → kříž a lahvička; supermarket → nákupní košík; `
           + `drogerie → mýdlo a kartáček.\n`
-          + `- Řetězce: Albert/Lidl/Kaufland/Tesco/Billa/Globus/Penny = supermarket; Dr.Max/Benu = lékárna; `
-          + `OMV/Shell/MOL/Benzina = čerpací stanice; DM/Rossmann = drogerie.\n`
-          + `- Když název NEPOZNÁŠ (např. "Tomášek od Miska" = návštěva u někoho doma), použij obecnou ikonu `
-          + `(návštěva → dva lidé u stolu s čajem; neznámé → mapový špendlík).\n\n`
-          + `Odpověz POUZE anglickým popisem té scény, max 12 slov, bez textu a jmen. `
-          + `Např. "children raising hands at school desks".` }]
+          + `- Řetězce: Albert/Lidl/Kaufland/Tesco/Billa/Globus/Penny/REWE/Netto/Spar/Hofer/Edeka/Coop `
+          + `= supermarket; Dr.Max/Benu/Apotheke = lékárna; OMV/Shell/MOL/Benzina/Agip/Jet = čerpací stanice; `
+          + `DM/Rossmann/Müller = drogerie; McDonald's/Burger King/KFC = fast food (taška/kelímek s logem NE, `
+          + `jen jídlo).\n`
+          + `- Když název NEPOZNÁŠ (např. neznámá firma nebo cizí jazyk), NEHÁDEJ ani nezdůvodňuj — `
+          + `rovnou použij obecnou ikonu podle kontextu (návštěva → dva lidé u stolu s čajem; `
+          + `neznámý obchod/firma → obecná budova s výlohou; úplně neznámé → mapový špendlík).\n\n`
+          + `KRITICKY DŮLEŽITÉ: Odpověz VÝHRADNĚ finální anglickou scénou, max 12 slov. `
+          + `ŽÁDNÉ zdůvodnění, ŽÁDNÉ mezikroky, ŽÁDNÉ šipky (→), ŽÁDNÝ markdown (**), ŽÁDNÉ odřádkování — `
+          + `jen jedna čistá věta. Např. "children raising hands at school desks".` }]
       }));
-    const desc = (data.content?.[0]?.text || '').trim().replace(/^["']|["']$/g, '');
-    return desc && desc.length < 100 ? desc : null;
+    const raw = (data.content?.[0]?.text || '').trim();
+    // Obranná očista — i kdyby Claude přesto nechal uvažování prosáknout ven
+    // (šipky, markdown, víc řádků), vytáhni použitelnou poslední větu.
+    let desc = raw
+      .split('\n').map(l => l.trim()).filter(Boolean).pop() || raw;  // poslední neprázdný řádek
+    desc = desc
+      .replace(/\*\*/g, '').replace(/[*_#]/g, '')       // markdown pryč
+      .replace(/^.*→\s*/, '')                             // vezmi jen text ZA poslední šipkou
+      .replace(/^["']|["']$/g, '')
+      .trim();
+    if (!desc || desc.length > 100 || desc.length < 3) return null;
+    return desc;
   } catch(e) { return null; }
 }
 
