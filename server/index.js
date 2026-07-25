@@ -726,6 +726,52 @@ const LEAVE_RADIUS = 150;
 const MERGE_RADIUS = 150;   // detekce do této vzdálenosti od existujícího místa = totéž místo (drift)
 const MIN_STOP_DURATION = 5 * 60 * 1000;
 const MIN_STOP_POINTS = 3;
+
+// ── "Potulka" v rozlehlé oblasti (zoo, park, výstaviště...) ──────────────────
+// Těsný cluster (80m) resetuje kdykoli člověk poodejde pár desítek metrů —
+// v rozlehlém areálu se tak nikdy "nezastaví" a místo se neidentifikuje, i po
+// hodině procházení. Tahle paralelní, volnější detekce sleduje širší oblast
+// (pevná kotva = první bod potulky, ne posouvající se střed — jinak by dlouhá
+// přímá chůze/jízda nikdy nevedla k resetu) a po WIDE_MIN_DURATION v ní spustí
+// identifikaci — bez ohledu na to, jestli člověk zrovna stojí, nebo jde dál.
+const WIDE_LEAVE_RADIUS = 600;             // dál od kotvy = opravdu jinam, nová "potulka"
+const WIDE_MIN_DURATION = 10 * 60 * 1000;  // 10 minut v oblasti
+const WIDE_MIN_POINTS = 4;
+const wideTrackers = {};   // member → { anchor:{lat,lon}, points:[{lat,lon,ts}], startTs, evaluated }
+
+function updateWideDwell(member, lat, lon, ts, motionActivities = []) {
+  const isFastVehicle = motionActivities.includes('automotive');
+  let wt = wideTrackers[member];
+
+  if (!wt) {
+    wideTrackers[member] = { anchor: { lat, lon }, points: [{ lat, lon, ts }], startTs: ts, evaluated: false };
+    return;
+  }
+
+  const distFromAnchor = distance(lat, lon, wt.anchor.lat, wt.anchor.lon);
+  if (distFromAnchor > WIDE_LEAVE_RADIUS) {
+    // Opravdu jinam (jiné místo, nebo odjezd autem daleko) — nová potulka odsud
+    wideTrackers[member] = { anchor: { lat, lon }, points: [{ lat, lon, ts }], startTs: ts, evaluated: false };
+    return;
+  }
+
+  // Rychlá jízda uvnitř oblasti (projíždění, ne procházka) — nepřičítej do potulky,
+  // ale nech kotvu být (krátký úsek autem v rámci stejného areálu neresetuje).
+  if (isFastVehicle) return;
+
+  wt.points.push({ lat, lon, ts });
+
+  if (!wt.evaluated && wt.points.length >= WIDE_MIN_POINTS && (ts - wt.startTs) >= WIDE_MIN_DURATION) {
+    wt.evaluated = true;
+    const center = clusterCenter(wt.points);
+    const durMin = Math.round((ts - wt.startTs) / 60000);
+    console.log(`[WIDE] [${member}] Potulka ${durMin}min v oblasti (${wt.points.length} bodů, ${wt.points.length} vzorků) → identifikace`);
+    // async, neblokuj příjem GPS bodů (stejný vzor jako evaluateCluster)
+    processStopCandidate(member, center.lat, center.lon, durMin, 'wide-dwell', false, false, ts, wt.points)
+      .catch(e => console.error('[WIDE] Chyba:', e.message));
+  }
+}
+
 const SILENCE_MIN_DIST = 200;
 const SILENCE_MIN_GAP = 20 * 60 * 1000;     // 20 minut — filtruje průjezdy
 const SILENCE_MAX_GAP = 4 * 60 * 60 * 1000;
@@ -1258,28 +1304,28 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
     // Bez AI: mapový podklad je autoritativní → ulož přímo
     if (mapName) {
       console.log(`[MAPA] AI nedostupné → ukládám z mapy "${mapName.name}"`);
-      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, mapName.name, AI_AUTOSAVE_THRESHOLD, 'mapa: ' + mapName.kind, source, geo && geo.formatted);
+      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, mapName.name, AI_AUTOSAVE_THRESHOLD, 'mapa: ' + mapName.kind, source, geo && geo.formatted, points);
       return;
     }
     // Bez AI: jednoznačná shoda adresy stačí na auto-uložení
     if (addrPick) {
       console.log(`[ADDR] AI nedostupné, ale adresa jednoznačně sedí → ukládám "${addrPick.name}"`);
-      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, addrPick.name, AI_AUTOSAVE_THRESHOLD, 'adresa: ' + (geo.formatted || ''), source, geo && geo.formatted);
+      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, addrPick.name, AI_AUTOSAVE_THRESHOLD, 'adresa: ' + (geo.formatted || ''), source, geo && geo.formatted, points);
       return;
     }
     // Bez AI: OSM pojmenovaný objekt → ulož jako návrh
     if (osmPlace) {
       console.log(`[OSM] AI nedostupné → návrh "${osmPlace.name}"`);
-      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, osmPlace.name, AI_SUGGEST_THRESHOLD, 'OSM: ' + osmPlace.kind, source, geo && geo.formatted);
+      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, osmPlace.name, AI_SUGGEST_THRESHOLD, 'OSM: ' + osmPlace.kind, source, geo && geo.formatted, points);
       return;
     }
     // Fallback — jen pokud je místo opakované a má POI
     if (placesNearby.length > 0 && historyVisits >= 3) {
-      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, null, 0, 'fallback', source);
+      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, null, 0, 'fallback', source, undefined, points);
     } else if (forceLong) {
       // Dlouhé stání: AI nedostupné, ale stání 30+ min označ vždy jako "?"
       console.log(`[STOP] Dlouhé stání ${gapMinutes}min, AI nedostupné — vytvářím "?" napřímo`);
-      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, null, 0, 'long_stay', source);
+      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, null, 0, 'long_stay', source, undefined, points);
     } else {
       await logEvent('place_rejected', { member, lat, lon, reason: 'AI nedostupné, nedostatek signálů', source });
     }
@@ -1291,7 +1337,7 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
       // Dlouhé stání: i když AI nedoporučuje, 30+ min na místě označ jako "?"
       // (s případným návrhem názvu od AI, pokud nějaký dala)
       console.log(`[STOP] Dlouhé stání ${gapMinutes}min, AI nedoporučila (conf=${aiResult.confidence}) — přesto "?": ${aiResult.reason}`);
-      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, aiResult.name || null, aiResult.confidence || 0, 'long_stay: ' + (aiResult.reason || ''), source);
+      await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, aiResult.name || null, aiResult.confidence || 0, 'long_stay: ' + (aiResult.reason || ''), source, undefined, points);
       return;
     }
     console.log(`[STOP] Zamítnuto (confidence=${aiResult.confidence}): ${aiResult.reason}`);
@@ -1299,12 +1345,23 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
     return;
   }
 
-  await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, aiResult.name, aiResult.confidence, aiResult.reason, source, geo && geo.formatted);
+  await savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, aiResult.name, aiResult.confidence, aiResult.reason, source, geo && geo.formatted, points);
 }
 
-async function savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, aiName, aiConfidence, aiReason, source, address) {
+async function savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, aiName, aiConfidence, aiReason, source, address, points = null) {
   const placeId = 'place_' + Date.now();
   const autoSave = aiConfidence >= AI_AUTOSAVE_THRESHOLD && aiName;
+
+  // Potulka v rozlehlé oblasti (zoo, park...) → geofence podle skutečného
+  // rozptylu bodů, ne pevných 60m — jinak by appka příště tu samou oblast
+  // znovu nepoznala. Ostatní zdroje (běžná zastávka) zůstávají u defaultu.
+  let fenceRadius = DEFAULT_FENCE_RADIUS;
+  if ((source === 'wide-dwell' || (source || '').startsWith('wide-dwell')) && Array.isArray(points) && points.length >= 2) {
+    const c = clusterCenter(points);
+    let maxDist = 0;
+    for (const p of points) { const d = distance(c.lat, c.lon, p.lat, p.lon); if (d > maxDist) maxDist = d; }
+    fenceRadius = Math.max(DEFAULT_FENCE_RADIUS, Math.min(500, Math.round(maxDist * 1.3)));
+  }
 
   const place = {
     id: placeId, lat, lon,
@@ -1318,8 +1375,8 @@ async function savePlaceCandidate(member, lat, lon, gapMinutes, placesNearby, ai
   };
 
   if (autoSave) {
-    console.log(`[STOP] Auto-uloženo: "${aiName}" (confidence=${aiConfidence})`);
-    const fence = { id: placeId, name: aiName, lat, lon, radius: DEFAULT_FENCE_RADIUS, createdAt: Date.now() };
+    console.log(`[STOP] Auto-uloženo: "${aiName}" (confidence=${aiConfidence})${fenceRadius !== DEFAULT_FENCE_RADIUS ? ` radius=${fenceRadius}m (potulka)` : ''}`);
+    const fence = { id: placeId, name: aiName, lat, lon, radius: fenceRadius, createdAt: Date.now() };
     dynamicFences.push(fence);
     await saveFences();
     broadcast({ type: 'fence_added', fence });
@@ -1464,6 +1521,10 @@ async function updateTracker(member, lat, lon, ts, motionActivities = []) {
   if (tracker.lastPoint) {
     await detectSilentStop(member, tracker.lastPoint, lat, lon, ts);
   }
+
+  // Paralelní detekce potulky v rozlehlé oblasti (zoo, park...) — nezávislá
+  // na těsném clusteru níže, běží při každém bodě.
+  updateWideDwell(member, lat, lon, ts, motionActivities);
 
   if (!tracker.cluster) {
     tracker.cluster = { points: [{ lat, lon, ts }], startTs: ts };
