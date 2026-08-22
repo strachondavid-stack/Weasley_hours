@@ -724,7 +724,9 @@ function broadcast(data) {
 const CLUSTER_RADIUS = 80;
 const LEAVE_RADIUS = 150;
 const MERGE_RADIUS = 150;   // detekce do této vzdálenosti od existujícího místa = totéž místo (drift)
-const MIN_STOP_DURATION = 5 * 60 * 1000;
+const MIN_STOP_DURATION = 10 * 60 * 1000;   // dřív 5 min — v Move módu chodí body hustě,
+                                              // takže 3 body (MIN_STOP_POINTS) se nasbírají
+                                              // za chvíli a jediná skutečná brzda byla čas
 const MIN_STOP_POINTS = 3;
 
 // ── "Potulka" v rozlehlé oblasti (zoo, park, výstaviště...) ──────────────────
