@@ -1973,10 +1973,13 @@ Odpověz POUZE názvy souborů oddělené čárkou, nebo prázdným stringem. Be
 }
 
 async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simTs = null, forceLive = false, source = 'unknown', acc = 0, cog = null, tst = null) {
-  const ts = simTs || Date.now();
-  // Časová značka bodu pro výpočet vlastní rychlosti: GPS tst (s) má přednost před
-  // časem doručení — důležité u dávkového HTTP (fronta po výpadku signálu).
-  const pointTs = (tst && !simTs) ? tst * 1000 : ts;
+  // Časová značka bodu — VŽDY skutečný čas GPS bodu (tst), ne čas doručení na
+  // server. Bez tohohle by dávkové odeslání (Overland fronta po výpadku/offline,
+  // nebo prostě 50 bodů najednou) zplošťovalo čas na "teď" pro všechny body v
+  // dávce → detekce zastávky (potřebuje uplynulou DOBU) by se nikdy nespustila,
+  // protože by se zdálo, že všech 50 bodů dorazilo ve stejném okamžiku.
+  const ts = simTs || (tst ? tst * 1000 : Date.now());
+  const pointTs = ts;
   pushGpsPoint(member, lat, lon, pointTs, vel, cog);
   const mctx = motionContext(member);
   // Koleje z mapy — jen když má smysl (nejsme evidentně v klidu); grid cache
@@ -1986,7 +1989,7 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
   }
   // MQTT a live zdroje vždy zapisují do live Redis bez ohledu na mód
   const activeRedis = (forceLive || currentMode === 'live') ? redisLive : redis;
-  let status = resolveStatus(member, lat, lon, vel, motionActivities, simTs || Date.now());
+  let status = resolveStatus(member, lat, lon, vel, motionActivities, ts);
   // Pohyb má přednost před geofence (kromě doma). Lepkavý automat: prostředek
   // se drží a mění až po MOTION_CHANGE_CONFIRM bodech; krátká zastávka ho nemaže.
   let motion = resolveMotionSticky(member, motionActivities, vel, ts, acc, mctx);
@@ -2001,7 +2004,7 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
           (!f.only || f.only.includes(member)) &&
           distance(lat, lon, f.lat, f.lon) < f.radius * 1.5
         );
-        if (nearFence && confirmFence(member, nearFence.name, nearFence.id, false, simTs || Date.now())) {
+        if (nearFence && confirmFence(member, nearFence.name, nearFence.id, false, ts)) {
           status = nearFence.name;
         } else {
           status = motion;
