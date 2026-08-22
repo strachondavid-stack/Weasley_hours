@@ -925,6 +925,9 @@ const lastMotion = {};  // member → { motion, ts }
 // (semafor, kopec, provoz) prostředek nemění. Změna jen na opakované potvrzení,
 // dlouhé stání prostředek zapomene (reálně jsi dorazil a vystoupil).
 const MOTION_CHANGE_CONFIRM = 5;             // bodů po sobě pro ZMĚNU prostředku
+const MOTION_CHANGE_CONFIRM_MS = 30 * 1000;  // ...NEBO tolik času (řeší řídké odesílání —
+                                              // bez tohohle by při bodu co 30s trvalo
+                                              // potvrzení 5×30s=2.5min misto max ~60s)
 const MOTION_STOP_FORGET_MS = 5 * 60 * 1000; // stání → po 5 min zapomeň prostředek
 const motionState = {};  // member → { mode, candMode, candCount, stoppedSince }
 
@@ -988,7 +991,7 @@ function motionContext(member) {
 function resolveMotionSticky(member, motionActivities, vel, ts, acc = 0, ctx = null) {
   const inst = resolveMotion(motionActivities, vel, acc, ctx);   // okamžité zařazení
   let st = motionState[member];
-  if (!st) { st = { mode: null, candMode: null, candCount: 0, stoppedSince: null }; motionState[member] = st; }
+  if (!st) { st = { mode: null, candMode: null, candCount: 0, candFirstTs: null, stoppedSince: null }; motionState[member] = st; }
 
   // ── Stojí / velmi pomalu (inst===null) ──────────────────────────────────────
   if (inst === null) {
@@ -996,7 +999,7 @@ function resolveMotionSticky(member, motionActivities, vel, ts, acc = 0, ctx = n
     if (st.stoppedSince === null) st.stoppedSince = ts;
     if (ts - st.stoppedSince >= MOTION_STOP_FORGET_MS) {
       // dost dlouhé stání → zapomeň prostředek (příští rozjezd se klasifikuje znovu)
-      st.mode = null; st.candMode = null; st.candCount = 0; st.stoppedSince = null;
+      st.mode = null; st.candMode = null; st.candCount = 0; st.candFirstTs = null; st.stoppedSince = null;
       return null;
     }
     return st.mode;                            // krátká pauza → drž prostředek (semafor, zácpa)
@@ -1012,23 +1015,27 @@ function resolveMotionSticky(member, motionActivities, vel, ts, acc = 0, ctx = n
     if ((inst === 'pěšky' || inst === 'běh')) {
       if (acceleratingCar) return null;               // zjevně se rozjíždíme → počkej
       if (st.candMode === inst) {                      // 2. shodný bod → potvrď nohy
-        st.mode = inst; st.candMode = null; st.candCount = 0; st.stoppedSince = null;
+        st.mode = inst; st.candMode = null; st.candCount = 0; st.candFirstTs = null; st.stoppedSince = null;
         return st.mode;
       }
       st.candMode = inst; st.candCount = 1; st.stoppedSince = null;
       return null;                                     // 1. bod nohou po stání → ještě nedrž
     }
-    st.mode = inst; st.candMode = null; st.candCount = 0; st.stoppedSince = null;
+    st.mode = inst; st.candMode = null; st.candCount = 0; st.candFirstTs = null; st.stoppedSince = null;
     return st.mode;                                    // auto/kolo hned (jasný signál)
   }
 
   st.stoppedSince = null;                      // zase jedeme
-  if (inst === st.mode) { st.candMode = null; st.candCount = 0; return st.mode; }          // potvrzení stávajícího
+  if (inst === st.mode) { st.candMode = null; st.candCount = 0; st.candFirstTs = null; return st.mode; }          // potvrzení stávajícího
 
   // jiný prostředek než držíme → kandidát na změnu, musí se opakovat
-  if (st.candMode === inst) st.candCount++; else { st.candMode = inst; st.candCount = 1; }
-  if (st.candCount >= MOTION_CHANGE_CONFIRM) {
-    st.mode = inst; st.candMode = null; st.candCount = 0;
+  if (st.candMode === inst) { st.candCount++; } else { st.candMode = inst; st.candCount = 1; st.candFirstTs = ts; }
+  const candElapsed = ts - (st.candFirstTs || ts);
+  // potvrď buď při dostatku bodů (rychlé u hustých dat), nebo když uplynulo dost
+  // času s aspoň 2 shodnými body (rychlé i u řídkých dat — strop ~45s bez ohledu
+  // na to, jak zřídka telefon posílá)
+  if (st.candCount >= MOTION_CHANGE_CONFIRM || (st.candCount >= 2 && candElapsed >= MOTION_CHANGE_CONFIRM_MS)) {
+    st.mode = inst; st.candMode = null; st.candCount = 0; st.candFirstTs = null;
     return st.mode;                            // potvrzená změna
   }
   return st.mode;                              // jednotlivý odlišný bod → ignoruj, drž stávající
