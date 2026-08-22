@@ -2191,7 +2191,7 @@ function logToggle(i) {
 
 function logTitle(l) {
   switch(l.type) {
-    case 'gps_received': return `${l.status || '?'} · ${l.lat?.toFixed(4)},${l.lon?.toFixed(4)}${l.vel != null ? ' · ' + l.vel + 'km/h' : ''}${l.medSpeed != null ? ' (med ' + l.medSpeed + ')' : ''}${l.cogR != null ? ' · R' + l.cogR : ''}${(l.motionActivities || []).length ? ' · ' + l.motionActivities.join(',') : ''}`;
+    case 'gps_received': return `<span style="color:#fff;font-weight:600">${l.lat?.toFixed(4)},${l.lon?.toFixed(4)}</span> · ${l.status || '?'}${l.vel != null ? ' · ' + l.vel + 'km/h' : ''}${l.medSpeed != null ? ' (med ' + l.medSpeed + ')' : ''}${l.cogR != null ? ' · R' + l.cogR : ''}${(l.motionActivities || []).length ? ' · ' + l.motionActivities.join(',') : ''}`;
     case 'ai_response': {
       const r = l.result || {};
       return `${r.should_save ? '✓' : '✗'} conf=${r.confidence?.toFixed(2)} · "${r.name || '–'}"`;
