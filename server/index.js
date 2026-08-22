@@ -2683,6 +2683,51 @@ app.post('/pub', async (req, res) => {
   res.json([]);  // OwnTracks očekává []
 });
 
+// ─── Overland GPS tracker endpoint ─────────────────────────────────────────
+// Alternativa k OwnTracks (spolehlivější podle zkušeností — přímo pro to
+// stavěná appka: https://overland.p3k.app, App Store zdarma).
+// Appka posílá dávky bodů (GeoJSON) a IDENTIFIKACE ČLENA je vestavěná přímo
+// v appce — nastav v Overland → Settings → Device ID: "tatka" (nebo mamka/
+// misak/kubik). Server URL v appce: http://<NAS>:3000/overland
+// Odpověď MUSÍ být přesně {"result":"ok"} — jinak appka nevyprázdní frontu
+// a bude posílat staré body pořád dokola.
+const OVERLAND_MOTION_MAP = { driving: 'automotive', automotive: 'automotive', cycling: 'cycling', walking: 'walking', running: 'running', stationary: 'stationary' };
+app.post('/overland', async (req, res) => {
+  const locations = (req.body && Array.isArray(req.body.locations)) ? req.body.locations : [];
+  if (!locations.length) return res.json({ result: 'ok' });
+
+  for (const loc of locations) {
+    try {
+      const props = loc.properties || {};
+      const coords = loc.geometry && loc.geometry.coordinates;
+      if (!Array.isArray(coords) || coords.length < 2) continue;
+      const lon = parseFloat(coords[0]);   // GeoJSON: [lon, lat] — POZOR opačné pořadí než obvykle!
+      const lat = parseFloat(coords[1]);
+      if (isNaN(lat) || isNaN(lon)) continue;
+
+      const member = (props.device_id || '').trim().toLowerCase();
+      if (!MEMBERS.includes(member)) {
+        console.log('[OVERLAND] Neznámý device_id:', props.device_id || '?', '— nastav v appce Settings → Device ID přesně: tatka/mamka/misak/kubik');
+        continue;
+      }
+      if (currentMode === 'test') continue;
+
+      const vel = (typeof props.speed === 'number' && props.speed >= 0) ? props.speed * 3.6 : 0;   // m/s → km/h
+      const acc = typeof props.horizontal_accuracy === 'number' ? props.horizontal_accuracy : 0;
+      const cog = typeof props.course === 'number' ? props.course : null;
+      const motionRaw = Array.isArray(props.motion) ? props.motion : [];
+      const motion = motionRaw.map(m => OVERLAND_MOTION_MAP[(m || '').toLowerCase()]).filter(Boolean);
+      const tstSec = props.timestamp ? Math.floor(new Date(props.timestamp).getTime() / 1000) : null;
+
+      await processGPS(member, lat, lon, motion, vel, null, true, 'overland', acc, cog, tstSec);
+      console.log(`[OVERLAND] [${member}] ${lat.toFixed(5)},${lon.toFixed(5)} vel=${vel.toFixed(1)} acc=${acc}`);
+    } catch(e) {
+      console.error('[OVERLAND] Chyba zpracování bodu:', e.message);
+    }
+  }
+  res.json({ result: 'ok' });   // MUSÍ být přesně tohle, jinak appka fronту nevyprázdní
+});
+
 app.post('/status/:member', async (req, res) => {
   const { member } = req.params;
   if (!MEMBERS.includes(member)) return res.status(404).json({ error: 'Unknown member' });
