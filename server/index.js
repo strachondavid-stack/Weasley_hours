@@ -3455,8 +3455,17 @@ async function startMqtt() {
       if (!err) console.log('✓ Subscribováno: rodina/+/gps + owntracks/+/+');
     });
   });
-  client.on('message', async (topic, payload) => {
+  client.on('message', async (topic, payload, packet) => {
     try {
+      // Retained zpráva = broker jen "přehrává" poslední uloženou hodnotu na
+      // tématu (typicky při novém odběru po restartu serveru) — NENÍ to živá
+      // poloha. Bez tohohle by appka po každém restartu dostala jeden falešný
+      // "čerstvý" bod, i kdyby appka na telefonu byla dávno odinstalovaná
+      // (broker si tu starou zprávu drží nezávisle na telefonu).
+      if (packet && packet.retain) {
+        console.log('[MQTT] Retained zpráva na ' + topic + ' ignorována (není živá poloha)');
+        return;
+      }
       const parts = topic.split('/');
       const member = parts[1];
       if (!MEMBERS.includes(member)) return;
