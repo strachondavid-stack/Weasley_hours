@@ -1752,6 +1752,54 @@ async function removeWhiteBackground(buf) {
 
 // Volání Replicate s automatickým retry na 429 (rate limit) — respektuje
 // Retry-After header, pokud ho Replicate pošle, jinak čeká rostoucí dobu.
+function httpGetReplicate(path) {
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'api.replicate.com', path, method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + REPLICATE_API_TOKEN },
+    }, (res) => {
+      let d = '';
+      res.on('data', chunk => d += chunk);
+      res.on('end', () => {
+        try { resolve({ statusCode: res.statusCode, body: JSON.parse(d) }); }
+        catch(e) { resolve({ statusCode: res.statusCode, body: null, raw: d }); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(15000, () => { req.destroy(); reject(new Error('timeout')); });
+    req.end();
+  });
+}
+
+// Replicate "Prefer: wait" má vlastní strop (typicky ~60s) — když generování
+// (fronta, cold start hardwaru) trvá déle, vrátí se predikce ještě NEDOKONČENÁ
+// (status 'processing'/'starting'), ne chyba. Bez pollingu by appka takovou
+// odpověď mylně považovala za selhání, přestože Replicate na pozadí v klidu
+// dokončí (přesně to, co je vidět v Replicate dashboardu — obrázek je hotový,
+// appka na něj ale přestala čekat).
+const REPLICATE_TERMINAL = ['succeeded', 'failed', 'canceled'];
+async function waitForReplicatePrediction(pred, maxTotalMs = 90000) {
+  if (!pred || REPLICATE_TERMINAL.includes(pred.status) || !pred.id) return pred;
+  console.log(`[IMGGEN] Sync čekání nestihlo dokončit (status=${pred.status}) → pokračuji pollingem...`);
+  const start = Date.now();
+  let current = pred;
+  while (Date.now() - start < maxTotalMs) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const resp = await httpGetReplicate('/v1/predictions/' + current.id);
+      if (resp.body) current = resp.body;
+      if (REPLICATE_TERMINAL.includes(current.status)) {
+        console.log(`[IMGGEN] Polling: dokončeno po ${Math.round((Date.now() - start) / 1000)}s (${current.status})`);
+        return current;
+      }
+    } catch(e) {
+      console.error('[IMGGEN] Chyba pollingu:', e.message);
+    }
+  }
+  console.error(`[IMGGEN] Polling vypršel po ${Math.round((Date.now() - start) / 1000)}s, poslední stav: ${current.status}`);
+  return current;
+}
+
 function httpPostReplicate(path, body, attempt = 1) {
   return new Promise((resolve, reject) => {
     const req = https.request({
@@ -1773,7 +1821,10 @@ function httpPostReplicate(path, body, attempt = 1) {
       });
     });
     req.on('error', reject);
-    req.setTimeout(30000, () => { req.destroy(); reject(new Error('timeout')); });
+    // 65s — nad typickým stropem Replicate "Prefer: wait" (~60s), ať request
+    // nezabijeme těsně před tím, než by odpověď stejně dorazila. Delší
+    // generování (nad 65s) doladí polling ve waitForReplicatePrediction.
+    req.setTimeout(65000, () => { req.destroy(); reject(new Error('timeout')); });
     req.write(body);
     req.end();
   });
@@ -1795,7 +1846,8 @@ async function generateImageForStatus(status) {
       // Replicate: FLUX schnell, sync čekání (Prefer: wait), auto-retry na 429
       const resp = await httpPostReplicate('/v1/models/black-forest-labs/flux-schnell/predictions',
         JSON.stringify({ input: { prompt, aspect_ratio: '1:1', output_format: 'png', num_outputs: 1 } }));
-      const pred = resp.body || {};
+      let pred = resp.body || {};
+      pred = await waitForReplicatePrediction(pred);   // dočkej se, pokud sync wait nestihl
 
       const outUrl = Array.isArray(pred.output) ? pred.output[0] : pred.output;
       if (!outUrl || pred.status === 'failed') {
