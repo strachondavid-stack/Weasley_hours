@@ -118,9 +118,11 @@ async function logEvent(type, data) {
   try {
     const ts = Date.now();
     const key = 'log:' + ts + ':' + Math.random().toString(36).slice(2, 6);
-    await redis.set(key, JSON.stringify({ type, ts, ...data }), { EX: LOG_TTL });
+    const entry = { type, ts, ...data };
+    await redis.set(key, JSON.stringify(entry), { EX: LOG_TTL });
     await redis.lPush('log:index', key);
     await redis.lTrim('log:index', 0, 4999);
+    broadcast({ type: 'log_entry', entry });   // živý přísun do Log záložky bez refreshe
   } catch(e) {
     console.error('[LOG] Chyba:', e.message);
   }

@@ -1751,6 +1751,7 @@ ws.onmessage=(e)=>{
   try{
     const msg=JSON.parse(e.data);
     if(msg.type==='update'){updateMember(msg.member,msg);renderChips();}
+    if(msg.type==='log_entry'){ logPushLive(msg.entry); }
     if(msg.type==='img_regenerated'){ imgVersion[msg.img]=Date.now(); if(currentPage==='clock') renderClock(); }
     if(msg.type==='sim_arrived'){
       if(famActive) return; // rodinný scénář řídí server — žádné dialogy na klientu
@@ -2102,7 +2103,7 @@ setInterval(()=>{
 </div>
 
 <script>
-let _logType = null, _logMember = null;
+let _logType = null, _logMember = null, _logCache = [];
 
 function logInitListeners() {
   document.querySelectorAll('#logTypeBar .log-fbtn, #logTypeBar .log-refresh').forEach(btn => {
@@ -2157,12 +2158,30 @@ async function loadLog() {
   
   try {
     const data = await fetch(url).then(r => r.json());
-    const logs = data.logs || [];
-    if (!logs.length) { list.innerHTML = '<div class="log-empty">Žádné záznamy</div>'; return; }
-    list.innerHTML = logs.map((l, i) => logRenderEntry(l, i)).join('');
+    _logCache = data.logs || [];
+    renderLogList();
   } catch(e) {
     list.innerHTML = '<div class="log-empty">Chyba načtení: ' + e.message + '</div>';
   }
+}
+
+function renderLogList() {
+  const list = document.getElementById('logList');
+  if (!list) return;
+  if (!_logCache.length) { list.innerHTML = '<div class="log-empty">Žádné záznamy</div>'; return; }
+  list.innerHTML = _logCache.map((l, i) => logRenderEntry(l, i)).join('');
+}
+
+// Živý přísun nových záznamů přes WebSocket — bez ručního refreshe. Přidá
+// jen když je Log záložka otevřená A záznam sedí na aktuálně vybraný filtr.
+const LOG_CACHE_MAX = 200;
+function logPushLive(entry) {
+  if (currentPage !== 'log') return;
+  if (_logType && entry.type !== _logType) return;
+  if (_logMember && entry.member !== _logMember) return;
+  _logCache.unshift(entry);
+  if (_logCache.length > LOG_CACHE_MAX) _logCache.length = LOG_CACHE_MAX;
+  renderLogList();
 }
 
 function logRenderEntry(l, i) {
