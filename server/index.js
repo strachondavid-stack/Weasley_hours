@@ -2847,6 +2847,33 @@ app.get('/places', async (req, res) => {
   res.json(raw ? JSON.parse(raw) : []);
 });
 
+// Po vytvoření/přejmenování geofence okamžitě přepni status a obrázek každého
+// člena, který je PRÁVĚ TEĎ uvnitř (bez čekání na další GPS bod/2min potvrzení).
+// Řeší: appka uloží "?", uživatel na místě ho ručně pojmenuje — status by jinak
+// zůstal starý až do příštího bodu (může trvat minuty, appka může i "spát").
+async function applyInstantStatusToPresent(fence) {
+  const activeRedis = currentMode === 'live' ? redisLive : redis;
+  for (const member of MEMBERS) {
+    try {
+      const raw = await activeRedis.get('member:' + member);
+      const d = raw ? JSON.parse(raw) : null;
+      if (!d || d.lat == null) continue;
+      const dist = distance(d.lat, d.lon, fence.lat, fence.lon);
+      if (dist > Math.max(fence.radius, CLUSTER_RADIUS)) continue;   // není tam
+      if (d.status === fence.name) continue;                         // už to má nastavené
+      memberFenceHyst[member] = { fenceId: fence.id, firstTs: Date.now() - FENCE_CONFIRM_MS };
+      d.status = fence.name;
+      d.img = await suggestImageForStatus(fence.name);
+      d.ts = Date.now();
+      await activeRedis.set('member:' + member, JSON.stringify(d));
+      memberImgCache[member] = { status: fence.name, img: d.img };
+      await recordPlaceVisit(fence, member, d.ts, d.img);
+      broadcast({ type: 'update', member, ...d });
+      console.log(`[NAME] Status [${member}] → "${fence.name}" (okamžitě, byl na místě)`);
+    } catch(e) { console.error('[NAME] Instant status chyba pro', member, ':', e.message); }
+  }
+}
+
 app.post('/places/:id/name', async (req, res) => {
   const { id } = req.params;
   const { name, radius = DEFAULT_FENCE_RADIUS, only, lat: reqLat, lon: reqLon } = req.body;
@@ -2865,6 +2892,7 @@ app.post('/places/:id/name', async (req, res) => {
   console.log(`✓ Nový geofence: "${name}" @ ${place.lat.toFixed(5)},${place.lon.toFixed(5)} r=${radius}m`);
   await logEvent('fence_added', { id, name, lat: place.lat, lon: place.lon, radius, manual: true });
   broadcast({ type: 'fence_added', fence });
+  await applyInstantStatusToPresent(fence);
   res.json({ ok: true, fence });
 });
 
@@ -2946,6 +2974,7 @@ app.put('/places/:id', async (req, res) => {
   await redis.set('detected_places', JSON.stringify(places));
   const fence = dynamicFences.find(f => f.id === id);
   if (fence) {
+    const nameChanged = fence.name !== name;
     fence.name = name;
     fence.lat = place.lat;
     fence.lon = place.lon;
@@ -2954,13 +2983,15 @@ app.put('/places/:id', async (req, res) => {
     await saveFences();
     console.log(`✓ Misto upraveno: "${oldName}" -> "${name}" @ ${place.lat.toFixed(5)},${place.lon.toFixed(5)}`);
     broadcast({ type: 'fence_updated', fence });
+    if (nameChanged) await applyInstantStatusToPresent(fence);
   } else {
-    const newFence = { id, name, lat: place.lat, lon: place.lon, radius: parseInt(radius) || 150, createdAt: Date.now(), ...(only && only.length ? { only } : {}) };
+    const newFence = { id, name, lat: place.lat, lon: place.lon, radius: parseInt(radius) || DEFAULT_FENCE_RADIUS, createdAt: Date.now(), ...(only && only.length ? { only } : {}) };
     dynamicFences.push(newFence);
     await saveFences();
     console.log(`✓ Misto pojmenovano (PUT): "${name}" @ ${place.lat.toFixed(5)},${place.lon.toFixed(5)} r=${newFence.radius}m`);
     await logEvent('fence_added', { id, name, lat: place.lat, lon: place.lon, radius: newFence.radius, manual: false });
     broadcast({ type: 'fence_added', fence: newFence });
+    await applyInstantStatusToPresent(newFence);
   }
   res.json({ ok: true });
 });
