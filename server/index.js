@@ -748,6 +748,11 @@ const MIN_STOP_POINTS = 3;
 const WIDE_LEAVE_RADIUS = 600;             // dál od kotvy = opravdu jinam, nová "potulka"
 const WIDE_MIN_DURATION = 10 * 60 * 1000;  // 10 minut v oblasti
 const WIDE_MIN_POINTS = 4;
+// Rozptyl bodů kolem TĚŽIŠTĚ (ne od pevné kotvy) — odliší "bloumání v areálu"
+// (zoo/park, body natěsno kolem sebe) od lineární procházky/výletu, která se
+// sice nikdy nevzdálí přes WIDE_LEAVE_RADIUS od startu, ale reálně urazí
+// stovky metrů jedním směrem (typicky trasa tam a zpět kolem vyhlídky).
+const WIDE_MAX_SPREAD = 200;
 const wideTrackers = {};   // member → { anchor:{lat,lon}, points:[{lat,lon,ts}], startTs, evaluated }
 
 function updateWideDwell(member, lat, lon, ts, motionActivities = []) {
@@ -773,10 +778,19 @@ function updateWideDwell(member, lat, lon, ts, motionActivities = []) {
   wt.points.push({ lat, lon, ts });
 
   if (!wt.evaluated && wt.points.length >= WIDE_MIN_POINTS && (ts - wt.startTs) >= WIDE_MIN_DURATION) {
-    wt.evaluated = true;
+    // Rozptyl kolem těžiště — velký rozptyl = spíš procházka/výlet, ne bloumání
+    // na místě. Nevyhodnocuj, ale ani nevzdávej — nech sledování běžet dál
+    // (pokud se člověk skutečně na místě zastaví, rozptyl se časem zmenší).
     const center = clusterCenter(wt.points);
+    let maxSpread = 0;
+    for (const p of wt.points) { const d = distance(center.lat, center.lon, p.lat, p.lon); if (d > maxSpread) maxSpread = d; }
+    if (maxSpread > WIDE_MAX_SPREAD) {
+      console.log(`[WIDE] [${member}] Rozptyl ${Math.round(maxSpread)}m (>${WIDE_MAX_SPREAD}m) — spíš procházka než bloumání, nevyhodnocuji`);
+      return;
+    }
+    wt.evaluated = true;
     const durMin = Math.round((ts - wt.startTs) / 60000);
-    console.log(`[WIDE] [${member}] Potulka ${durMin}min v oblasti (${wt.points.length} bodů, ${wt.points.length} vzorků) → identifikace`);
+    console.log(`[WIDE] [${member}] Potulka ${durMin}min v oblasti (${wt.points.length} bodů, rozptyl ${Math.round(maxSpread)}m) → identifikace`);
     // async, neblokuj příjem GPS bodů (stejný vzor jako evaluateCluster)
     processStopCandidate(member, center.lat, center.lon, durMin, 'wide-dwell', false, false, ts, wt.points)
       .catch(e => console.error('[WIDE] Chyba:', e.message));
