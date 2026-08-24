@@ -589,7 +589,7 @@ async function askClaude(member, lat, lon, context) {
     return null;
   }
 
-  const { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source, geo, strongMatch, residential, osmPlace, mapName } = context;
+  const { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source, geo, strongMatch, residential, osmPlace, mapName, avgAcc } = context;
 
   // Zvýrazni nejbližší místo — pokud je výrazně blíž než ostatní, je to pravděpodobný cíl
   let placesStr = '  Žádná místa nenalezena';
@@ -609,6 +609,13 @@ async function askClaude(member, lat, lon, context) {
     ? '\nAdresa zastávky (reverse geocoding): ' + geo.formatted
       + (strongMatch ? '\n→ Adresa PŘESNĚ odpovídá POI "' + strongMatch.name + '" — to je velmi pravděpodobně to pravé místo, použij jeho název.' : '')
       + (residential ? '\n→ POZOR: tato adresa je REZIDENČNÍ (rodinný dům) a na tomto čísle popisném NENÍ registrovaný žádný podnik. NEPOJMENOVÁVEJ místo podle okolní firmy (obchod/dílna o pár čísel dál NENÍ toto místo). Pokud je to bydliště/návštěva, vrať name: null (uživatel ho pojmenuje sám), should_save klidně true u opakované návštěvy.' : '')
+    : '';
+
+  // Nespolehlivá GPS přesnost (běžné u vody, pod stromy, v soutěskách) — bod
+  // může "uvíznout" na jedné pozici i při reálném pohybu (odrazy signálu),
+  // takže zdánlivé stání může být jen artefakt, ne skutečná zastávka.
+  const accStr = (avgAcc != null && avgAcc > 30)
+    ? `\n→ POZOR: GPS přesnost na místě byla nespolehlivá (průměr ${Math.round(avgAcc)}m — časté u vody/stromů). Zdánlivé "stání na místě" může být GPS artefakt (signál neaktualizoval pozici, i když se člen reálně pohyboval), ne skutečná zastávka. Buď opatrnější s confidence, pokud dalších signálů (adresa, mapa, POI) není dost silných.`
     : '';
 
   const osmStr = osmPlace
@@ -633,7 +640,7 @@ async function askClaude(member, lat, lon, context) {
 Zdroj: ${source === 'silence' ? 'Significant mode (GPS bod před odjezdem, mezera ' + gapMinutes + ' min)' : 'cluster bodů v Move mode, délka minimálně ' + gapMinutes + ' min (člen je pravděpodobně stále na místě — skutečná délka bude delší)'}
 Souřadnice: ${lat.toFixed(5)}, ${lon.toFixed(5)}
 Předchozí návštěvy tohoto místa: ${historyVisits}×${historyVisits >= 3 ? ' — PRAVIDELNĚ navštěvované místo. Opakovaná návštěva je SILNÝ důkaz, že místo je pro rodinu důležité (i bez klasického POI, např. práce, návštěva, kroužek) — silně zvaž uložení a vyšší confidence.' : (historyVisits >= 1 ? ' — místo už bylo navštíveno dříve, zvaž to jako signál.' : '')}
-${nearbyStr}${mapStr}${addrStr}${osmStr}
+${nearbyStr}${mapStr}${addrStr}${osmStr}${accStr}
 Nejbližší místa z Google Places:
 ${placesStr}
 
@@ -1233,10 +1240,18 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
   const dayOfWeek = days[now.getDay()];
   const timeStr = now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0');
 
-  await logEvent('stop_candidate', { member, lat, lon, gapMinutes, historyVisits, nearbyMembers, placesCount: placesNearby.length, spread: Math.round(spread), searchRadius, dayOfWeek, timeStr, source });
-  console.log(`[STOP] Kandidát [${member}] ${gapMinutes}min @ ${lat.toFixed(5)},${lon.toFixed(5)} | ${placesNearby.length} POI | ${historyVisits}x navštíveno`);
+  // Průměrná GPS přesnost v tomto clusteru — nespolehlivá GPS (typicky u vody/
+  // pod stromy) může vyrobit falešné "stání na místě" i při reálném pohybu.
+  let avgAcc = null;
+  if (Array.isArray(points) && points.length) {
+    const accs = points.map(p => p.acc).filter(a => typeof a === 'number' && a > 0);
+    if (accs.length) avgAcc = accs.reduce((s, a) => s + a, 0) / accs.length;
+  }
 
-  const aiResult = await askClaude(member, lat, lon, { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source, geo, strongMatch: addrPick, residential: residentialNoPoi, osmPlace, mapName });
+  await logEvent('stop_candidate', { member, lat, lon, gapMinutes, historyVisits, nearbyMembers, placesCount: placesNearby.length, spread: Math.round(spread), searchRadius, dayOfWeek, timeStr, source, avgAcc: avgAcc != null ? Math.round(avgAcc) : null });
+  console.log(`[STOP] Kandidát [${member}] ${gapMinutes}min @ ${lat.toFixed(5)},${lon.toFixed(5)} | ${placesNearby.length} POI | ${historyVisits}x navštíveno | acc~${avgAcc != null ? Math.round(avgAcc) + 'm' : '?'}`);
+
+  const aiResult = await askClaude(member, lat, lon, { gapMinutes, placesNearby, historyVisits, nearbyMembers, dayOfWeek, timeStr, source, geo, strongMatch: addrPick, residential: residentialNoPoi, osmPlace, mapName, avgAcc });
 
   // Tvrdý bonus k confidence za opakované návštěvy — opakování je silný signál,
   // který nenecháváme jen na uvážení AI. +0,07 za každou návštěvu nad první, strop +0,30.
@@ -1526,7 +1541,7 @@ async function evaluateCluster(member, cluster, repeat = false, forceLong = fals
 }
 
 // ─── Hlavní tracker ───────────────────────────────────────────────────────────
-async function updateTracker(member, lat, lon, ts, motionActivities = []) {
+async function updateTracker(member, lat, lon, ts, motionActivities = [], acc = 0) {
   const tracker = getTracker(member);
 
   if (tracker.lastPoint) {
@@ -1538,7 +1553,7 @@ async function updateTracker(member, lat, lon, ts, motionActivities = []) {
   updateWideDwell(member, lat, lon, ts, motionActivities);
 
   if (!tracker.cluster) {
-    tracker.cluster = { points: [{ lat, lon, ts }], startTs: ts };
+    tracker.cluster = { points: [{ lat, lon, ts, acc }], startTs: ts };
     tracker.lastPoint = { lat, lon, ts };
     await saveTracker(member);
     return;
@@ -1554,7 +1569,7 @@ async function updateTracker(member, lat, lon, ts, motionActivities = []) {
 
   if (dist <= CLUSTER_RADIUS && !forceClose) {
     // Ulož info o pohybu do bodu
-    tracker.cluster.points.push({ lat, lon, ts, stationary: !isAutomotive });
+    tracker.cluster.points.push({ lat, lon, ts, stationary: !isAutomotive, acc });
     const durMin = Math.round((ts - tracker.cluster.startTs) / 60000);
     console.log(`[TRACK] [${member}] V clusteru dist=${Math.round(dist)}m dur=${durMin}min pts=${tracker.cluster.points.length}`);
     // Detekce JEDNOU krátce po příjezdu (~5 min). Žádné opakování každých 10 min —
@@ -1597,14 +1612,14 @@ async function updateTracker(member, lat, lon, ts, motionActivities = []) {
     } else {
       console.log(`[TRACK] [${member}] Přeskočeno — průběžná detekce již proběhla`);
     }
-    tracker.cluster = { points: [{ lat, lon, ts, stationary: !isAutomotive }], startTs: ts };
+    tracker.cluster = { points: [{ lat, lon, ts, stationary: !isAutomotive, acc }], startTs: ts };
   } else {
     // Přechodná zóna (80–150 m od středu). Pokud je cluster malý (1–2 body,
     // typicky z jízdy), nahraď ho — člen přijel a zastavil kousek vedle.
     // Velký cluster (reálná zastávka) zůstává chráněn hysterezí.
     if (tracker.cluster.points.length <= 2) {
       console.log(`[TRACK] [${member}] přechodná zóna dist=${Math.round(dist)}m → nahrazuji malý cluster (${tracker.cluster.points.length} bodů)`);
-      tracker.cluster = { points: [{ lat, lon, ts, stationary: !isAutomotive }], startTs: ts };
+      tracker.cluster = { points: [{ lat, lon, ts, stationary: !isAutomotive, acc }], startTs: ts };
     } else {
       console.log(`[TRACK] [${member}] přechodná zóna dist=${Math.round(dist)}m`);
     }
@@ -2124,7 +2139,7 @@ async function processGPS(member, lat, lon, motionActivities = [], vel = 0, simT
     cogR: mctx.cogR != null ? Math.round(mctx.cogR * 100) / 100 : null,
     windowN: mctx.n });
   console.log(`[GPS] [${member}] ${status} (${lat.toFixed(5)}, ${lon.toFixed(5)}) vel=${vel} med=${mctx.medSpeed != null ? mctx.medSpeed.toFixed(1) : '-'} cogR=${mctx.cogR != null ? mctx.cogR.toFixed(2) : '-'} acc=${acc} motion=${(motionActivities || []).join(",")}`);
-  await updateTracker(member, lat, lon, ts, motionActivities);
+  await updateTracker(member, lat, lon, ts, motionActivities, acc);
   return status;
 }
 
