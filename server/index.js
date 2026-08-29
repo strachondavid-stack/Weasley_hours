@@ -2865,6 +2865,24 @@ app.get('/places', async (req, res) => {
 // člena, který je PRÁVĚ TEĎ uvnitř (bez čekání na další GPS bod/2min potvrzení).
 // Řeší: appka uloží "?", uživatel na místě ho ručně pojmenuje — status by jinak
 // zůstal starý až do příštího bodu (může trvat minuty, appka může i "spát").
+// Zajistí obrázek pro fenci VŽDY po pojmenování/přejmenování — bez ohledu na to,
+// jestli je zrovna někdo fyzicky na místě. Řeší: appka auto-uloží místo, uživatel
+// si to doma později přejmenuje/opraví — obrázek by jinak zůstal starý/prázdný
+// až do další skutečné návštěvy. suggestImageForStatus si sám hlídá cache, takže
+// zavolání tady i zároveň v applyInstantStatusToPresent nic nezdvojuje (druhé
+// volání jen trefí cache).
+async function ensureFenceImage(fence) {
+  try {
+    const img = await suggestImageForStatus(fence.name);
+    if (img && img !== fence.img) {
+      fence.img = img;
+      await saveFences();
+      broadcast({ type: 'img_regenerated', img });
+      console.log(`[NAME] Obrázek pro "${fence.name}" → ${img}`);
+    }
+  } catch(e) { console.error('[NAME] ensureFenceImage chyba:', e.message); }
+}
+
 async function applyInstantStatusToPresent(fence) {
   const activeRedis = currentMode === 'live' ? redisLive : redis;
   for (const member of MEMBERS) {
@@ -2907,6 +2925,7 @@ app.post('/places/:id/name', async (req, res) => {
   await logEvent('fence_added', { id, name, lat: place.lat, lon: place.lon, radius, manual: true });
   broadcast({ type: 'fence_added', fence });
   await applyInstantStatusToPresent(fence);
+  ensureFenceImage(fence).catch(() => {});   // nečekej na generování, ať odpověď nečeká
   res.json({ ok: true, fence });
 });
 
@@ -2997,7 +3016,10 @@ app.put('/places/:id', async (req, res) => {
     await saveFences();
     console.log(`✓ Misto upraveno: "${oldName}" -> "${name}" @ ${place.lat.toFixed(5)},${place.lon.toFixed(5)}`);
     broadcast({ type: 'fence_updated', fence });
-    if (nameChanged) await applyInstantStatusToPresent(fence);
+    if (nameChanged) {
+      await applyInstantStatusToPresent(fence);
+      ensureFenceImage(fence).catch(() => {});
+    }
   } else {
     const newFence = { id, name, lat: place.lat, lon: place.lon, radius: parseInt(radius) || DEFAULT_FENCE_RADIUS, createdAt: Date.now(), ...(only && only.length ? { only } : {}) };
     dynamicFences.push(newFence);
@@ -3006,6 +3028,7 @@ app.put('/places/:id', async (req, res) => {
     await logEvent('fence_added', { id, name, lat: place.lat, lon: place.lon, radius: newFence.radius, manual: false });
     broadcast({ type: 'fence_added', fence: newFence });
     await applyInstantStatusToPresent(newFence);
+    ensureFenceImage(newFence).catch(() => {});
   }
   res.json({ ok: true });
 });
