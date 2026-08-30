@@ -621,7 +621,7 @@ async function askClaude(member, lat, lon, context) {
   const osmStr = osmPlace
     ? '\nMapová data OpenStreetMap znají na tomto místě pojmenovaný objekt: "' + osmPlace.name + '" (' + osmPlace.kind + ', ' + osmPlace.dist + 'm). Google Places ho nezná.'
       + (osmPlace.tier >= 3
-        ? ' → Je to KONKRÉTNÍ INSTITUCE (úřad/škola/nemocnice/policie...) — Google Places o ní neví, protože takové instituce v ní často nemá zaregistrované. Pokud v okolí vidíš víc podobně vzdálených firem v jedné budově a nejsi si jistý, kterou z nich vybrat, DEJ PŘEDNOST této konkrétní instituci z mapy před hádáním mezi firmami — je to spolehlivější signál než tipování.'
+        ? ' → Je to KONKRÉTNÍ INSTITUCE (úřad/škola/nemocnice/policie...) — Google Places o ní neví, protože takové instituce v ní často nemá zaregistrované. Pokud v okolí vidíš víc podobně vzdálených firem v jedné budově a nejsi si jistý, kterou z nich vybrat, DEJ PŘEDNOST této konkrétní instituci z mapy před hádáním mezi firmami — je to spolehlivější signál než tipování. ALE pokud je mezi Google Places kandidát JASNĚ nejblíž bodu (řádově pár metrů, výrazně blíž než tato instituce), věř tomu blízkému kandidátovi — to už není tipování, to je přesná shoda.'
         : ' Pokud sedí (přírodní/rekreační/kulturní místo bez adresy — amfiteátr, park, kopec, koupaliště...), použij tento název.')
     : '';
 
@@ -1318,10 +1318,15 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
 
   // OSM konkrétní INSTITUCE (úřad/škola/nemocnice/policie...) vs. nejednoznačné
   // hádání mezi víc firmami ve stejné budově (Google nedal jednoznačnou adresní
-  // shodu — addrPick je null — a v okolí je víc podobně vzdálených kandidátů).
-  // Instituce z mapy je spolehlivější signál než tipování mezi firmami → přebij
-  // i AI vlastní hádání (ne jen prázdný název jako níž).
-  if (aiResult && osmPlace && osmPlace.tier >= 3 && aiResult.should_save && !addrPick) {
+  // shodu — addrPick je null — a v okolí je víc podobně vzdálených kandidátů,
+  // ŽÁDNÝ z nich není jasně nejblíž). Instituce z mapy je spolehlivější signál
+  // než tipování mezi firmami → přebij i AI vlastní hádání. ALE pokud je nejbližší
+  // kandidát rozhodně blízko (prakticky přesně na bodě), tomu se věří vždy —
+  // to už není nejednoznačnost, to je jasná odpověď (např. cukrárna 2m vs.
+  // muzeum 81m — cukrárna vyhrává, nehledě na to, že muzeum je "instituce").
+  const closestPlace = placesNearby[0];
+  const closestIsDecisive = closestPlace && closestPlace.dist <= 15;
+  if (aiResult && osmPlace && osmPlace.tier >= 3 && aiResult.should_save && !addrPick && !closestIsDecisive) {
     const nearbyCount = placesNearby.filter(p => p.dist <= osmPlace.dist + 15).length;
     if (nearbyCount >= 2 && aiResult.name !== osmPlace.name) {
       console.log(`[OSM] Instituce z mapy má přednost před hádáním mezi ${nearbyCount} firmami: "${aiResult.name || '—'}" → "${osmPlace.name}"`);
@@ -3206,7 +3211,9 @@ async function previewDetection(member, lat, lon, gapMinutes = 15) {
       if (sel) aiResult.confidence = Math.min(1, aiResult.confidence + ADDR_MATCH_BONUS);
     }
   }
-  if (aiResult && osmPlace && osmPlace.tier >= 3 && aiResult.should_save && !addrPick) {
+  const closestPlacePD = placesNearby[0];
+  const closestIsDecisivePD = closestPlacePD && closestPlacePD.dist <= 15;
+  if (aiResult && osmPlace && osmPlace.tier >= 3 && aiResult.should_save && !addrPick && !closestIsDecisivePD) {
     const nearbyCount = placesNearby.filter(p => p.dist <= osmPlace.dist + 15).length;
     if (nearbyCount >= 2 && aiResult.name !== osmPlace.name) {
       aiResult.name = osmPlace.name;
