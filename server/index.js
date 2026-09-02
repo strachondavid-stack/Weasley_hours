@@ -1144,7 +1144,14 @@ async function processStopCandidate(member, lat, lon, gapMinutes, source, repeat
   let nearest = null, nearestDist = Infinity;
   for (const p of allPlaces) {
     const d = distance(lat, lon, p.lat, p.lon);
-    if (d < MERGE_RADIUS && d < nearestDist) { nearest = p; nearestDist = d; }
+    // Pokud už má místo potvrzenou geofenci, věř JEJÍMU skutečnému radiusu
+    // (+ malá rezerva na GPS drift) místo paušálních 150m pro všechno — jinak
+    // velké místo (nemocnice, nákupák) zbytečně "pohltí" i skutečně jiná místa
+    // poblíž (jóga studio vedle nemocnice), protože oboje spadne pod stejný
+    // plochý poloměr bez ohledu na to, jak velké to první místo doopravdy je.
+    const confirmedFence = p.name ? dynamicFences.find(f => f.id === p.id) : null;
+    const effectiveRadius = confirmedFence ? confirmedFence.radius + 30 : MERGE_RADIUS;
+    if (d < effectiveRadius && d < nearestDist) { nearest = p; nearestDist = d; }
   }
   if (nearest) {
     if (!nearest.name) {
