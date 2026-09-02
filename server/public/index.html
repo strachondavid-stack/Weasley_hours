@@ -2221,7 +2221,7 @@ function logTitle(l) {
     case 'ai_error': return l.error || '?';
     case 'stop_candidate': return `${l.source} · ${l.gapMinutes}min · ${l.placesCount || 0} POI`;
     case 'place_saved': return `"${l.name || l.suggestedName || '?'}" ${l.autoSave ? '(auto)' : '(čeká)'}`;
-    case 'place_rejected': return l.reason || '?';
+    case 'place_rejected': return l.reason === 'near_named_place' ? `blízko "${l.placeName}" (${l.distM}m)` : (l.reason || '?');
     case 'ai_skipped': return `${l.reason || 'cooldown'} · ${l.lat?.toFixed(4)},${l.lon?.toFixed(4)}${l.gapMinutes ? ' · '+l.gapMinutes+'min' : ''}`;
     case 'fence_added': return `"${l.name}" r=${l.radius}m`;
     case 'img_selected': return `${l.status} → ${l.selectedImg || 'žádný'}`;
@@ -2264,6 +2264,8 @@ function logDetail(l) {
         'důvod: ' + esc(l.aiReason);
     case 'place_rejected':
       return 'důvod: ' + esc(l.reason) + nl +
+        (l.reason === 'near_named_place' ? 'blízko místa: "' + esc(l.placeName) + '" (' + l.distM + 'm)' + nl : '') +
+        (l.reason === 'cross_member_dup' ? 'jiný člen: ' + esc(l.otherMember) + nl : '') +
         'confidence: ' + (l.aiConfidence || '-') + nl +
         'AI důvod: ' + esc(l.aiReason);
     case 'ai_error':
